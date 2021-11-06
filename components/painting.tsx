@@ -1,61 +1,70 @@
 import * as THREE from 'three';
 import { useTexture } from '@react-three/drei';
 import { Box } from '@react-three/flex';
-import { useRef } from 'react';
-import HeightReporter from './HeightReporter';
 
-type Gudz = {
-  images: any;
-  onReflow: any;
-  left: boolean | any;
-};
-
-export const Painting = ({ images, onReflow, left = false }: Gudz) => {
-  const mesh = useRef<THREE.Mesh>();
+export const Painting = ({ images }: any) => {
   const textures: any = useTexture(images);
+
   const boxProps = {
     centerAnchor: true,
-    grow: 1,
-    marginTop: 1,
-    marginLeft: left * 1,
-    marginRight: left! * 1,
     width: 'auto',
     height: 'auto',
-    minWidth: 3,
-    minHeight: 3,
-    maxWidth: 6,
-    maxHeight: 6,
+    minWidth: 4.5,
+    minHeight: 8,
+    maxWidth: 9,
+    maxHeight: 16,
+    marginLeft: 10,
+    marginRight: 10,
   };
+  const smoxProps = {
+    centerAnchor: true,
+    width: 'auto',
+    height: 'auto',
+    minWidth: 16,
+    minHeight: 9,
+    maxWidth: 32,
+    maxHeight: 27,
+    // marginLeft: 10,
+    // marginRight: 10,
+  };
+
   return (
     <Box
-      dir='column'
-      align={left ? 'flex-start' : 'flex-end'}
-      justify='flex-start'
+      dir='row'
       width='100%'
       height='auto'
-      minHeight='100%'
+      justifyContent='space-around'
+      align='center'
+      wrap='wrap'
     >
-      <HeightReporter onReflow={onReflow} />
-      <Box
-        dir='row'
-        width='100%'
-        height='auto'
-        justify={left ? 'flex-end' : 'flex-start'}
-        margin={0}
-        grow={1}
-        wrap='wrap'
-      >
-        {textures.map((texture: any, i: number) => (
-          <Box key={i} {...boxProps}>
+      {textures.map((texture: THREE.Texture, i: number) => {
+        return i < 8 ? (
+          <Box grow={1} shrink={1} basis={100} key={i} {...boxProps}>
             {(width, height) => (
-              <mesh ref={mesh}>
+              <mesh>
                 <boxGeometry args={[width, height, 0.5]} />
                 <meshBasicMaterial map={texture} toneMapped={false} />
               </mesh>
             )}
           </Box>
-        ))}
-      </Box>
+        ) : (
+          <Box
+            grow={1}
+            shrink={1}
+            basis={100}
+            key={i}
+            justify='center'
+            {...smoxProps}
+          >
+            {(width, height) => (
+              <mesh>
+                <boxGeometry args={[width, height, 0.5]} />
+                <meshBasicMaterial map={texture} toneMapped={false} />
+              </mesh>
+            )}
+          </Box>
+        );
+      })}
     </Box>
   );
 };
