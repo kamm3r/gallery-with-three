@@ -1,8 +1,8 @@
 import { Canvas } from '@react-three/fiber';
 import { Suspense, useState } from 'react';
 import type { NextPage } from 'next';
-import { OrbitControls, Plane } from '@react-three/drei';
-import Front from '../components/home';
+import { OrbitControls, Plane, Sky } from '@react-three/drei';
+import Gallery from '../components/gallery';
 import { TwoColumn } from '../components/twoColumn';
 
 const Home: NextPage = () => {
@@ -10,19 +10,21 @@ const Home: NextPage = () => {
 
   return (
     <section className='h-screen w-screen'>
-      <Canvas shadows camera={{ position: [0, 4, 10], fov: 120 }}>
-        <ambientLight />
-        <pointLight position={[10, 10, 10]} />
+      <Canvas shadows camera={{ position: [0, 0, 10], fov: 120 }}>
+        <Sky sunPosition={[7, 5, 1]} />
+        <pointLight intensity={2} position={[7, 5, 1]} castShadow />
         <Suspense fallback={null}>
-          <Front onReflow={setPages} />
+          <Gallery onReflow={setPages} />
           {/* <TwoColumn /> */}
         </Suspense>
         <Plane
-          args={[100, 100]}
-          position={[0, -1, 0]}
+          args={[300, 300, 0]}
+          position={[0, -4, 0]}
           rotation={[-Math.PI / 2, 0, 0]}
+          receiveShadow
         >
-          <meshPhongMaterial attach='material' color='yellow' />
+          {/* <meshPhongMaterial attach='material' color='yellow' /> */}
+          <shadowMaterial attach='material' opacity={0.4} />
         </Plane>
         <OrbitControls />
       </Canvas>
@@ -31,3 +33,5 @@ const Home: NextPage = () => {
 };
 
 export default Home;
+
+// enableRotate={false}

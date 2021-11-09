@@ -3,7 +3,7 @@ import create from 'zustand';
 export const state = {
   top: 0,
   pages: 0,
-  threshold: 4,
+  threshold: 2,
   mouse: [0, 0],
   content: [
     {

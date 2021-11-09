@@ -1,5 +1,5 @@
 import { Painting } from './painting';
-import { state } from './../utils/store';
+import { state } from '../utils/store';
 import { Box, Flex } from '@react-three/flex';
 import { useThree } from '@react-three/fiber';
 import { Bounds, useHelper } from '@react-three/drei';
@@ -7,7 +7,7 @@ import SelectToZoom from './selectToZoom';
 import { useCallback, useRef } from 'react';
 import { BoxHelper } from 'three';
 
-const Front = ({ onReflow }: any) => {
+const Gallery = ({ onReflow }: any) => {
   const flex = useRef();
   const { viewport } = useThree();
 
@@ -21,13 +21,13 @@ const Front = ({ onReflow }: any) => {
   return (
     <Bounds fit clip>
       <SelectToZoom>
-        <group ref={flex}>
+        <group>
           <Flex
             plane='xz'
             dir='column'
-            justify='space-evenly'
-            align='center'
-            position={[-viewport.width / 2, viewport.height / 5, 0]}
+            // justify='space-evenly'
+            // align='center'
+            position={[-viewport.width / 2, viewport.height / 2, 0]}
             size={[viewport.width, viewport.height, 0]}
             onReflow={handleReflow}
           >
@@ -57,4 +57,4 @@ const Front = ({ onReflow }: any) => {
   );
 };
 
-export default Front;
+export default Gallery;

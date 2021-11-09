@@ -36,12 +36,13 @@ export const Painting = ({ images }: any) => {
       justifyContent='space-around'
       align='center'
       wrap='wrap'
+      castShadow
     >
       {textures.map((texture: THREE.Texture, i: number) => {
         return i < 8 ? (
-          <Box grow={1} shrink={1} basis={100} key={i} {...boxProps}>
+          <Box grow={1} shrink={1} basis={100} key={i} {...boxProps} castShadow>
             {(width, height) => (
-              <mesh>
+              <mesh castShadow>
                 <boxGeometry args={[width, height, 0.5]} />
                 <meshBasicMaterial map={texture} toneMapped={false} />
               </mesh>
@@ -57,9 +58,13 @@ export const Painting = ({ images }: any) => {
             {...smoxProps}
           >
             {(width, height) => (
-              <mesh>
+              <mesh onClick={() => (window.location.href = '/pageTwo')}>
                 <boxGeometry args={[width, height, 0.5]} />
-                <meshBasicMaterial map={texture} toneMapped={false} />
+                <meshBasicMaterial
+                  map={texture}
+                  color='black'
+                  toneMapped={false}
+                />
               </mesh>
             )}
           </Box>
