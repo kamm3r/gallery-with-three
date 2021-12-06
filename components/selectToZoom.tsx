@@ -1,18 +1,13 @@
-import * as THREE from 'three';
-import { BoundsApi, BoundsProps, useBounds } from '@react-three/drei';
-import { useEffect, useState } from 'react';
+import { BoundsProps, useBounds } from '@react-three/drei';
 
 export default function SelectToZoom({ children }: BoundsProps) {
   const api = useBounds();
-  const [active, activate] = useState();
-  useEffect(() => void api.refresh(active).fit(), [api, active]);
   return (
     <group
       onClick={(e) => (
-        e.stopPropagation(),
-        e.delta <= 2 && activate(active === e.object ? null : e.object)
+        e.stopPropagation(), e.delta <= 2 && api.refresh(e.object).fit()
       )}
-      onPointerMissed={(e) => activate(null)}
+      onPointerMissed={(e) => e.button === 0 && api.refresh().fit()}
     >
       {children}
     </group>

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import React, { useRef } from 'react';
 import { useGLTF } from '@react-three/drei';
 import { GLTF } from 'three-stdlib';
+import { trees } from '../utils/store';
 
 type GLTFResult = GLTF & {
   nodes: {
@@ -13,21 +14,10 @@ type GLTFResult = GLTF & {
     tree_bark_dark: THREE.MeshStandardMaterial;
   };
 };
-const imgs = [
-  '/assets/trees/tree-branched.glb',
-  '/assets/trees/tree-columnar.glb',
-  '/assets/trees/tree-conical.glb',
-  '/assets/trees/tree-open.glb',
-  '/assets/trees/tree-oval.glb',
-  '/assets/trees/tree-pyramidal.glb',
-  '/assets/trees/tree-round.glb',
-  '/assets/trees/tree-spreading.glb',
-  '/assets/trees/tree-vase.glb',
-];
 
 export default function Tree(props: JSX.IntrinsicElements['group']) {
   const group = useRef<THREE.Group>();
-  const { nodes, materials } = useGLTF(imgs[0]) as GLTFResult;
+  const { nodes, materials } = useGLTF(trees[0]) as GLTFResult;
   return (
     <group ref={group} {...props} dispose={null}>
       <mesh

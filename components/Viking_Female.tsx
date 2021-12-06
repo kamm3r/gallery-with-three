@@ -1,7 +1,8 @@
 import * as THREE from 'three';
-import { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useGLTF, useAnimations } from '@react-three/drei';
 import { GLTF } from 'three-stdlib';
+import { useFrame } from '@react-three/fiber';
 
 interface GLTFAction extends THREE.AnimationClip {
   name: ActionName;
@@ -19,11 +20,11 @@ type GLTFResult = GLTF & {
   };
   materials: {
     Skin: THREE.MeshStandardMaterial;
-    Shirt: THREE.MeshStandardMaterial;
+    Light: THREE.MeshStandardMaterial;
+    Main: THREE.MeshStandardMaterial;
     Pants: THREE.MeshStandardMaterial;
-    Belt: THREE.MeshStandardMaterial;
-    Face: THREE.MeshStandardMaterial;
     Hair: THREE.MeshStandardMaterial;
+    Face: THREE.MeshStandardMaterial;
   };
   animations: GLTFAction[];
 };
@@ -37,19 +38,22 @@ type ActionName =
   | 'SitDown'
   | 'Walk';
 
-export const Casual = ({ ...props }: JSX.IntrinsicElements['group']) => {
-  const group = useRef<THREE.Group>(null!);
+export default function Model(
+  index: any,
+  { ...props }: JSX.IntrinsicElements['group']
+) {
   const { nodes, materials, animations } = useGLTF(
-    '/assets/Casual_Male.glb'
+    '/assets/Viking_Female.glb'
   ) as GLTFResult;
-  const { actions } = useAnimations(animations, group);
+  const { ref, actions, names } = useAnimations(animations);
+
   useEffect(() => {
-    actions['Run']?.reset().fadeIn(0.5).play();
-    return () => void actions['Idle']?.fadeOut(0.5);
-  }, [actions]);
+    actions[names[index]]?.reset().fadeIn(0.5).play();
+    return () => void actions[names[index]]?.fadeOut(0.5);
+  }, [actions, names, index]);
 
   return (
-    <group ref={group} {...props} dispose={null}>
+    <group ref={ref} {...props} dispose={null}>
       <primitive object={nodes.Bone} />
       <skinnedMesh
         castShadow
@@ -60,35 +64,35 @@ export const Casual = ({ ...props }: JSX.IntrinsicElements['group']) => {
       <skinnedMesh
         castShadow
         geometry={nodes.Cube004_1.geometry}
-        material={materials.Shirt}
+        material={materials.Light}
         skeleton={nodes.Cube004_1.skeleton}
       />
       <skinnedMesh
         castShadow
         geometry={nodes.Cube004_2.geometry}
-        material={materials.Pants}
+        material={materials.Main}
         skeleton={nodes.Cube004_2.skeleton}
       />
       <skinnedMesh
         castShadow
         geometry={nodes.Cube004_3.geometry}
-        material={materials.Belt}
+        material={materials.Pants}
         skeleton={nodes.Cube004_3.skeleton}
       />
       <skinnedMesh
         castShadow
         geometry={nodes.Cube004_4.geometry}
-        material={materials.Face}
+        material={materials.Hair}
         skeleton={nodes.Cube004_4.skeleton}
       />
       <skinnedMesh
         castShadow
         geometry={nodes.Cube004_5.geometry}
-        material={materials.Hair}
+        material={materials.Face}
         skeleton={nodes.Cube004_5.skeleton}
       />
     </group>
   );
-};
+}
 
-useGLTF.preload('/assets/Casual_Male.glb');
+useGLTF.preload('/assets/Viking_Female.glb');

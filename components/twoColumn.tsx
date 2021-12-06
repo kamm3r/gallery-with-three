@@ -1,23 +1,28 @@
-import { Html, Text } from '@react-three/drei';
 import { useThree } from '@react-three/fiber';
 import { Box, Flex } from '@react-three/flex';
+import { ReactElement, ReactNode } from 'react';
 import { BigPainting } from './BigPainting';
 import Texts from './text';
 
-export const TwoColumn = () => {
+export const TwoColumn = ({
+  children,
+}: {
+  children: ReactNode;
+}): ReactElement => {
   const { viewport } = useThree();
 
   return (
-    <Flex
+    <Box
       dir='column'
       justify='center'
       align='center'
-      position={[-viewport.width / 2, viewport.height / 2, 0]}
-      size={[viewport.width, viewport.height, 0]}
+      // position={[-viewport.width / 2, viewport.height / 5, 0]}
+      // size={[viewport.width, viewport.height, 0]}
       wrap='wrap'
     >
       <Box grow={1} shrink={1} basis={100} marginLeft={1}>
-        <BigPainting />
+        {/* <BigPainting /> */}
+        {children}
       </Box>
       <Box grow={2} shrink={1} basis={100} marginRight={1}>
         <Box>
@@ -29,16 +34,16 @@ export const TwoColumn = () => {
             maxWidth={(viewport.width / 4) * 3}
             fontSize={1}
           >
-            The Scream
+            Nothing Written
           </Texts>
         </Box>
         <Box>
           <Texts
             italic
-            lineHeight={1}
+            lineHeight={1.5}
             letterSpacing={-0.05}
             color='#1f1f1f'
-            maxWidth={(viewport.width / 6) * 3}
+            maxWidth={(viewport.width / 25) * 3}
             fontSize={0.5}
           >
             Lorem ipsum dolor sit amet consectetur adipisicing elit. Ullam
@@ -47,6 +52,6 @@ export const TwoColumn = () => {
           </Texts>
         </Box>
       </Box>
-    </Flex>
+    </Box>
   );
 };

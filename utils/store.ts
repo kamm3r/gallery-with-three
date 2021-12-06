@@ -74,17 +74,41 @@ export const state = {
       ],
     },
   ],
-  trees: [
-    '/assets/trees/tree-branched.glb',
-    '/assets/trees/tree-columnar.glb',
-    '/assets/trees/tree-conical.glb',
-    '/assets/trees/tree-open.glb',
-    '/assets/trees/tree-oval.glb',
-    '/assets/trees/tree-pyramidal.glb',
-    '/assets/trees/tree-round.glb',
-    '/assets/trees/tree-spreading.glb',
-    '/assets/trees/tree-vase.glb',
-  ],
+};
+
+export const trees = [
+  '/assets/trees/tree-branched.glb',
+  '/assets/trees/tree-columnar.glb',
+  '/assets/trees/tree-conical.glb',
+  '/assets/trees/tree-open.glb',
+  '/assets/trees/tree-oval.glb',
+  '/assets/trees/tree-pyramidal.glb',
+  '/assets/trees/tree-round.glb',
+  '/assets/trees/tree-spreading.glb',
+  '/assets/trees/tree-vase.glb',
+];
+
+export const boxProps = {
+  centerAnchor: true,
+  width: 'auto',
+  height: 'auto',
+  minWidth: 4.5,
+  minHeight: 8,
+  maxWidth: 9,
+  maxHeight: 16,
+  marginLeft: 10,
+  marginRight: 10,
+};
+export const smoxProps = {
+  centerAnchor: true,
+  width: 'auto',
+  height: 'auto',
+  minWidth: 16,
+  minHeight: 9,
+  maxWidth: 32,
+  maxHeight: 27,
+  // marginLeft: 10,
+  // marginRight: 10,
 };
 
 //zustand finite-state machine

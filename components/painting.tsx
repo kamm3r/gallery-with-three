@@ -1,32 +1,11 @@
 import * as THREE from 'three';
 import { useTexture } from '@react-three/drei';
 import { Box } from '@react-three/flex';
+import { boxProps, smoxProps } from '../utils/store';
+import { TwoColumn } from './twoColumn';
 
 export const Painting = ({ images }: any) => {
   const textures: any = useTexture(images);
-
-  const boxProps = {
-    centerAnchor: true,
-    width: 'auto',
-    height: 'auto',
-    minWidth: 4.5,
-    minHeight: 8,
-    maxWidth: 9,
-    maxHeight: 16,
-    marginLeft: 10,
-    marginRight: 10,
-  };
-  const smoxProps = {
-    centerAnchor: true,
-    width: 'auto',
-    height: 'auto',
-    minWidth: 16,
-    minHeight: 9,
-    maxWidth: 32,
-    maxHeight: 27,
-    // marginLeft: 10,
-    // marginRight: 10,
-  };
 
   return (
     <Box
@@ -36,13 +15,12 @@ export const Painting = ({ images }: any) => {
       justifyContent='space-around'
       align='center'
       wrap='wrap'
-      castShadow
     >
       {textures.map((texture: THREE.Texture, i: number) => {
         return i < 8 ? (
-          <Box grow={1} shrink={1} basis={100} key={i} {...boxProps} castShadow>
+          <Box grow={1} shrink={1} basis={100} key={i} {...boxProps}>
             {(width, height) => (
-              <mesh castShadow>
+              <mesh>
                 <boxGeometry args={[width, height, 0.5]} />
                 <meshBasicMaterial map={texture} toneMapped={false} />
               </mesh>
@@ -60,11 +38,7 @@ export const Painting = ({ images }: any) => {
             {(width, height) => (
               <mesh onClick={() => (window.location.href = '/pageTwo')}>
                 <boxGeometry args={[width, height, 0.5]} />
-                <meshBasicMaterial
-                  map={texture}
-                  color='black'
-                  toneMapped={false}
-                />
+                <meshStandardMaterial attach='material' color='black' />
               </mesh>
             )}
           </Box>

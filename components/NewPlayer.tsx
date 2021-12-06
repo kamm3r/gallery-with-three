@@ -1,35 +1,35 @@
 import * as THREE from 'three';
 import React, { useEffect, useRef } from 'react';
-import { useSphere } from '@react-three/cannon';
+import { useCompoundBody, useSphere } from '@react-three/cannon';
 import { useThree, useFrame } from '@react-three/fiber';
 import { useCharacterControls } from '../hooks/useCharacterControls';
+import Model from './Viking_Female';
 
 const walkVelocity = 2;
 const runVelocity = 5;
 const direction = new THREE.Vector3();
 const frontVector = new THREE.Vector3();
 const sideVector = new THREE.Vector3();
-const rotation = new THREE.Vector3();
 const speed = new THREE.Vector3();
+// const _decceleration = new THREE.Vector3(-0.0005, -0.0001, -5.0);
+// const _acceleration = new THREE.Vector3(1, 0.25, 50.0);
+// const _velocity = new THREE.Vector3(0, 0, 0);
 
 export const Player = (props: any) => {
   const { camera } = useThree();
   const { forward, backward, left, right, run, jump } = useCharacterControls();
-  const [ref, api]: any = useSphere(() => ({
+  const [ref, api]: any = useCompoundBody(() => ({
     mass: 1,
     type: 'Dynamic',
-    position: [0, 10, 0],
+    position: [0, 10, 5],
     ...props,
   }));
 
   const velocity = useRef([0, 0, 0]);
 
   useEffect(() => {
-    const unsubscribe = api.velocity.subscribe(
-      (v: number[]) => (velocity.current = v)
-    );
-    return unsubscribe;
-  }, [api]);
+    api.velocity.subscribe((v: any) => (velocity.current = v));
+  }, [api.velocity]);
 
   useFrame(() => {
     ref.current.getWorldPosition(camera.position);
@@ -39,8 +39,9 @@ export const Player = (props: any) => {
       .subVectors(frontVector, sideVector)
       .normalize()
       .multiplyScalar(run === true ? runVelocity : walkVelocity)
-      .applyQuaternion(camera.quaternion);
+      .applyEuler(camera.rotation);
     speed.fromArray(velocity.current);
+
     api.velocity.set(direction.x, velocity.current[1], direction.z);
 
     if (jump && Math.abs(velocity.current[1]) < 0.001)
@@ -49,11 +50,8 @@ export const Player = (props: any) => {
 
   return (
     <>
-      <mesh ref={ref} castShadow />
-      {/* <group ref={model}>
-        <Model position={[0, -1, 2]} />
-      </group> */}
-      {/* <Model ref={ref} index={anim} position={[0, 0, 0]} /> */}
+      {/* <mesh ref={ref} castShadow /> */}
+      <Model ref={ref} />
     </>
   );
 };

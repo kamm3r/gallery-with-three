@@ -1,15 +1,18 @@
 import { Painting } from './painting';
 import { state } from '../utils/store';
-import { Box, Flex } from '@react-three/flex';
+import { Flex } from '@react-three/flex';
 import { useThree } from '@react-three/fiber';
 import { Bounds, useHelper } from '@react-three/drei';
 import SelectToZoom from './selectToZoom';
 import { useCallback, useRef } from 'react';
 import { BoxHelper } from 'three';
+import { useState } from 'react';
+import { TwoColumn } from './twoColumn';
 
 const Gallery = ({ onReflow }: any) => {
   const flex = useRef();
   const { viewport } = useThree();
+  const [col, setCol] = useState<any>(false);
 
   const handleReflow = useCallback(
     (w, h) => onReflow((state.pages = h / viewport.height + 5.5)),
@@ -25,13 +28,10 @@ const Gallery = ({ onReflow }: any) => {
           <Flex
             plane='xz'
             dir='column'
-            // justify='space-evenly'
-            // align='center'
             position={[-viewport.width / 2, viewport.height / 2, 0]}
             size={[viewport.width, viewport.height, 0]}
             onReflow={handleReflow}
           >
-            {/* <Box> */}
             {state.content.map((props, i: number) => (
               <Painting
                 key={i}
@@ -49,7 +49,6 @@ const Gallery = ({ onReflow }: any) => {
                 {...props}
               />
             ))}
-            {/* </Box> */}
           </Flex>
         </group>
       </SelectToZoom>

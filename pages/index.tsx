@@ -1,7 +1,7 @@
 import { Canvas } from '@react-three/fiber';
 import { Suspense, useState } from 'react';
 import type { NextPage } from 'next';
-import { OrbitControls, Plane, Sky } from '@react-three/drei';
+import { OrbitControls, Plane, Sky, useTexture } from '@react-three/drei';
 import Gallery from '../components/gallery';
 import { TwoColumn } from '../components/twoColumn';
 
@@ -23,14 +23,25 @@ const Home: NextPage = () => {
           rotation={[-Math.PI / 2, 0, 0]}
           receiveShadow
         >
-          {/* <meshPhongMaterial attach='material' color='yellow' /> */}
           <shadowMaterial attach='material' opacity={0.4} />
         </Plane>
-        <OrbitControls />
+        <OrbitControls
+          makeDefault
+          minPolarAngle={0}
+          maxPolarAngle={Math.PI / 1.75}
+        />
       </Canvas>
     </section>
   );
 };
+useTexture.preload('/assets/text.jpg');
+useTexture.preload('/assets/sweesh.jpg');
+useTexture.preload('/assets/hands.jpg');
+useTexture.preload('/assets/mankey.jpg');
+useTexture.preload('/assets/oilpainting.jpg');
+useTexture.preload('/assets/plaster.jpg');
+useTexture.preload('/assets/tree.jpg');
+useTexture.preload('/assets/fieldhouse.jpg');
 
 export default Home;
 

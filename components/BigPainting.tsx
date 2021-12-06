@@ -2,7 +2,7 @@ import { useTexture } from '@react-three/drei';
 import { Box } from '@react-three/flex';
 
 export const BigPainting = () => {
-  const texture = useTexture({ map: '/assets/tree.jpg' });
+  const texture = useTexture({ map: '/assets/text.jpg' });
   const boxProps = {
     centerAnchor: true,
     with: 'auto',

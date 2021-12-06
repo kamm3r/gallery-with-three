@@ -4,10 +4,10 @@ import { Canvas } from '@react-three/fiber';
 import type { NextPage } from 'next';
 import { Suspense } from 'react';
 import { Casual } from '../components/Casual_Male';
+import { Help } from '../components/Help';
 import { Plane } from '../components/Plane';
 import { Player } from '../components/player';
 import Tree from '../components/Tree';
-import Parts from '../components/Trees';
 import Wizard from '../components/Wizard';
 
 const PageTwo: NextPage = () => {
@@ -31,7 +31,6 @@ const PageTwo: NextPage = () => {
           <Suspense fallback={null}>
             <Tree scale={2} position={[10, 0, 2]} />
             <Tree scale={3} position={[3, 0, -5]} />
-            {/* <Parts scale={4} position={[-3, 0, -2]} /> */}
             <Wizard scale={1} position={[10, 0, -5]} />
             <Casual scale={1} position={[6, 0, -2]} />
             <Player scale={2} position={[0, 5, 0]} />
@@ -40,6 +39,7 @@ const PageTwo: NextPage = () => {
         </Physics>
         <PointerLockControls />
       </Canvas>
+      <Help />
     </section>
   );
 };
