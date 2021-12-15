@@ -3,7 +3,6 @@ import { Suspense, useState } from 'react';
 import type { NextPage } from 'next';
 import { OrbitControls, Plane, Sky, useTexture } from '@react-three/drei';
 import Gallery from '../components/gallery';
-import { TwoColumn } from '../components/twoColumn';
 
 const Home: NextPage = () => {
   const [, setPages] = useState(0);
@@ -15,7 +14,6 @@ const Home: NextPage = () => {
         <pointLight intensity={2} position={[7, 5, 1]} castShadow />
         <Suspense fallback={null}>
           <Gallery onReflow={setPages} />
-          {/* <TwoColumn /> */}
         </Suspense>
         <Plane
           args={[300, 300, 0]}
@@ -44,5 +42,3 @@ useTexture.preload('/assets/tree.jpg');
 useTexture.preload('/assets/fieldhouse.jpg');
 
 export default Home;
-
-// enableRotate={false}

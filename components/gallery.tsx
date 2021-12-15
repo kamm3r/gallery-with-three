@@ -6,13 +6,10 @@ import { Bounds, useHelper } from '@react-three/drei';
 import SelectToZoom from './selectToZoom';
 import { useCallback, useRef } from 'react';
 import { BoxHelper } from 'three';
-import { useState } from 'react';
-import { TwoColumn } from './twoColumn';
 
 const Gallery = ({ onReflow }: any) => {
-  const flex = useRef();
+  const flex = useRef<any>();
   const { viewport } = useThree();
-  const [col, setCol] = useState<any>(false);
 
   const handleReflow = useCallback(
     (w, h) => onReflow((state.pages = h / viewport.height + 5.5)),
@@ -24,7 +21,7 @@ const Gallery = ({ onReflow }: any) => {
   return (
     <Bounds fit clip>
       <SelectToZoom>
-        <group>
+        <group ref={flex}>
           <Flex
             plane='xz'
             dir='column'

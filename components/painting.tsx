@@ -2,9 +2,11 @@ import * as THREE from 'three';
 import { useTexture } from '@react-three/drei';
 import { Box } from '@react-three/flex';
 import { boxProps, smoxProps } from '../utils/store';
-import { TwoColumn } from './twoColumn';
+import { Description } from './Description';
+import { useState } from 'react';
 
 export const Painting = ({ images }: any) => {
+  const [text, setText] = useState(false);
   const textures: any = useTexture(images);
 
   return (
@@ -18,13 +20,23 @@ export const Painting = ({ images }: any) => {
     >
       {textures.map((texture: THREE.Texture, i: number) => {
         return i < 8 ? (
-          <Box grow={1} shrink={1} basis={100} key={i} {...boxProps}>
-            {(width, height) => (
-              <mesh>
-                <boxGeometry args={[width, height, 0.5]} />
-                <meshBasicMaterial map={texture} toneMapped={false} />
-              </mesh>
-            )}
+          <Box dir='column' justify='center' align='center' wrap='wrap'>
+            <Box
+              grow={1}
+              shrink={1}
+              basis={100}
+              marginLeft={1}
+              key={i}
+              {...boxProps}
+            >
+              {(width, height) => (
+                <mesh onClick={() => setText(!text)}>
+                  <boxGeometry args={[width, height, 0.5]} />
+                  <meshBasicMaterial map={texture} toneMapped={false} />
+                </mesh>
+              )}
+            </Box>
+            {text ? <Description /> : ''}
           </Box>
         ) : (
           <Box

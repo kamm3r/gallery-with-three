@@ -96,8 +96,8 @@ export const boxProps = {
   minHeight: 8,
   maxWidth: 9,
   maxHeight: 16,
-  marginLeft: 10,
-  marginRight: 10,
+  // marginLeft: 10,
+  // marginRight: 10,
 };
 export const smoxProps = {
   centerAnchor: true,
