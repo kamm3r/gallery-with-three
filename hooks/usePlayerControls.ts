@@ -8,7 +8,18 @@ export type ControlName =
   | 'jump'
   | 'run';
 
-export type PlayerControls = Record<ControlName, boolean>;
+export type PlayerControls = Record<ControlName, boolean> & {
+  jumpPress: number;
+};
+
+const controlNames: ControlName[] = [
+  'forward',
+  'backward',
+  'left',
+  'right',
+  'jump',
+  'run',
+];
 
 const keyMap: Record<string, ControlName | undefined> = {
   ArrowDown: 'backward',
@@ -31,18 +42,20 @@ const state: PlayerControls = {
   right: false,
   jump: false,
   run: false,
+  jumpPress: 0,
 };
 
 const listeners = new Set<(next: PlayerControls) => void>();
 
 export function setPlayerControl(control: ControlName, active: boolean) {
+  if (control === 'jump' && active && !state.jump) state.jumpPress += 1;
   state[control] = active;
   listeners.forEach((listener) => listener(state));
 }
 
 function resetControls() {
-  Object.keys(state).forEach((key) => {
-    state[key as ControlName] = false;
+  controlNames.forEach((control) => {
+    state[control] = false;
   });
   listeners.forEach((listener) => listener(state));
 }

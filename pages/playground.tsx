@@ -4,13 +4,13 @@ import Head from 'next/head';
 import { useRouter } from 'next/router';
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { ExperienceHud } from '../components/ExperienceHud';
-import { ForestWorld } from '../components/ForestWorld';
+import { PlaygroundWorld } from '../components/PlaygroundWorld';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 
-export default function ForestHub() {
+export default function PlaygroundLevel() {
   const router = useRouter();
-  const [nearPortal, setNearPortal] = useState<string | null>(null);
-  const [portalImpact, setPortalImpact] = useState<string | null>(null);
+  const [nearPortal, setNearPortal] = useState(false);
+  const [portalImpact, setPortalImpact] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const [ready, setReady] = useState(false);
   const transitionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -18,13 +18,12 @@ export default function ForestHub() {
   const reducedMotion = useReducedMotion();
   const markReady = useCallback(() => setReady(true), []);
 
-  const enterPortal = useCallback((portalId: string) => {
+  const returnToForest = useCallback(() => {
     if (transitionTimer.current) return;
-    setPortalImpact(portalId);
+    setPortalImpact(true);
     transitionTimer.current = setTimeout(() => {
       setLeaving(true);
-      const destination = portalId === 'playground' ? '/playground' : '/gallery';
-      routeTimer.current = setTimeout(() => void router.push(destination), 240);
+      routeTimer.current = setTimeout(() => void router.push('/'), 240);
     }, reducedMotion ? 40 : 620);
   }, [reducedMotion, router]);
 
@@ -38,32 +37,25 @@ export default function ForestHub() {
   return (
     <main className='experience'>
       <Head>
-        <title>The painted forest</title>
-        <meta name='description' content='Explore a forest and step through its paintings.' />
+        <title>The proving grounds | The painted forest</title>
       </Head>
-      <Canvas shadows camera={{ position: [0, 4, 12], fov: 52 }}>
+      <Canvas shadows camera={{ position: [0, 3.9, 12], fov: 52 }}>
         <Suspense fallback={null}>
           <Physics gravity={[0, -30, 0]}>
-            <ForestWorld
+            <PlaygroundWorld
               nearPortal={nearPortal}
               portalImpact={portalImpact}
               onNearPortal={setNearPortal}
-              onEnterPortal={enterPortal}
+              onExit={returnToForest}
               onReady={markReady}
             />
           </Physics>
         </Suspense>
       </Canvas>
       <ExperienceHud
-        chapter='The clearing'
-        title='The painted forest'
-        prompt={
-          nearPortal
-            ? nearPortal === 'playground'
-              ? 'Jump into the study painting'
-              : 'Jump into the gallery painting'
-            : undefined
-        }
+        chapter='Movement study'
+        title='The proving grounds'
+        prompt={nearPortal ? 'Jump through to return' : undefined}
         leaving={leaving}
         ready={ready}
       />

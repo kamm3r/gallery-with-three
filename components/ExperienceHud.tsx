@@ -39,6 +39,7 @@ export function ExperienceHud({ chapter, title, prompt, leaving, ready }: Experi
       </header>
       <div className='keyboard-help' aria-label='Controls'>
         <span>WASD or arrows to move</span>
+        <span>Drag to orbit camera</span>
         <span>Shift to run</span>
         <span>Space to jump</span>
       </div>

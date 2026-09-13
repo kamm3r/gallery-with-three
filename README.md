@@ -1,7 +1,8 @@
 # The painted forest
 
-A third-person WebGL experience built with Next.js and React Three Fiber. Explore
-a forest clearing, walk into its painting, and enter a gallery level.
+A third-person WebGL experience built with Next.js, React Three Fiber, and
+Rapier. Explore a forest clearing and jump through paintings to enter a gallery
+or a movement-testing level.
 
 ## Run locally
 
@@ -17,9 +18,10 @@ Open `http://localhost:3000`.
 ## Controls
 
 - `WASD` or arrow keys move and turn the character.
+- Drag across the world to orbit the camera.
 - Hold `Shift` to run.
 - Press `Space` to jump.
-- Walk into a painting to travel between levels.
+- Jump into a painting to travel between levels.
 
 Touch controls appear on small or touch-enabled screens.
 
@@ -28,5 +30,6 @@ Touch controls appear on small or touch-enabled screens.
 ```bash
 npm run lint
 npm run typecheck
+npm test
 npm run build
 ```
