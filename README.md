@@ -1,8 +1,8 @@
 # The painted forest
 
-A third-person WebGL experience built with Next.js, React Three Fiber, and
-Rapier. Explore a forest clearing and jump through paintings to enter a gallery
-or a movement-testing level.
+A third-person WebGL experience built with Next.js, React Three Fiber, Rapier,
+and Ecctrl. Explore a forest clearing and jump through paintings to enter a
+gallery or a movement-testing level.
 
 ## Run locally
 
