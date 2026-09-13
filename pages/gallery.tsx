@@ -3,9 +3,9 @@ import Head from 'next/head';
 import { useRouter } from 'next/router';
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { ExperienceHud } from '../components/ExperienceHud';
-import { ForestWorld } from '../components/ForestWorld';
+import { GalleryWorld } from '../components/GalleryWorld';
 
-export default function ForestHub() {
+export default function GalleryLevel() {
   const router = useRouter();
   const [nearPortal, setNearPortal] = useState(false);
   const [leaving, setLeaving] = useState(false);
@@ -13,10 +13,10 @@ export default function ForestHub() {
   const transitionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const markReady = useCallback(() => setReady(true), []);
 
-  const enterGallery = useCallback(() => {
+  const returnToForest = useCallback(() => {
     if (transitionTimer.current) return;
     setLeaving(true);
-    transitionTimer.current = setTimeout(() => void router.push('/gallery'), 240);
+    transitionTimer.current = setTimeout(() => void router.push('/'), 240);
   }, [router]);
 
   useEffect(() => {
@@ -27,27 +27,27 @@ export default function ForestHub() {
 
   return (
     <main className='experience'>
-      <Head>
-        <title>The painted forest</title>
-        <meta name='description' content='Explore a forest and step through its paintings.' />
-      </Head>
-      <Canvas shadows camera={{ position: [0, 4, 12], fov: 52 }}>
+      <Head><title>The collection | The painted forest</title></Head>
+      <Canvas shadows camera={{ position: [0, 4, 13], fov: 52 }}>
         <Suspense fallback={null}>
-          <ForestWorld
+          <GalleryWorld
             nearPortal={nearPortal}
             onNearPortal={setNearPortal}
-            onEnterPortal={enterGallery}
+            onExit={returnToForest}
             onReady={markReady}
           />
         </Suspense>
       </Canvas>
       <ExperienceHud
-        chapter='The clearing'
-        title='The painted forest'
-        prompt={nearPortal ? 'Walk into the painting' : undefined}
+        chapter='Beyond the frame'
+        title='The collection'
+        prompt={nearPortal ? 'Walk through to return' : undefined}
         leaving={leaving}
         ready={ready}
       />
+      <button className='return-link' type='button' onClick={returnToForest}>
+        Return to the forest
+      </button>
     </main>
   );
 }

@@ -2,13 +2,12 @@ import Link from 'next/link';
 
 export default function Custom404() {
   return (
-    <section className='flex justify-center items-center h-screen'>
-      <div className='flex flex-col justify-center items-start'>
-        <h1 className='text-5xl font-bold mb-3'>Something went wrong</h1>
-        <Link href='/'>
-          <a className='text-3xl '>Go Home</a>
-        </Link>
+    <main className='error-page'>
+      <div>
+        <p>Lost trail</p>
+        <h1>This path leaves the forest.</h1>
+        <Link href='/'>Go home</Link>
       </div>
-    </section>
+    </main>
   );
 }

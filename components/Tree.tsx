@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import React, { useRef } from 'react';
 import { useGLTF } from '@react-three/drei';
+import type { ThreeElements } from '@react-three/fiber';
 import { GLTF } from 'three-stdlib';
-import { trees } from '../utils/store';
 
 type GLTFResult = GLTF & {
   nodes: {
@@ -15,9 +15,11 @@ type GLTFResult = GLTF & {
   };
 };
 
-export default function Tree(props: JSX.IntrinsicElements['group']) {
-  const group = useRef<THREE.Group>();
-  const { nodes, materials } = useGLTF(trees[0]) as GLTFResult;
+export default function Tree(props: ThreeElements['group']) {
+  const group = useRef<THREE.Group>(null);
+  const { nodes, materials } = useGLTF(
+    '/assets/trees/tree-branched.glb'
+  ) as unknown as GLTFResult;
   return (
     <group ref={group} {...props} dispose={null}>
       <mesh
@@ -37,4 +39,4 @@ export default function Tree(props: JSX.IntrinsicElements['group']) {
   );
 }
 
-useGLTF.preload('/assets/tree/tree-branched.glb');
+useGLTF.preload('/assets/trees/tree-branched.glb');

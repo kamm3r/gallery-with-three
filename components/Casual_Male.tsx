@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { useEffect, useRef } from 'react';
 import { useGLTF, useAnimations } from '@react-three/drei';
+import type { ThreeElements } from '@react-three/fiber';
 import { GLTF } from 'three-stdlib';
 
 interface GLTFAction extends THREE.AnimationClip {
@@ -28,7 +29,7 @@ type GLTFResult = GLTF & {
   animations: GLTFAction[];
 };
 
-type ActionName =
+export type ActionName =
   | 'Idle'
   | 'PickUp'
   | 'Punch'
@@ -37,16 +38,21 @@ type ActionName =
   | 'SitDown'
   | 'Walk';
 
-export const Casual = ({ ...props }: JSX.IntrinsicElements['group']) => {
+type CasualProps = ThreeElements['group'] & {
+  animation?: ActionName;
+};
+
+export const Casual = ({ animation = 'Idle', ...props }: CasualProps) => {
   const group = useRef<THREE.Group>(null!);
   const { nodes, materials, animations } = useGLTF(
     '/assets/Casual_Male.glb'
-  ) as GLTFResult;
+  ) as unknown as GLTFResult;
   const { actions } = useAnimations(animations, group);
   useEffect(() => {
-    actions['Run']?.reset().fadeIn(0.5).play();
-    return () => void actions['Idle']?.fadeOut(0.5);
-  }, [actions]);
+    const action = actions[animation];
+    action?.reset().fadeIn(0.18).play();
+    return () => void action?.fadeOut(0.18);
+  }, [actions, animation]);
 
   return (
     <group ref={group} {...props} dispose={null}>
