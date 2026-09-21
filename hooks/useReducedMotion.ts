@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
+import { useGame } from '../app/gameSettings';
 
 export function useReducedMotion() {
+  const { settings } = useGame();
   const [reducedMotion, setReducedMotion] = useState(false);
 
   useEffect(() => {
@@ -12,5 +14,5 @@ export function useReducedMotion() {
     return () => mediaQuery.removeEventListener('change', updatePreference);
   }, []);
 
-  return reducedMotion;
+  return reducedMotion || settings.reducedMotion;
 }

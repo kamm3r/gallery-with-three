@@ -55,12 +55,14 @@ type PortalPaintingProps = ThreeElements['group'] & {
   image: string;
   active?: boolean;
   impact?: boolean;
+  beacon?: boolean;
 };
 
 export function PortalPainting({
   image,
   active = false,
   impact = false,
+  beacon = true,
   ...props
 }: PortalPaintingProps) {
   const texture = useTexture(image);
@@ -107,11 +109,11 @@ export function PortalPainting({
   return (
     <group {...props}>
       <mesh position={[0, 0, -0.18]} castShadow>
-        <boxGeometry args={[4.15, 3.25, 0.34]} />
+        <boxGeometry args={[5.25, 4.15, 0.34]} />
         <meshStandardMaterial color='#51381f' roughness={0.72} />
       </mesh>
       <mesh position={[0, 0, 0.02]} castShadow>
-        <planeGeometry args={[3.56, 2.66, 64, 48]} />
+        <planeGeometry args={[4.62, 3.5, 72, 56]} />
         <shaderMaterial
           ref={material}
           uniforms={uniforms}
@@ -120,28 +122,28 @@ export function PortalPainting({
           toneMapped={false}
         />
       </mesh>
-      <mesh position={[0, 1.56, 0.12]} castShadow>
-        <boxGeometry args={[4.55, 0.28, 0.26]} />
+      <mesh position={[0, 2.02, 0.12]} castShadow>
+        <boxGeometry args={[5.75, 0.3, 0.26]} />
         <meshStandardMaterial color='#b78945' metalness={0.62} roughness={0.3} />
       </mesh>
-      <mesh position={[0, -1.56, 0.12]} castShadow>
-        <boxGeometry args={[4.55, 0.28, 0.26]} />
+      <mesh position={[0, -2.02, 0.12]} castShadow>
+        <boxGeometry args={[5.75, 0.3, 0.26]} />
         <meshStandardMaterial color='#b78945' metalness={0.62} roughness={0.3} />
       </mesh>
-      <mesh position={[-2.14, 0, 0.12]} castShadow>
-        <boxGeometry args={[0.28, 3.4, 0.26]} />
+      <mesh position={[-2.72, 0, 0.12]} castShadow>
+        <boxGeometry args={[0.3, 4.34, 0.26]} />
         <meshStandardMaterial color='#b78945' metalness={0.62} roughness={0.3} />
       </mesh>
-      <mesh position={[2.14, 0, 0.12]} castShadow>
-        <boxGeometry args={[0.28, 3.4, 0.26]} />
+      <mesh position={[2.72, 0, 0.12]} castShadow>
+        <boxGeometry args={[0.3, 4.34, 0.26]} />
         <meshStandardMaterial color='#b78945' metalness={0.62} roughness={0.3} />
       </mesh>
-      <pointLight
+      {beacon && <pointLight
         color='#e6bb71'
         intensity={active ? 24 : 9}
         distance={7}
         position={[0, 0.25, 2]}
-      />
+      />}
     </group>
   );
 }

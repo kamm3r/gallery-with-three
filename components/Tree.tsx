@@ -15,10 +15,21 @@ type GLTFResult = GLTF & {
   };
 };
 
-export default function Tree(props: ThreeElements['group']) {
+export type TreeVariant =
+  | 'branched'
+  | 'conical'
+  | 'oval'
+  | 'round'
+  | 'spreading';
+
+type TreeProps = ThreeElements['group'] & {
+  variant?: TreeVariant;
+};
+
+export default function Tree({ variant = 'branched', ...props }: TreeProps) {
   const group = useRef<THREE.Group>(null);
   const { nodes, materials } = useGLTF(
-    '/assets/trees/tree-branched.glb'
+    `/assets/trees/tree-${variant}.glb`
   ) as unknown as GLTFResult;
   return (
     <group ref={group} {...props} dispose={null}>
@@ -39,4 +50,6 @@ export default function Tree(props: ThreeElements['group']) {
   );
 }
 
-useGLTF.preload('/assets/trees/tree-branched.glb');
+(['branched', 'conical', 'oval', 'round', 'spreading'] as TreeVariant[]).forEach(
+  (variant) => useGLTF.preload(`/assets/trees/tree-${variant}.glb`)
+);

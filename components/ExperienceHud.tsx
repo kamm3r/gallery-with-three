@@ -1,4 +1,5 @@
 import type { PointerEvent } from 'react';
+import { useGame } from '../app/gameSettings';
 import { setPlayerControl, type ControlName } from '../hooks/usePlayerControls';
 
 interface ExperienceHudProps {
@@ -30,25 +31,20 @@ function TouchButton({ control, label }: { control: ControlName; label: string }
   );
 }
 
-export function ExperienceHud({ chapter, title, prompt, leaving, ready }: ExperienceHudProps) {
+export function ExperienceHud({ title, prompt, leaving, ready }: ExperienceHudProps) {
+  const { paused } = useGame();
   return (
-    <div className='hud' data-scene-ready={ready}>
-      <header className='world-title'>
-        <p>{chapter}</p>
+    <div className='hud' data-scene-ready={ready} inert={paused} aria-hidden={paused}>
+      {ready && <header key={title} className='arrival-title' style={{ animationPlayState: paused ? 'paused' : 'running' }}>
         <h1>{title}</h1>
-      </header>
-      <div className='keyboard-help' aria-label='Controls'>
-        <span>WASD or arrows to move</span>
-        <span>Drag to orbit camera</span>
-        <span>Shift to run</span>
-        <span>Space to jump</span>
-      </div>
+      </header>}
       <div className='touch-controls' aria-label='Touch controls'>
         <TouchButton control='forward' label='Up' />
         <TouchButton control='left' label='Left' />
         <TouchButton control='backward' label='Down' />
         <TouchButton control='right' label='Right' />
         <TouchButton control='jump' label='Jump' />
+        <TouchButton control='roll' label='Roll' />
       </div>
       <div className={`portal-prompt ${prompt ? 'is-visible' : ''}`} role='status'>
         {prompt}

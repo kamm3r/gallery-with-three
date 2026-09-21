@@ -1,4 +1,5 @@
 import { FramedArtwork } from './FramedArtwork';
+import { useCallback, useState } from 'react';
 import {
   CuboidCollider,
   CylinderCollider,
@@ -8,6 +9,7 @@ import { PortalPainting } from './PortalPainting';
 import { PortalFrameCollider } from './PortalFrameCollider';
 import { ThirdPersonPlayer } from './ThirdPersonPlayer';
 import Tree from './Tree';
+import { GallerySealPuzzle } from './GallerySealPuzzle';
 
 interface GalleryWorldProps {
   nearPortal: boolean;
@@ -15,6 +17,8 @@ interface GalleryWorldProps {
   onNearPortal: (near: boolean) => void;
   onExit: () => void;
   onReady: () => void;
+  onHangChange: (hanging: boolean) => void;
+  onPuzzleProgress: (progress: number) => void;
 }
 
 const artworks = [
@@ -36,7 +40,17 @@ export function GalleryWorld({
   onNearPortal,
   onExit,
   onReady,
+  onHangChange,
+  onPuzzleProgress,
 }: GalleryWorldProps) {
+  const [puzzleProgress, setPuzzleProgress] = useState(0);
+  const puzzleSolved = puzzleProgress === 3;
+
+  const updatePuzzleProgress = useCallback((progress: number) => {
+    setPuzzleProgress(progress);
+    onPuzzleProgress(progress);
+  }, [onPuzzleProgress]);
+
   return (
     <>
       <color attach='background' args={['#182225']} />
@@ -142,11 +156,13 @@ export function GalleryWorld({
         position={[0, 3.7, -9.4]}
       />
 
+      <GallerySealPuzzle onProgressChange={updatePuzzleProgress} />
+
       <PortalPainting
         image='/assets/tree.jpg'
         position={[0, 2.2, 12.65]}
         rotation={[0, Math.PI, 0]}
-        active={nearPortal || portalImpact}
+        active={puzzleSolved && (nearPortal || portalImpact)}
         impact={portalImpact}
       />
       <PortalFrameCollider
@@ -155,11 +171,16 @@ export function GalleryWorld({
       />
       <ThirdPersonPlayer
         start={[0, 0, 6.4]}
-        portals={[{ id: 'forest', position: [0, 0, 12.65] }]}
+        portals={
+          puzzleSolved
+            ? [{ id: 'forest', position: [0, 0, 12.65] }]
+            : []
+        }
         bounds={[7.7, 11.8]}
         cameraDistance={4.8}
         onNearPortal={(portalId) => onNearPortal(Boolean(portalId))}
         onEnterPortal={() => onExit()}
+        onHangChange={onHangChange}
         onReady={onReady}
       />
     </>

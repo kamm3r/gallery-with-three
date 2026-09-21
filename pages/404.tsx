@@ -1,4 +1,4 @@
-import Link from 'next/link';
+import { Link } from 'react-router-dom';
 
 export default function Custom404() {
   return (
@@ -6,7 +6,7 @@ export default function Custom404() {
       <div>
         <p>Lost trail</p>
         <h1>This path leaves the forest.</h1>
-        <Link href='/'>Go home</Link>
+        <Link to='/'>Go home</Link>
       </div>
     </main>
   );
