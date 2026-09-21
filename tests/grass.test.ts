@@ -1,17 +1,24 @@
-import assert from 'node:assert/strict';
-import test from 'node:test';
-import { allowsGrass, createGrassPatch } from '../gameplay/grass.ts';
-import { groundHeight } from '../gameplay/terrain.ts';
+import assert from "node:assert/strict";
+import test from "node:test";
+import { allowsGrass, createGrassPatch } from "../src/gameplay/grass.ts";
+import { groundHeight } from "../src/gameplay/terrain.ts";
 
-test('grass leaves spawn, paths, and portal gardens clear', () => {
-  for (const [x, z] of [[0, 6], [-6, 4], [-15, -3], [-32, -14], [-28, 102], [125, 0]]) {
+test("grass leaves spawn, paths, and portal gardens clear", () => {
+  for (const [x, z] of [
+    [0, 6],
+    [-6, 4],
+    [-15, -3],
+    [-32, -14],
+    [-28, 102],
+    [125, 0],
+  ]) {
     assert.equal(allowsGrass(x, z), false);
   }
   assert.equal(allowsGrass(-5, 5), false);
   assert.equal(allowsGrass(-5, -5), true);
 });
 
-test('grass patches are reproducible, grounded, and stay within their chunk', () => {
+test("grass patches are reproducible, grounded, and stay within their chunk", () => {
   const blades = createGrassPatch(-3, 2, 12);
   assert.ok(blades.length > 500);
   assert.deepEqual(blades, createGrassPatch(-3, 2, 12));

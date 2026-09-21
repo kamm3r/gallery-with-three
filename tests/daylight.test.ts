@@ -1,8 +1,8 @@
-import assert from 'node:assert/strict';
-import test from 'node:test';
-import { DAY_LENGTH, daylightAt } from '../gameplay/daylight.ts';
+import assert from "node:assert/strict";
+import test from "node:test";
+import { DAY_LENGTH, daylightAt } from "../src/gameplay/daylight.ts";
 
-test('the day/night cycle repeats smoothly and includes daylight and darkness', () => {
+test("the day/night cycle repeats smoothly and includes daylight and darkness", () => {
   assert.equal(daylightAt(DAY_LENGTH * 0.13).daylight, 1);
   assert.equal(daylightAt(DAY_LENGTH * 0.63).daylight, 0);
   for (let t = 0; t < DAY_LENGTH; t++) {

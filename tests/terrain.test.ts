@@ -1,5 +1,5 @@
-import assert from 'node:assert/strict';
-import test from 'node:test';
+import assert from "node:assert/strict";
+import test from "node:test";
 import {
   FLAT_RADIUS,
   HUB_HALF,
@@ -12,9 +12,9 @@ import {
   WATER_LEVEL,
   riverX,
   isDryLand,
-} from '../gameplay/terrain.ts';
+} from "../src/gameplay/terrain.ts";
 
-test('river and lakes have submerged beds and the island remains dry', () => {
+test("river and lakes have submerged beds and the island remains dry", () => {
   for (const z of [-95, -30, 10, 80, 100]) {
     assert.ok(groundHeight(riverX(z), z) < WATER_LEVEL);
   }
@@ -26,7 +26,7 @@ test('river and lakes have submerged beds and the island remains dry', () => {
   assert.ok(isDryLand(riverX(10) + 11, 10));
 });
 
-test('the clearing is dead flat', () => {
+test("the clearing is dead flat", () => {
   for (const [x, z] of [
     [0, 0],
     [6, 0],
@@ -41,7 +41,7 @@ test('the clearing is dead flat', () => {
   assert.ok(Math.hypot(10, 8) < FLAT_RADIUS + 1);
 });
 
-test('hills stay bounded and walkable inside the play radius', () => {
+test("hills stay bounded and walkable inside the play radius", () => {
   let maxAbs = 0;
   let maxSlope = 0;
   for (let x = -PLAY_RADIUS; x <= PLAY_RADIUS; x += 2) {
@@ -56,7 +56,7 @@ test('hills stay bounded and walkable inside the play radius', () => {
   assert.ok(maxSlope < 30, `max slope ${maxSlope}°`);
 });
 
-test('the terrain grid is well-formed', () => {
+test("the terrain grid is well-formed", () => {
   const grid = buildTerrainGrid();
   assert.equal(grid.count, (HUB_SEGS + 1) * (HUB_SEGS + 1));
   assert.equal(grid.vertices.length, grid.count * 3);
@@ -73,7 +73,7 @@ test('the terrain grid is well-formed', () => {
   assert.equal(grid.vertices[1], groundHeight(x0, x0));
 });
 
-test('scatter stays in its annulus and on the ground', () => {
+test("scatter stays in its annulus and on the ground", () => {
   const points = scatter(200, 6, 55, 7);
   assert.equal(points.length, 200);
   for (const p of points) {
