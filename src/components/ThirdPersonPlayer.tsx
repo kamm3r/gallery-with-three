@@ -24,6 +24,8 @@ import {
   canEnterPortal,
   canGrabLedge,
   consumeRollPress,
+  downhillSnapSpeed,
+  DOWNHILL_SNAP_FEET,
   getGravityScale,
   HANG_TIMEOUT,
   LEDGE_TOP_MAX,
@@ -31,6 +33,7 @@ import {
   ROLL_COOLDOWN,
   ROLL_DURATION,
   ROLL_SPEED,
+  shouldStickToGround,
 } from "../gameplay/playerRules";
 import { usePlayerControls, type PlayerControls } from "../hooks/usePlayerControls";
 import { AnimatedCharacter, type ActionName } from "./AnimatedCharacter";
@@ -115,6 +118,8 @@ interface RollState {
 }
 
 const PLAYER_CENTER_HEIGHT = 1.12;
+/** Center to capsule bottom: halfHeight (0.5) + radius (0.42). */
+const CAPSULE_BOTTOM_OFFSET = 0.92;
 const JUMP_SPEED = 8.4;
 const WALK_SPEED = 4.8;
 const RUN_SPEED = 7.5;
@@ -131,6 +136,8 @@ const ledgeDirection = new THREE.Vector3();
 const ledgeTopOrigin = new THREE.Vector3();
 const ledgeDown = new THREE.Vector3(0, -1, 0);
 const hangTarget = new THREE.Vector3();
+// Scratch origin for the downhill snap ray (no per-frame allocation).
+const stickOrigin = new THREE.Vector3();
 
 function PlayerRuntime({
   combat: combatRef,
@@ -562,6 +569,48 @@ function PlayerRuntime({
     if (notifiedHang.current !== hang.active) {
       notifiedHang.current = hang.active;
       onHangChange(hang.active);
+    }
+
+    // Downhill snap: briefly airborne after running off a slope/step edge
+    // while walkable ground is still close below -> pull down so the hover
+    // spring re-catches instead of bouncing. Only runs on the
+    // grounded -> airborne edge, so real jumps and falls are untouched.
+    if (
+      enabled &&
+      !hang.active &&
+      !roll.active &&
+      wasGrounded.current &&
+      !grounded &&
+      velocity.y <= 0 &&
+      movementInput
+    ) {
+      stickOrigin.set(position.x, position.y, position.z);
+      const snapHit = world.castRayAndGetNormal(
+        new rapier.Ray(stickOrigin, ledgeDown),
+        CAPSULE_BOTTOM_OFFSET + DOWNHILL_SNAP_FEET + 0.1,
+        true,
+        rapier.QueryFilterFlags.EXCLUDE_SENSORS,
+        undefined,
+        undefined,
+        body,
+      );
+      const feetAboveGround = snapHit ? snapHit.timeOfImpact - CAPSULE_BOTTOM_OFFSET : null;
+      if (
+        shouldStickToGround({
+          wasGrounded: wasGrounded.current,
+          grounded,
+          verticalSpeed: velocity.y,
+          moving: movementInput,
+          enabled: true,
+          feetAboveGround,
+          groundNormalY: snapHit?.normal.y,
+        })
+      ) {
+        body.setLinvel(
+          { x: velocity.x, y: downhillSnapSpeed(velocity.y, delta), z: velocity.z },
+          true,
+        );
+      }
     }
 
     landingTime.current = Math.max(0, landingTime.current - delta);
@@ -1007,9 +1056,13 @@ export function ThirdPersonPlayer({
         capsuleRadius={0.42}
         floatHeight={0.2}
         springK={180}
-        dampingC={24}
+        dampingC={30}
         moveImpulsePointOffset={0}
-        rayHitForgiveness={0.18}
+        // Wide snap window: keeps contact running down the 0.48m steps and
+        // the 40 deg slope instead of flickering airborne each edge.
+        rayHitForgiveness={0.55}
+        // Longer feelers so the landing is already in range at run speed.
+        rayLength={2}
         maxWalkVel={WALK_SPEED}
         maxRunVel={RUN_SPEED}
         accDeltaTime={0.34}

@@ -53,6 +53,52 @@ export const ROLL_DURATION = 0.92;
 export const ROLL_COOLDOWN = 0.9;
 export const ROLL_SPEED = 9;
 
+// --- Downhill snap: keeps the Ecctrl hover spring glued to the ground when
+// running down slopes/steps. At run speed the body outruns the spring for a
+// frame or two over each edge (a 0.48m step at 7.5m/s needs ~-5m/s of descent
+// that gravity alone can't supply), so isOnGround flickers and the spring
+// slams back down -> visible jitter. The fix is a short "snap" window: when
+// we were grounded last frame, are briefly airborne while moving, and walkable
+// ground is still close below, pull down harder until the spring re-catches.
+
+/** Snap window above the feet. Covers the tallest park step (0.48m) + float. */
+export const DOWNHILL_SNAP_FEET = 0.75;
+/** Don't snap when already falling fast (real falls should feel like falls). */
+export const DOWNHILL_SNAP_MAX_FALL = -10;
+/** cos(50 deg): walkable ceiling mirroring the controller's slopeMaxAngle. */
+export const WALKABLE_NORMAL_Y = 0.64;
+/** Guaranteed minimum sink speed while snapping (m/s). */
+export const DOWNHILL_SNAP_MIN_SINK = -3.5;
+/** Extra downward acceleration while snapping (m/s^2). */
+export const DOWNHILL_SNAP_ACCEL = 25;
+
+export interface DownhillStickState {
+  wasGrounded: boolean;
+  grounded: boolean;
+  verticalSpeed: number;
+  /** Any move input held. */
+  moving: boolean;
+  /** Not hanging / rolling / seated / entering / dead. */
+  enabled: boolean;
+  /** Feet height above walkable ground, or null when nothing is in range. */
+  feetAboveGround: number | null;
+  groundNormalY?: number;
+}
+
+export function shouldStickToGround(state: DownhillStickState) {
+  if (!state.enabled || !state.moving) return false;
+  if (!state.wasGrounded || state.grounded) return false;
+  if (state.verticalSpeed > 0 || state.verticalSpeed < DOWNHILL_SNAP_MAX_FALL) return false;
+  if (state.feetAboveGround === null) return false;
+  if (state.feetAboveGround < 0 || state.feetAboveGround > DOWNHILL_SNAP_FEET) return false;
+  if ((state.groundNormalY ?? 1) < WALKABLE_NORMAL_Y) return false;
+  return true;
+}
+
+export function downhillSnapSpeed(verticalSpeed: number, delta: number) {
+  return Math.min(verticalSpeed - DOWNHILL_SNAP_ACCEL * delta, DOWNHILL_SNAP_MIN_SINK);
+}
+
 export interface RollStartState {
   grounded: boolean;
   rolling: boolean;
