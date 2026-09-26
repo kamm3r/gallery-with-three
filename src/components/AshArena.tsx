@@ -261,6 +261,7 @@ export function createFireMaterial(seed: number) {
 function Brazier({ position, seed }: { position: [number, number, number]; seed: number }) {
   const light = useRef<THREE.PointLight>(null);
   const material = useMemo(() => createFireMaterial(seed), [seed]);
+  useEffect(() => () => material.dispose(), [material]);
   useFrame((state) => {
     const t = state.clock.elapsedTime;
     material.uniforms.uTime.value = t;
@@ -459,6 +460,7 @@ export function AshArena({ combat }: { combat: MutableRefObject<Encounter> }) {
       }),
     [],
   );
+  useEffect(() => () => skyMaterial.dispose(), [skyMaterial]);
   const fx = useRef({ enrage: 0, pulse: 0, lastImpact: 0 });
 
   // The post haze reads its tint from the shared sun state; claim it here.
@@ -635,6 +637,7 @@ export function FogGate({
       ),
     [],
   );
+  useEffect(() => () => layers.forEach((material) => material.dispose()), [layers]);
   useFrame((state, delta) => {
     for (const material of layers) {
       material.uniforms.uTime.value = state.clock.elapsedTime;

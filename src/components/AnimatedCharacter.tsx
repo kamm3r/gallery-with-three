@@ -74,23 +74,6 @@ export function AnimatedCharacter({
   const { scene, animations } = useGLTF(MODEL_PATH);
   const character = useMemo(() => clone(scene), [scene]);
   const { actions } = useAnimations(animations, group);
-  // TEMP-PROOF: expose mixer state for diagnosis. Revert.
-  useFrame(() => {
-    if (
-      typeof window !== "undefined" &&
-      new URLSearchParams(window.location.search).get("debugseat") !== null
-    ) {
-      const weights: Record<string, number> = {};
-      for (const [name, action] of Object.entries(actions)) {
-        weights[name] = action ? Number(action.getEffectiveWeight().toFixed(3)) : -1;
-      }
-      (window as unknown as { __animdbg?: unknown }).__animdbg = {
-        current: animation,
-        keys: Object.keys(actions),
-        weights,
-      };
-    }
-  });
   const currentAction = useRef<THREE.AnimationAction | null>(null);
   const paceRef = useRef(pace);
   useEffect(() => {
@@ -167,6 +150,8 @@ export function AnimatedCharacter({
   }, [character, armed, weaponScale]);
 
   useLayoutEffect(() => {
+    // Restore the shared glTF materials on cleanup so the clones can be freed.
+    const restore: Array<[THREE.Mesh, THREE.Material | THREE.Material[], THREE.Material[]]> = [];
     character.traverse((object) => {
       if (object instanceof THREE.Mesh) {
         object.castShadow = true;
@@ -185,9 +170,16 @@ export function AnimatedCharacter({
           }
           return material;
         });
+        restore.push([object, object.material, styledMaterials]);
         object.material = hasMultipleMaterials ? styledMaterials : styledMaterials[0];
       }
     });
+    return () => {
+      for (const [mesh, original, styled] of restore) {
+        mesh.material = original;
+        for (const material of styled) material.dispose();
+      }
+    };
   }, [character, palette]);
 
   useEffect(() => {

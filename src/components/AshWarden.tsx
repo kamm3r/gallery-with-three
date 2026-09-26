@@ -1,6 +1,6 @@
 import { useFrame } from "@react-three/fiber";
 import { CylinderCollider, RigidBody, type RapierRigidBody } from "@react-three/rapier";
-import { useMemo, useRef, type MutableRefObject } from "react";
+import { useEffect, useMemo, useRef, type MutableRefObject } from "react";
 import * as THREE from "three";
 import {
   LEAP_AIRTIME,
@@ -531,6 +531,18 @@ export function AshWarden({
     });
     return { geometry, material, positions };
   }, []);
+  useEffect(
+    () => () => {
+      Object.values(materials).forEach((material) => material.dispose());
+      telegraphMaterial.dispose();
+      leapMaterial.dispose();
+      cloakGeometry.dispose();
+      blade.dispose();
+      trail.geometry.dispose();
+      trail.material.dispose();
+    },
+    [materials, telegraphMaterial, leapMaterial, cloakGeometry, blade, trail],
+  );
 
   const runtime = useRef({
     pose: { ...IDLE } as Pose,

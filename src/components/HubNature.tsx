@@ -80,6 +80,7 @@ export function HubGround({ grid }: { grid: TerrainGrid }) {
     geo.computeVertexNormals();
     return geo;
   }, [grid]);
+  useEffect(() => () => geometry.dispose(), [geometry]);
   const material = useMemo(createGroundMaterial, []);
   useEffect(() => () => material.dispose(), [material]);
 
@@ -105,6 +106,7 @@ export function Grass({ count = 2200 }: { count?: number }) {
     geo.translate(0, 0.24, 0);
     return geo;
   }, []);
+  useEffect(() => () => blades.dispose(), [blades]);
   useScatterInstances(ref, points, grassColor);
   return (
     <instancedMesh ref={ref} args={[blades, undefined, points.length]} receiveShadow>
@@ -127,6 +129,7 @@ export function Flowers({ count = 220 }: { count?: number }) {
     geo.translate(0, 0.25, 0);
     return geo;
   }, []);
+  useEffect(() => () => stemGeo.dispose(), [stemGeo]);
   useScatterInstances(stems, points, stemColor);
   useScatterInstances(heads, points, flowerHeadColor);
   return (
@@ -172,6 +175,7 @@ export function Bushes({ count = 30 }: { count?: number }) {
     geo.scale(1, 0.7, 1);
     return geo;
   }, []);
+  useEffect(() => () => bushGeo.dispose(), [bushGeo]);
   useScatterInstances(ref, points, bushColor, 0.15);
   return (
     <instancedMesh ref={ref} args={[bushGeo, undefined, points.length]} castShadow receiveShadow>

@@ -1,5 +1,5 @@
 import { useFrame } from "@react-three/fiber";
-import { useLayoutEffect, useMemo, useRef, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, type ReactNode } from "react";
 import * as THREE from "three";
 import { PIT_BOTTOM, type LevelTheme, type Solid, type WarpLevel } from "../gameplay/warpLevels";
 
@@ -71,6 +71,10 @@ export function LevelGround({ level }: { level: WarpLevel }) {
       wall: [wall, wall, wallTop, wall, wall, wall],
     };
   }, [theme]);
+  useEffect(
+    () => () => new Set([...materials.floor, ...materials.wall]).forEach((m) => m.dispose()),
+    [materials],
+  );
   return (
     <>
       {level.solids.map((solid, i) => (
@@ -235,6 +239,7 @@ function Snowfall({ from, to }: { from: number; to: number }) {
     g.setAttribute("position", new THREE.BufferAttribute(positions, 3));
     return g;
   }, [from, to]);
+  useEffect(() => () => geometry.dispose(), [geometry]);
   useFrame((_, delta) => {
     const attribute = geometry.getAttribute("position") as THREE.BufferAttribute;
     const array = attribute.array as Float32Array;

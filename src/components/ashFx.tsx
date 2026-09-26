@@ -1,5 +1,5 @@
 import { useFrame, useThree } from "@react-three/fiber";
-import { useImperativeHandle, useMemo, useRef, type Ref } from "react";
+import { useEffect, useImperativeHandle, useMemo, useRef, type Ref } from "react";
 import * as THREE from "three";
 
 // Shared effects for the Ash Warden's arena: GPU-drifted embers and ash,
@@ -124,6 +124,7 @@ export function Embers({
     result.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, height / 2, 0), radius + height);
     return result;
   }, [count, radius, height]);
+  useEffect(() => () => geometry.dispose(), [geometry]);
   const material = useMemo(
     () =>
       new THREE.ShaderMaterial({
@@ -146,6 +147,7 @@ export function Embers({
       }),
     [additive, color, height, opacity, pixelRatio, radius, size, speed, sway],
   );
+  useEffect(() => () => material.dispose(), [material]);
   useImperativeHandle(ref, () => ({ material }), [material]);
   useFrame((state) => {
     material.uniforms.uTime.value = state.clock.elapsedTime;
@@ -282,6 +284,13 @@ export function ImpactBursts({ ref }: { ref?: Ref<ImpactBurstsHandle> }) {
     });
     return { geometry, material };
   }, [pixelRatio]);
+  useEffect(
+    () => () => {
+      debris.geometry.dispose();
+      debris.material.dispose();
+    },
+    [debris],
+  );
   const ringMaterials = useMemo(
     () =>
       Array.from(
@@ -299,6 +308,13 @@ export function ImpactBursts({ ref }: { ref?: Ref<ImpactBurstsHandle> }) {
     [],
   );
   const ringGeometry = useMemo(() => new THREE.RingGeometry(0.82, 1, 72).rotateX(-Math.PI / 2), []);
+  useEffect(
+    () => () => {
+      ringGeometry.dispose();
+      ringMaterials.forEach((material) => material.dispose());
+    },
+    [ringGeometry, ringMaterials],
+  );
 
   useImperativeHandle(
     ref,

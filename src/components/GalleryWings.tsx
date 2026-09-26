@@ -716,7 +716,13 @@ function SunArchive({
     const spines = new THREE.MeshStandardMaterial({ map: books, roughness: 0.85 });
     return [wood, wood, wood, wood, spines, spines];
   }, [books]);
-  useEffect(() => () => materials[0].dispose(), [materials]);
+  useEffect(
+    () => () => {
+      materials[0].dispose();
+      materials[4].dispose();
+    },
+    [materials],
+  );
   const [vx, vz] = archiveMaze.deadEnds[0];
   const [sx, sz] = archiveMaze.deepest;
   return (

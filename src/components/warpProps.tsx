@@ -1,5 +1,5 @@
 import { useFrame } from "@react-three/fiber";
-import { useLayoutEffect, useMemo, useRef, type MutableRefObject } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, type MutableRefObject } from "react";
 import * as THREE from "three";
 import { CRATE_SIZE, type CrateKind, type EnemyKind, type Vec3 } from "../gameplay/warpLevels";
 
@@ -180,6 +180,11 @@ export function CrateMesh({
         : crateMaterial(kind),
     [kind],
   );
+  // Only the per-crate clones are ours; the cached base set is shared.
+  useEffect(() => {
+    if (kind !== "tnt" && kind !== "nitro") return;
+    return () => materials.forEach((material) => material.dispose());
+  }, [kind, materials]);
   useFrame((state) => {
     const m = mesh.current;
     if (!m) return;
