@@ -1,6 +1,7 @@
 import { useFrame } from "@react-three/fiber";
 import { CuboidCollider, RigidBody, type RapierCollider } from "@react-three/rapier";
 import { useEffect, useMemo, useRef, type MutableRefObject } from "react";
+import { StaticBatch } from "./StaticBatch";
 import * as THREE from "three";
 import {
   CEILING_Y,
@@ -89,7 +90,14 @@ function useHouseKit() {
       brick: new THREE.MeshStandardMaterial({ color: style.brick, roughness: 1 }),
     }));
     // Real glass in real openings: see-through, faintly tinted; lamp-lit panes glow.
-    const glass = { transparent: true, depthWrite: false, side: THREE.DoubleSide } as const;
+    // Flat panes need no back-then-front pass; that split re-resolves the
+    // shader program for every pane, every frame.
+    const glass = {
+      transparent: true,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      forceSinglePass: true,
+    } as const;
     const windows = {
       lit: new THREE.MeshBasicMaterial({
         color: WINDOW_LIT,
@@ -425,6 +433,7 @@ function Furniture({
                     ref={(group) => {
                       leaves.current[leaf] = group;
                     }}
+                    userData={{ dynamic: true }}
                   >
                     <mesh
                       position={[(leaf ? -1 : 1) * (wardrobeWidth / 4), h / 2, 0]}
@@ -566,7 +575,11 @@ function HouseDoor({
           position={[plan.x, FLOOR_Y + DOOR_HEIGHT / 2, plan.z]}
         />
       </RigidBody>
-      <group ref={hinge} position={[plan.x - plan.width / 2, FLOOR_Y, plan.z]}>
+      <group
+        ref={hinge}
+        position={[plan.x - plan.width / 2, FLOOR_Y, plan.z]}
+        userData={{ dynamic: true }}
+      >
         <mesh position={[plan.width / 2, DOOR_HEIGHT / 2, 0]} material={material} castShadow>
           <boxGeometry args={[plan.width - 0.04, DOOR_HEIGHT, 0.06]} />
         </mesh>
@@ -627,7 +640,7 @@ function CraftsmanHouse({
   const porchTop = 3.3;
   const porchFront = hd + 2.8;
   return (
-    <group position={[house.x, 0, house.z]} rotation-y={house.yaw}>
+    <StaticBatch position={[house.x, 0, house.z]} rotation-y={house.yaw}>
       <RigidBody type="fixed" colliders={false}>
         <CuboidCollider
           args={[geometry.porchWidth / 2 + 0.4, 0.175, 1.4]}
@@ -746,7 +759,7 @@ function CraftsmanHouse({
           <sphereGeometry args={[0.09, 8, 6]} />
         </mesh>
       )}
-    </group>
+    </StaticBatch>
   );
 }
 

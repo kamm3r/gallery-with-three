@@ -1,6 +1,6 @@
 import { Canvas, useThree, type CanvasProps } from "@react-three/fiber";
-import { useLayoutEffect } from "react";
-import { Leva } from "leva";
+import { lazy, Suspense, useLayoutEffect } from "react";
+import { Leva, useControls } from "leva";
 import { useGame } from "../gameSettings";
 import { WorldProvider } from "koota/react";
 import { runtimeWorld } from "../gameplay/ecs/world";
@@ -30,6 +30,27 @@ function PauseRenderLoop() {
   return null;
 }
 
+// Dev only: the dynamic import keeps r3f-perf out of production bundles.
+const Perf = import.meta.env.DEV
+  ? lazy(() => import("r3f-perf").then((module) => ({ default: module.Perf })))
+  : () => null;
+
+function Diagnostics() {
+  const { perf } = useControls("Diagnostics", {
+    perf: { value: false, label: "r3f-perf overlay" },
+  });
+  // Live root state for the dev-browser checks in scripts/.
+  const state = useThree();
+  useLayoutEffect(() => {
+    (window as { __r3f?: typeof state }).__r3f = state;
+  }, [state]);
+  return perf ? (
+    <Suspense fallback={null}>
+      <Perf position="top-left" />
+    </Suspense>
+  ) : null;
+}
+
 export function GameCanvas({
   children,
   atmosphere,
@@ -57,6 +78,7 @@ export function GameCanvas({
             <RuntimeSystems />
             {children}
             <CinematicPost atmosphere={atmosphere} />
+            {import.meta.env.DEV && <Diagnostics />}
           </WorldProvider>
         </Canvas>
       </div>
