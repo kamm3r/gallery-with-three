@@ -52,7 +52,7 @@ test("hills stay bounded and walkable inside the play radius", () => {
     }
   }
   assert.ok(maxAbs < 3.2, `max |height| ${maxAbs}`);
-  // Ecctrl climbs 50° slopes; stay far below for a relaxed walk.
+  // The controller climbs 50° slopes; stay far below for a relaxed walk.
   assert.ok(maxSlope < 30, `max slope ${maxSlope}°`);
 });
 

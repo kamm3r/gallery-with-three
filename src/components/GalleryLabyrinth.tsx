@@ -1,10 +1,31 @@
-import { useState } from "react";
-import { CuboidCollider, RigidBody } from "@react-three/rapier";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Stars } from "@react-three/drei";
+import { useFrame, useThree } from "@react-three/fiber";
+import { CuboidCollider, CylinderCollider, RigidBody } from "@react-three/rapier";
+import * as THREE from "three";
 import { GalleryArchitecture, GalleryInscription } from "./GalleryArchitecture";
-import { advanceGallerySequence, type GallerySigil } from "../gameplay/galleryLayout";
+import {
+  GalleryWings,
+  PressureButton,
+  SIGIL_COLORS,
+  SigilGem,
+  type ButtonFeedback,
+} from "./GalleryWings";
+import {
+  GALLERY_BOUNDS,
+  GALLERY_SEQUENCE,
+  GALLERY_SIGILS,
+  advanceGallerySequence,
+  roomAt,
+  type DoorKey,
+  type RoomId,
+  type GallerySigil,
+} from "../gameplay/galleryLayout";
+import { playSound, setFootstepSurface, setZone, type SoundZone } from "../gameplay/sound";
 import { PortalPainting } from "./PortalPainting";
 import { PortalFrameCollider } from "./PortalFrameCollider";
 import { ThirdPersonPlayer } from "./ThirdPersonPlayer";
+import { isPlayerBody } from "../gameplay/playerBody";
 
 interface Props {
   nearPortal: boolean;
@@ -14,221 +35,327 @@ interface Props {
   onReady: () => void;
   onHangChange: (value: boolean) => void;
   onPuzzleProgress: (value: number) => void;
+  onNotice: (message: string) => void;
 }
-const colors = { sun: "#e6b65a", leaf: "#93c08a", moon: "#a3bbec" };
-function Block({
+
+type Vec3 = [number, number, number];
+
+/** Dev-only `?spawn=x,z[,yawDegrees]` drops the player straight into a wing for testing. */
+const DEV_SPAWN =
+  import.meta.env.DEV && typeof window !== "undefined"
+    ? new URLSearchParams(window.location.search).get("spawn")?.split(",").map(Number)
+    : undefined;
+const START: Vec3 = DEV_SPAWN ? [DEV_SPAWN[0], 0, DEV_SPAWN[1]] : [0, 0, 23];
+const START_YAW = DEV_SPAWN?.[2] === undefined ? Math.PI : (DEV_SPAWN[2] * Math.PI) / 180;
+const PORTAL: Vec3 = [0, 2.2, -62.3];
+const ROTUNDA: [number, number] = [0, -12];
+/** Plate order around the ring deliberately differs from the journey. */
+const RING: GallerySigil[] = ["moon", "star", "ember", "sun", "leaf"];
+
+const SIGIL_NAMES: Record<GallerySigil, string> = {
+  sun: "sun",
+  leaf: "leaf",
+  moon: "moon",
+  star: "star",
+  ember: "ember",
+};
+
+function isPlayer(event: { other: { rigidBody?: { userData?: unknown } } }) {
+  return isPlayerBody(event.other.rigidBody);
+}
+
+function Checkpoint({
   position,
   size,
-  color = "#4a5b61",
+  onEnter,
 }: {
-  position: [number, number, number];
-  size: [number, number, number];
-  color?: string;
+  position: Vec3;
+  size: Vec3;
+  onEnter: () => void;
 }) {
   return (
-    <RigidBody type="fixed" colliders="cuboid" position={position}>
-      <mesh castShadow receiveShadow>
-        <boxGeometry args={size} />
-        <meshStandardMaterial color={color} roughness={0.85} />
-      </mesh>
+    <RigidBody type="fixed" colliders={false} position={position}>
+      <CuboidCollider
+        sensor
+        args={size}
+        onIntersectionEnter={(event) => {
+          if (isPlayer(event)) onEnter();
+        }}
+      />
     </RigidBody>
   );
 }
-export function GalleryLabyrinth(props: Props) {
-  const [found, setFound] = useState<GallerySigil[]>([]);
-  const [progress, setProgress] = useState(0);
-  const [secrets, setSecrets] = useState<number[]>([]);
-  const solved = progress === 5;
-  const press = (name: GallerySigil) => {
-    const next = advanceGallerySequence(progress, name, found);
-    setProgress(next);
-    props.onPuzzleProgress(next);
-  };
+
+const ROOM_ZONES: Partial<Record<RoomId, SoundZone>> = {
+  archive: "archive",
+  study: "archive",
+  westHall: "archive",
+  mirrors: "mirrors",
+  eastHall: "mirrors",
+  conservatory: "mirrors",
+  garden: "garden",
+  gardenPassage: "garden",
+  crypt: "crypt",
+  cryptPassage: "crypt",
+  ossuary: "crypt",
+  starStair: "observatory",
+  observatory: "observatory",
+  vault: "vault",
+  vaultHall: "vault",
+};
+
+/** Follows the camera through the wings: ambience zones, stone steps, falls. */
+function GalleryAudio() {
+  const camera = useThree((state) => state.camera);
+  const zone = useRef<SoundZone | null>(null);
+  const elapsed = useRef(0);
+  const falling = useRef(false);
+  useEffect(() => {
+    setFootstepSurface("stone");
+    return () => {
+      setFootstepSurface("grass");
+      setZone(null);
+    };
+  }, []);
+  useFrame((_, delta) => {
+    elapsed.current += delta;
+    if (elapsed.current < 0.25) return;
+    elapsed.current = 0;
+    const { x, y, z } = camera.position;
+    if (y < -3 && !falling.current) {
+      falling.current = true;
+      playSound("fall");
+    } else if (y > 0) {
+      falling.current = false;
+    }
+    const room = roomAt(x, z);
+    const next = (room && ROOM_ZONES[room.id]) ?? "halls";
+    if (next !== zone.current) {
+      zone.current = next;
+      setZone(next);
+    }
+  });
+  return null;
+}
+
+function KeeperStatue({ progress }: { progress: number }) {
+  const halo = useRef<THREE.Mesh>(null);
+  useFrame((state, delta) => {
+    if (!halo.current) return;
+    halo.current.rotation.z += delta * (0.3 + progress * 0.25);
+    halo.current.position.y = 4.6 + Math.sin(state.clock.elapsedTime) * 0.08;
+  });
+  const glow = progress / GALLERY_SEQUENCE.length;
   return (
-    <>
-      <color attach="background" args={["#202d38"]} />
-      <fog attach="fog" args={["#202d38", 45, 110]} />
-      <hemisphereLight args={["#c7d2df", "#394245", 1.35]} />
-      <directionalLight
-        castShadow
-        position={[-25, 45, 10]}
-        intensity={1.8}
-        color="#f1dec2"
-        shadow-mapSize={[2048, 2048]}
-        shadow-camera-left={-65}
-        shadow-camera-right={65}
-        shadow-camera-top={65}
-        shadow-camera-bottom={-65}
-        shadow-camera-far={150}
-        shadow-normalBias={0.03}
-      />
-      <GalleryArchitecture />
-      <GalleryInscription
-        position={[0, 3.5, -2.7]}
-        text={`The keeper's testament\nFind the three lost sigils.\nDawn wakes the garden; night follows.\nThrough the garden, return to dawn.\nRecovered: ${found.length} / 3`}
-        width={5}
-      />
-      <GalleryInscription
-        position={[-24, 3.4, -20.7]}
-        text={
-          "The sun archive\nA light sleeps behind the shelves.\nAn unlit passage hides another story."
-        }
-        width={5}
-      />
-      <GalleryInscription
-        position={[24, 3.4, -20.7]}
-        text={
-          "The moon chamber\nWalk around the broken mirrors.\nTheir silver backs conceal a passage."
-        }
-        width={5}
-      />
-      <GalleryInscription
-        position={[24, 3.4, 9.3]}
-        text={
-          "The suspended garden\nClimb the stones to recover the leaf.\nNo progress is lost when you fall."
-        }
-        width={5}
-      />
-      {[-1, 0, 1].map((i) => (
-        <Block
-          key={`s${i}`}
-          position={[-24 + i * 4, 1.6, -12 + (i % 2 ? 2 : -2)]}
-          size={[0.7, 3.2, 9]}
-          color="#665247"
+    <group position={[ROTUNDA[0], 0, ROTUNDA[1]]}>
+      <RigidBody type="fixed" colliders={false}>
+        <CylinderCollider args={[0.6, 1.4]} position={[0, 0.6, 0]} />
+        <CylinderCollider args={[1.6, 0.55]} position={[0, 2.8, 0]} />
+      </RigidBody>
+      <mesh position={[0, 0.6, 0]} castShadow receiveShadow>
+        <cylinderGeometry args={[1.4, 1.6, 1.2, 24]} />
+        <meshStandardMaterial color="#8f866f" roughness={0.6} />
+      </mesh>
+      <mesh position={[0, 2.5, 0]} castShadow>
+        <coneGeometry args={[0.75, 2.6, 16]} />
+        <meshStandardMaterial color="#d8d0bd" roughness={0.45} />
+      </mesh>
+      <mesh position={[0, 4.05, 0]} castShadow>
+        <sphereGeometry args={[0.38, 20, 14]} />
+        <meshStandardMaterial color="#d8d0bd" roughness={0.45} />
+      </mesh>
+      <mesh ref={halo} position={[0, 4.6, 0]} rotation={[Math.PI / 2.4, 0, 0]}>
+        <torusGeometry args={[0.8, 0.05, 8, 40]} />
+        <meshBasicMaterial
+          color={new THREE.Color("#ffd68a").multiplyScalar(1 + glow * 3)}
+          toneMapped={false}
         />
-      ))}
-      {[-1, 0, 1].map((i) => (
-        <Block
-          key={`m${i}`}
-          position={[24 + i * 4, 1.3, -12 + (i % 2 ? -2 : 2)]}
-          size={[0.55, 2.6, 8]}
-          color="#81969d"
-        />
-      ))}
-      {[0, 1, 2].map((i) => (
-        <Block
-          key={i}
-          position={[20 + i * 3.5, 0.2 + i * 0.2, 21]}
-          size={[2.5, 0.4 + i * 0.4, 2.5]}
-          color="#677d67"
-        />
-      ))}
-      {(["sun", "moon", "leaf"] as const).map(
-        (name, i) =>
-          !found.includes(name) && (
-            <RigidBody
-              key={name}
-              type="fixed"
-              colliders={false}
-              position={i === 0 ? [-26, 1.2, -17] : i === 1 ? [26, 1.2, -17] : [27, 1.9, 21]}
-            >
-              <CuboidCollider
-                sensor
-                args={[0.65, 0.55, 0.65]}
-                onIntersectionEnter={(event) => {
-                  if (event.other.rigidBody?.isDynamic())
-                    setFound((current) => (current.includes(name) ? current : [...current, name]));
-                }}
-              />
-              <mesh>
-                <octahedronGeometry args={[0.45]} />
-                <meshStandardMaterial
-                  color={colors[name]}
-                  emissive={colors[name]}
-                  emissiveIntensity={1.5}
-                />
-              </mesh>
-            </RigidBody>
-          ),
-      )}
-      {(["sun", "leaf", "moon"] as const).map((name, i) => (
-        <group key={name} position={[(i - 1) * 3, 0, 0]}>
-          <RigidBody type="fixed" colliders={false}>
-            <CuboidCollider
-              sensor
-              position={[0, 0.25, 0]}
-              args={[0.75, 0.25, 0.75]}
-              onIntersectionEnter={(event) => {
-                if (event.other.rigidBody?.isDynamic()) press(name);
-              }}
-            />
-            <mesh position={[0, 0.07, 0]}>
-              <cylinderGeometry args={[0.8, 0.9, 0.14, 16]} />
-              <meshStandardMaterial
-                color={colors[name]}
-                emissive={colors[name]}
-                emissiveIntensity={found.includes(name) ? 0.8 : 0}
-              />
-            </mesh>
-          </RigidBody>
-          <GalleryInscription position={[0, 1.2, -0.9]} text={name} width={1.3} />
-        </group>
-      ))}
-      <GalleryInscription
-        position={[0, 2.8, -8.8]}
-        text={
-          solved
-            ? "The vault is open."
-            : found.length < 3
-              ? "Recover all three sigils first."
-              : `Remember the keeper's journey.\nSequence: ${progress} / 5\nA wrong step breaks the sequence.`
-        }
-        width={4.5}
-      />
-      {!solved && <Block position={[0, 3.5, -27]} size={[6, 7, 0.6]} color="#7d7058" />}
-      {[-1, 1].map((side) => (
-        <group key={side}>
-          {!secrets.includes(side) && (
-            <>
-              <Block position={[side * 30, 3.5, -21]} size={[6, 7, 0.45]} />
-              <RigidBody type="fixed" colliders={false} position={[side * 31, 0.3, -17]}>
-                <CuboidCollider
-                  sensor
-                  args={[0.65, 0.5, 0.65]}
-                  onIntersectionEnter={(event) => {
-                    if (event.other.rigidBody?.isDynamic())
-                      setSecrets((current) => [...new Set([...current, side])]);
-                  }}
-                />
-                <mesh>
-                  <cylinderGeometry args={[0.35, 0.4, 0.15, 8]} />
-                  <meshStandardMaterial color="#b29a64" />
-                </mesh>
-              </RigidBody>
-            </>
-          )}
-          <GalleryInscription
-            position={[side * 33, 3, -44.7]}
-            text={
-              side < 0
-                ? "The keeper walked five steps.\nSun. Leaf. Moon. Leaf. Sun."
-                : "A hidden collection\nYou found the mirror conservatory."
-            }
-            width={5}
-          />
-          <mesh position={[side * 33, 1.3, -39]}>
-            <icosahedronGeometry args={[1]} />
-            <meshStandardMaterial
-              color={side < 0 ? "#e2b76b" : "#9bbac8"}
-              metalness={0.7}
-              roughness={0.25}
+      </mesh>
+      {GALLERY_SEQUENCE.map((_, i) => {
+        const angle = (i / GALLERY_SEQUENCE.length) * Math.PI * 2;
+        return (
+          <mesh key={i} position={[Math.sin(angle) * 1.25, 5.3, Math.cos(angle) * 1.25]}>
+            <sphereGeometry args={[0.12, 12, 8]} />
+            <meshBasicMaterial
+              color={i < progress ? new THREE.Color(3, 2.4, 1.2) : new THREE.Color("#3a3a44")}
+              toneMapped={false}
             />
           </mesh>
-        </group>
+        );
+      })}
+      <mesh position={[0, 0.015, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[6.1, 6.45, 72]} />
+        <meshStandardMaterial color="#c9a45c" metalness={0.6} roughness={0.35} />
+      </mesh>
+    </group>
+  );
+}
+
+function SigilPlate({
+  sigil,
+  angle,
+  found,
+  onPress,
+}: {
+  sigil: GallerySigil;
+  angle: number;
+  found: boolean;
+  onPress: (sigil: GallerySigil) => ButtonFeedback;
+}) {
+  const x = ROTUNDA[0] + Math.sin(angle) * 5;
+  const z = ROTUNDA[1] + Math.cos(angle) * 5;
+  return (
+    <group position={[x, 0, z]}>
+      <PressureButton
+        color={SIGIL_COLORS[sigil]}
+        lit={found ? 1 : 0}
+        onPress={() => onPress(sigil)}
+      />
+      <group position={[0, 1.8, 0]}>
+        <SigilGem sigil={sigil} lit={found ? 1 : 0} scale={0.8} />
+      </group>
+      {/* Name stands just outside the plate, facing the statue. */}
+      <group rotation={[0, angle + Math.PI, 0]}>
+        <GalleryInscription position={[0, 0.6, -1.45]} text={SIGIL_NAMES[sigil]} width={1.1} />
+      </group>
+    </group>
+  );
+}
+
+export function GalleryLabyrinth(props: Props) {
+  const { onPuzzleProgress, onNotice } = props;
+  const [found, setFound] = useState<GallerySigil[]>([]);
+  const [progress, setProgress] = useState(0);
+  const [openKeys, setOpenKeys] = useState<DoorKey[]>([]);
+  const [respawn, setRespawn] = useState<Vec3>(START);
+  const solved = progress === GALLERY_SEQUENCE.length;
+  const progressRef = useRef(0);
+  const foundRef = useRef<GallerySigil[]>([]);
+
+  const find = useCallback(
+    (sigil: GallerySigil) => {
+      if (foundRef.current.includes(sigil)) return;
+      foundRef.current = [...foundRef.current, sigil];
+      setFound(foundRef.current);
+      playSound("sigil", { intensity: foundRef.current.length / GALLERY_SIGILS.length });
+      const count = foundRef.current.length;
+      onNotice(
+        count === GALLERY_SIGILS.length
+          ? "All five sigils recovered. Return to the hall of sigils."
+          : `The ${SIGIL_NAMES[sigil]} sigil recovered (${count} / ${GALLERY_SIGILS.length})`,
+      );
+    },
+    [onNotice],
+  );
+
+  const press = useCallback(
+    (sigil: GallerySigil): ButtonFeedback => {
+      if (foundRef.current.length < GALLERY_SIGILS.length) {
+        playSound("deny");
+        onNotice(
+          `The plates stay cold. ${foundRef.current.length} / ${GALLERY_SIGILS.length} sigils recovered.`,
+        );
+        return "neutral";
+      }
+      const before = progressRef.current;
+      if (before >= GALLERY_SEQUENCE.length) return "neutral";
+      const next = advanceGallerySequence(before, sigil, foundRef.current);
+      progressRef.current = next;
+      if (next !== before) {
+        setProgress(next);
+        onPuzzleProgress(next);
+      }
+      if (next === GALLERY_SEQUENCE.length) {
+        setOpenKeys((keys) => [...keys, "vault"]);
+        playSound("solve");
+        playSound("rumble");
+        onNotice("The vault door grinds open.");
+        return "good";
+      }
+      if (next > before) {
+        playSound("correct", { intensity: next / GALLERY_SEQUENCE.length });
+        return "good";
+      }
+      playSound("wrong");
+      onNotice("A wrong step. The journey starts again.");
+      return "bad";
+    },
+    [onNotice, onPuzzleProgress],
+  );
+
+  const conservatoryOpen = useRef(false);
+  const openConservatory = useCallback(() => {
+    if (conservatoryOpen.current) return;
+    conservatoryOpen.current = true;
+    setOpenKeys((keys) => [...keys, "conservatory"]);
+    playSound("secret");
+    playSound("rumble");
+    onNotice("Somewhere in the moon chamber, stone slides against stone.");
+  }, [onNotice]);
+
+  return (
+    <>
+      <color attach="background" args={["#0e1420"]} />
+      <fog attach="fog" args={["#0e1420", 34, 95]} />
+      <hemisphereLight args={["#b9c6de", "#2a2622", 0.55]} />
+      <Stars radius={140} depth={40} count={2500} factor={5} saturation={0.2} fade speed={0.4} />
+      <GalleryAudio />
+      <GalleryArchitecture openKeys={openKeys} />
+      <GalleryWings found={found} solved={solved} onFind={find} onSecretPlate={openConservatory} />
+
+      <KeeperStatue progress={progress} />
+      {RING.map((sigil, i) => (
+        <SigilPlate
+          key={sigil}
+          sigil={sigil}
+          angle={((i * 72 + 36) * Math.PI) / 180}
+          found={found.includes(sigil)}
+          onPress={press}
+        />
       ))}
+      <GalleryInscription
+        position={[-5.5, 3.8, -20.6]}
+        text={
+          solved
+            ? "The journey is complete.\nThe vault stands open."
+            : found.length < GALLERY_SIGILS.length
+              ? `The hall of sigils\nThe plates wait for their sigils.\nRecovered: ${found.length} / ${GALLERY_SIGILS.length}`
+              : `The hall of sigils\nWalk the keeper's journey.\nSteps taken: ${progress} / ${GALLERY_SEQUENCE.length}`
+        }
+        width={4.6}
+      />
+      <GalleryInscription
+        position={[5.5, 3.8, -20.6]}
+        text={"The vault\nSix steps, as the verses tell.\nA wrong step undoes them all."}
+        width={4.6}
+      />
+
+      <Checkpoint
+        position={[12, 1, 18]}
+        size={[2.5, 1, 2.5]}
+        onEnter={() => setRespawn([12, 0, 18])}
+      />
+      <Checkpoint
+        position={[-12, 1, 18]}
+        size={[2.5, 1, 2.5]}
+        onEnter={() => setRespawn([-12, 0, 18])}
+      />
+      <Checkpoint position={[0, 1, 18]} size={[8.5, 1, 8.5]} onEnter={() => setRespawn(START)} />
+
       <PortalPainting
         image="/assets/tree.jpg"
-        position={[0, 2.2, -47]}
+        position={PORTAL}
         active={solved && (props.nearPortal || props.portalImpact)}
         impact={props.portalImpact}
       />
-      <PortalFrameCollider position={[0, 2.2, -47]} />
+      <PortalFrameCollider position={PORTAL} />
       <ThirdPersonPlayer
-        start={[0, 0, 15]}
-        respawn={[0, 0, 15]}
-        bounds={[40, 52]}
-        cameraDistance={3.8}
-        portals={solved ? [{ id: "forest", position: [0, 0, -47] }] : []}
+        start={START}
+        startYaw={START_YAW}
+        respawn={respawn}
+        bounds={GALLERY_BOUNDS}
+        cameraDistance={4.2}
+        portals={solved ? [{ id: "forest", position: [PORTAL[0], 0, PORTAL[2]] }] : []}
         onNearPortal={(id) => props.onNearPortal(Boolean(id))}
         onEnterPortal={props.onExit}
         onHangChange={props.onHangChange}

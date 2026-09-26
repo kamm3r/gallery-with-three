@@ -21,8 +21,19 @@ import {
 import { syncPlayer } from "../src/gameplay/ecs/syncPlayer.ts";
 import { updatePlatforms } from "../src/gameplay/ecs/updatePlatforms.ts";
 import { selectDetail, updateVisibility } from "../src/gameplay/ecs/updateVisibility.ts";
-import { simplifyGeometry } from "../src/gameplay/simplifyGeometry.ts";
-import { courseObstacles, COURSE_EXTENT } from "../src/gameplay/collisionCourse.ts";
+import {
+  PARK_EXTENT,
+  parkJumpPads,
+  parkLabels,
+  parkOneWay,
+  parkPushables,
+  parkStatics,
+  SLOPE_ANGLES,
+  SLOPE_LIMIT_DEG,
+  STEP_RISERS,
+  terrainHeight,
+  terrainMask,
+} from "../src/gameplay/collisionCourse.ts";
 
 test("player registration updates shared position and clears on teardown", () => {
   const world = createRuntimeWorld();
@@ -110,22 +121,40 @@ test("visibility system packs near/far instances, culls behind camera, restores 
   world.destroy();
 });
 
-test("distant mesh simplification reduces geometry and preserves material groups", () => {
-  const source = new BoxGeometry(1, 1, 1, 24, 24, 24);
-  const low = simplifyGeometry(source);
-  assert.ok(low.getAttribute("position").count < source.index!.count / 2);
-  assert.equal(low.groups.length, source.groups.length);
-  assert.ok(low.getAttribute("normal").count > 0);
-  low.dispose();
-  source.dispose();
+test("movement park covers every skill zone inside the arena bounds", () => {
+  assert.ok(parkStatics.length > 60);
+  assert.deepEqual(
+    new Set(parkStatics.map((o) => o.shape)),
+    new Set(["box", "pyramid", "sphere", "cylinder", "cone"]),
+  );
+  for (const obstacle of parkStatics) {
+    assert.ok(obstacle.size.every((n) => n > 0));
+    assert.ok(Math.abs(obstacle.position[0]) + obstacle.size[0] / 2 < PARK_EXTENT);
+    assert.ok(Math.abs(obstacle.position[2]) + obstacle.size[2] / 2 < PARK_EXTENT);
+  }
+  // Slopes bracket the walkable limit: climbable set plus one too-steep ramp.
+  assert.ok(SLOPE_ANGLES.some((a) => a <= SLOPE_LIMIT_DEG));
+  assert.ok(SLOPE_ANGLES.some((a) => a > SLOPE_LIMIT_DEG));
+  assert.equal(STEP_RISERS.length, 3);
+  // One-way boards ascend so each hop stays inside jump range.
+  assert.equal(parkOneWay.length, 4);
+  for (let i = 1; i < parkOneWay.length; i++) {
+    const rise = parkOneWay[i].position[1] - parkOneWay[i - 1].position[1];
+    assert.ok(rise > 0 && rise < 1.1);
+  }
+  // Jump pads escalate in strength.
+  assert.equal(parkJumpPads.length, 3);
+  for (let i = 1; i < parkJumpPads.length; i++) {
+    assert.ok(parkJumpPads[i].strength > parkJumpPads[i - 1].strength);
+  }
+  // Pushables include light shovable cubes and one heavy "not pushable" cube.
+  assert.ok(parkPushables.some((b) => b.mass <= 2));
+  assert.ok(parkPushables.some((b) => b.mass >= 100));
+  assert.equal(parkLabels.length, 23);
 });
 
-test("collision course has bounded obstacles and multiple collider shapes", () => {
-  assert.ok(courseObstacles.length > 150);
-  assert.equal(new Set(courseObstacles.map((o) => o.shape)).size, 4);
-  for (const obstacle of courseObstacles) {
-    assert.ok(obstacle.size.every((n) => n > 0));
-    assert.ok(Math.abs(obstacle.position[0]) + obstacle.size[0] / 2 < COURSE_EXTENT);
-    assert.ok(Math.abs(obstacle.position[2]) + obstacle.size[2] / 2 < COURSE_EXTENT);
-  }
+test("terrain height field is finite and falls off at the patch border", () => {
+  assert.ok(Number.isFinite(terrainHeight(3, -2)));
+  assert.equal(terrainMask(100, 100, 11, 11), 0);
+  assert.equal(terrainMask(0, 0, 11, 11), 1);
 });

@@ -6,10 +6,12 @@ import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { ExperienceHud } from "../components/ExperienceHud";
 import { ForestWorld } from "../components/ForestWorld";
+import { FOREST_ATMOSPHERE } from "../components/AtmosphereEffect";
 import { useDocumentMetadata } from "../hooks/useDocumentMetadata";
 import { useReducedMotion } from "../hooks/useReducedMotion";
 import { HUB_PORTALS } from "../gameplay/hubPortals";
 import { hubSpawn } from "../gameplay/hubSpawn";
+import { setMood } from "../gameplay/sound";
 
 export default function ForestHub() {
   const navigate = useNavigate();
@@ -27,6 +29,9 @@ export default function ForestHub() {
   const reducedMotion = useReducedMotion();
   const markReady = useCallback(() => setReady(true), []);
   useDocumentMetadata("The painted forest", "Explore a forest and jump through its paintings.");
+  useEffect(() => {
+    setMood("meadow");
+  }, []);
 
   const enterPortal = useCallback(
     (portalId: string) => {
@@ -57,7 +62,11 @@ export default function ForestHub() {
 
   return (
     <main className="experience">
-      <GameCanvas shadows="percentage" camera={{ position: [0, 4, 12], fov: 52 }}>
+      <GameCanvas
+        shadows="percentage"
+        camera={{ position: [0, 4, 12], fov: 52 }}
+        atmosphere={FOREST_ATMOSPHERE}
+      >
         <Suspense fallback={null}>
           <Physics gravity={[0, -30, 0]} paused={paused}>
             <ForestWorld

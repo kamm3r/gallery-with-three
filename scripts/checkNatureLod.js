@@ -3,7 +3,10 @@
  * then restores ECS visibility, including its matrix packing cache.
  */
 export function checkNatureLod(state, world, InstanceBatch, updateVisibility) {
-  const read = () => ({ calls: state.gl.info.render.calls, triangles: state.gl.info.render.triangles });
+  const read = () => ({
+    calls: state.gl.info.render.calls,
+    triangles: state.gl.info.render.triangles,
+  });
   try {
     world.query(InstanceBatch).readEach(([batch]) => {
       for (const mesh of batch.detail) {
@@ -21,7 +24,8 @@ export function checkNatureLod(state, world, InstanceBatch, updateVisibility) {
     state.gl.render(state.scene, state.camera);
     const optimized = read();
     const reduction = 1 - optimized.triangles / fullDetail.triangles;
-    if (reduction < .15) throw new Error(`LOD/culling saved only ${(reduction * 100).toFixed(1)}% of triangles`);
+    if (reduction < 0.15)
+      throw new Error(`LOD/culling saved only ${(reduction * 100).toFixed(1)}% of triangles`);
     return { fullDetail, optimized, triangleReductionPercent: reduction * 100 };
   } finally {
     world.query(InstanceBatch).readEach(([batch]) => batch.levels.fill(255));

@@ -4,9 +4,17 @@ import { InstanceBatch, PlayerPosition } from "../gameplay/ecs/traits";
 import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import { scatter } from "../gameplay/terrain";
+import { scatter, valueNoise } from "../gameplay/terrain";
 import { allowsGrass } from "../gameplay/grass";
 import { useReducedMotion } from "../hooks/useReducedMotion";
+import {
+  distanceFadeDiscard,
+  distanceFadeFragment,
+  distanceFadeUniforms,
+  distanceFadeVertex,
+} from "./distanceFade";
+
+const FLOWER_FAR = 60;
 
 function paint(geometry: THREE.BufferGeometry, color: string) {
   const rgb = new THREE.Color(color);
@@ -44,19 +52,25 @@ class FlowerField {
     this.geometry = mergeGeometries(parts);
     parts.forEach((part) => part.dispose());
     this.material.onBeforeCompile = (shader) => {
-      Object.assign(shader.uniforms, {
+      Object.assign(shader.uniforms, distanceFadeUniforms(FLOWER_FAR), {
         uFlowerTime: this.time,
         uFlowerWind: this.wind,
         uFlowerPlayer: this.player,
       });
       shader.vertexShader =
+        distanceFadeVertex +
         "uniform float uFlowerTime, uFlowerWind; uniform vec3 uFlowerPlayer;\n" +
         shader.vertexShader;
+      shader.fragmentShader = (distanceFadeFragment + shader.fragmentShader).replace(
+        "void main() {",
+        `void main() {\n${distanceFadeDiscard}`,
+      );
       shader.vertexShader = shader.vertexShader.replace(
         "#include <begin_vertex>",
         `
         #include <begin_vertex>
         vec3 root = instanceMatrix[3].xyz;
+        vDistanceFade = distanceFade(root);
         float height = clamp(position.y / 0.8, 0.0, 1.0);
         float gust = sin(root.x*0.24+root.z*0.18+uFlowerTime*1.6)*0.65 + sin(root.z*0.63-uFlowerTime*2.3)*0.25;
         vec2 away = root.xz-uFlowerPlayer.xz;
@@ -67,7 +81,7 @@ class FlowerField {
       `,
       );
     };
-    this.material.customProgramCacheKey = () => "wind-flowers-v1";
+    this.material.customProgramCacheKey = () => "wind-flowers-v2";
   }
   update(time: number, reduced: boolean, player: { x: number; y: number; z: number }) {
     this.time.value = time;
@@ -80,7 +94,13 @@ function FlowerPatch({ color, seed }: { color: string; seed: number }) {
   const world = useWorld();
   const field = useMemo(() => new FlowerField(color), [color]);
   const points = useMemo(
-    () => scatter(700, 3, 112, seed, 0.65, 1.35).filter((point) => allowsGrass(point.x, point.z)),
+    () =>
+      // Wildflowers gather in drifts (meadow reference), not an even sprinkle.
+      scatter(1700, 3, 112, seed, 0.75, 1.5).filter(
+        (point) =>
+          allowsGrass(point.x, point.z) &&
+          valueNoise(point.x * 0.07 + seed, point.z * 0.07 - seed) > 0.52,
+      ),
     [seed],
   );
   const ref = useRef<THREE.InstancedMesh>(null);
@@ -110,8 +130,8 @@ function FlowerPatch({ color, seed }: { color: string; seed: number }) {
         proxy: [],
         radius: 1.2,
         centerY: 0.5,
-        near: 52,
-        far: 52,
+        near: FLOWER_FAR,
+        far: FLOWER_FAR,
         shadows: false,
       }),
     );
@@ -139,7 +159,7 @@ function FlowerPatch({ color, seed }: { color: string; seed: number }) {
 export function WindFlowers() {
   return (
     <>
-      {["#f2e6cb", "#d6a6cd", "#c6c8e5", "#f1d167"].map((color, i) => (
+      {["#f4eedc", "#e3a3c6", "#a78bd6", "#f1d167", "#e2764f"].map((color, i) => (
         <FlowerPatch key={color} color={color} seed={710 + i} />
       ))}
     </>

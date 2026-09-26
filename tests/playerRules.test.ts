@@ -14,13 +14,12 @@ test("walkable banks are not ledges even when both proximity rays hit", () => {
 import { consumeRollPress } from "../src/gameplay/playerRules.ts";
 import test from "node:test";
 import {
+  canCoyoteJump,
   canEnterPortal,
   canGrabLedge,
-  downhillSnapSpeed,
-  DOWNHILL_SNAP_FEET,
   getGravityScale,
+  JUMP_DEFAULTS,
   shouldStartRoll,
-  shouldStickToGround,
 } from "../src/gameplay/playerRules.ts";
 
 test("walking into a portal does not enter it", () => {
@@ -36,8 +35,30 @@ test("portal entry still requires touching the artwork", () => {
 });
 
 test("releasing jump increases gravity while rising", () => {
-  assert.ok(getGravityScale(4, false) > getGravityScale(4, true));
-  assert.equal(getGravityScale(-1, true), 1);
+  assert.ok(getGravityScale(4, false, true) > getGravityScale(4, true, true));
+});
+
+test("pad launches keep full height without jump held", () => {
+  assert.equal(getGravityScale(12, false, false), JUMP_DEFAULTS.riseGravity);
+});
+
+test("holding jump floats at the apex, then falls heavier than it rose", () => {
+  assert.equal(getGravityScale(1, true, true), JUMP_DEFAULTS.apexGravity);
+  assert.equal(getGravityScale(-1, true, false), JUMP_DEFAULTS.apexGravity);
+  assert.equal(getGravityScale(-1, false, false), JUMP_DEFAULTS.fallGravity);
+  assert.ok(JUMP_DEFAULTS.fallGravity > JUMP_DEFAULTS.riseGravity);
+});
+
+test("falls stop accelerating at terminal speed", () => {
+  assert.equal(getGravityScale(-JUMP_DEFAULTS.fallMaxSpeed - 1, false, false), 0);
+});
+
+test("coyote jump only right after leaving the ground", () => {
+  const offEdge = { airTime: 0.05, jumping: false, verticalSpeed: -1 };
+  assert.equal(canCoyoteJump(offEdge), true);
+  assert.equal(canCoyoteJump({ ...offEdge, airTime: JUMP_DEFAULTS.coyoteTime + 0.01 }), false);
+  assert.equal(canCoyoteJump({ ...offEdge, jumping: true }), false);
+  assert.equal(canCoyoteJump({ ...offEdge, verticalSpeed: 8 }), false);
 });
 
 test("falling against a ledge wall grabs it", () => {
@@ -127,48 +148,4 @@ test("an unavailable roll press is consumed and cannot fire later", () => {
     assert.equal(consumeRollPress(ready).start, false);
     assert.equal(consumeRollPress({ ...ready, rollPress: 3 }).start, true);
   }
-});
-
-test("downhill snap sticks on the grounded-to-airborne edge over a step", () => {
-  assert.equal(
-    shouldStickToGround({
-      wasGrounded: true,
-      grounded: false,
-      verticalSpeed: -1,
-      moving: true,
-      enabled: true,
-      feetAboveGround: 0.48,
-      groundNormalY: 1,
-    }),
-    true,
-  );
-});
-
-test("downhill snap ignores steady states and real falls", () => {
-  const runningOffEdge = {
-    wasGrounded: true,
-    grounded: false,
-    verticalSpeed: -1,
-    moving: true,
-    enabled: true,
-    feetAboveGround: 0.3,
-    groundNormalY: 1,
-  };
-  assert.equal(shouldStickToGround({ ...runningOffEdge, grounded: true }), false);
-  assert.equal(shouldStickToGround({ ...runningOffEdge, wasGrounded: false }), false);
-  assert.equal(shouldStickToGround({ ...runningOffEdge, moving: false }), false);
-  assert.equal(shouldStickToGround({ ...runningOffEdge, enabled: false }), false);
-  assert.equal(shouldStickToGround({ ...runningOffEdge, verticalSpeed: 1 }), false);
-  assert.equal(shouldStickToGround({ ...runningOffEdge, verticalSpeed: -12 }), false);
-  assert.equal(shouldStickToGround({ ...runningOffEdge, feetAboveGround: null }), false);
-  assert.equal(
-    shouldStickToGround({ ...runningOffEdge, feetAboveGround: DOWNHILL_SNAP_FEET + 0.1 }),
-    false,
-  );
-  assert.equal(shouldStickToGround({ ...runningOffEdge, groundNormalY: 0.2 }), false);
-});
-
-test("downhill snap speed sinks at least the minimum and accelerates", () => {
-  assert.equal(downhillSnapSpeed(-0.5, 1 / 60), -3.5);
-  assert.ok(downhillSnapSpeed(-4, 1 / 60) < -4);
 });

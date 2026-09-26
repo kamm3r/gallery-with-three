@@ -1,8 +1,9 @@
 # The painted forest
 
 A third-person WebGL experience built with Vite, React, React Three Fiber,
-Rapier, Ecctrl, and Koota. Explore a forest clearing and jump through paintings
-to enter a gallery, a collision course, Halloween Hollow, or a boss arena.
+Rapier, and Koota. Explore a forest clearing and jump through paintings
+to enter a gallery, a collision course, Halloween Hollow, a boss arena, or the
+Warp Room.
 
 The seasonal painting currently leads to a fixed Halloween world at `/seasons`,
 with jack-o'-lanterns, autumn and dead trees, gravestones, moonlight, and fog.
@@ -37,6 +38,29 @@ transitions. Display and game options include render quality, brightness,
 fullscreen, camera sensitivity, inverted vertical look, control hints, and
 reduced motion. Settings are saved in this browser. Returning to the forest
 from the menu resets progress in the current area.
+
+## The Warp Room
+
+The painting lying face up on the lake island leads to `/warp`, a hub in the
+style of Crash Bandicoot 2. Five portals lead to short platforming levels:
+Turtle Woods, Snow Go, The Pits, Boulder Dash, and Road to Ruin. Each level
+has crates to break, fruit, patrolling critters, checkpoint crates, one power
+crystal, and a gem for breaking every counted crate. TNT crates explode three
+seconds after you land on them. Nitro crates explode when touched. Aku Aku
+mask crates absorb one hit each.
+
+- Jump on crates and critters, or press the left mouse button, `J`, or `E` to
+  spin.
+- Collect all five crystals to open the center pad. It leads to Tiny Tusk, a
+  boss who leaps at you, sends out shockwaves when he lands, and is dazed after
+  a few slams. Jump on his head three times while he is dazed to win.
+- Progress is saved in this browser. From the pause menu inside a level, you
+  can go back to the Warp Room.
+
+Level layouts are data in `src/gameplay/warpLevels.ts`. The rules are pure
+functions in `warpRun.ts` and `warpBoss.ts`. Tests check that each gap can be
+jumped at walking speed. Simulated players with human-like reaction times,
+who don't sprint, check that the boulder chase and the boss fight can be won.
 
 ## Forest landscape
 
@@ -78,21 +102,34 @@ visible membership changes. Grass retains its worker streaming/distance LOD.
 
 ## Collision course
 
-The proving grounds at `/playground` have a 160 × 160 checkerboard floor.
-The reference-course extension adds a curved checker hill, red loop, open boat
-with a gangplank and mast, branching balance beams, angled wall teeth, and a
-stepped tower. The hill and loop use triangle colliders to preserve their curves
-and openings. These are procedural approximations of the recording, not its assets.
-Ground labels mark 10/20/35/50/65-degree slopes, 18/30/48-cm stairs,
-three pyramid/bump fields, seams, narrow beams and gaps, several ledge heights,
-80–200-cm passages, low ceilings, rounded contacts, corners, and pushable boxes.
-Platforms translate on all three axes; a separate platform rotates. Their ECS
-system runs before fixed physics steps to keep motion independent of rendering.
-Some obstacles intentionally exceed the controller's limits.
+The proving grounds at `/playground` are a 170 × 170 test park for the
+character controller, modelled on classic controller demo scenes. Ground
+labels name each lane. Lanes are entered from +z and walked toward -z.
+
+- **Front field:** 12/25/40/55° slopes with walkable/too-steep strips,
+  18/30/48 cm stairs, a funnel squeeze, rough ground, bumpy terrain, moving and
+  rotating platforms, pushable boxes and a seesaw, one-way boards, and jump pads.
+- **South field:** 2.4/2.1/1.8 m ceilings plus a ramp that wedges under a
+  roof, 0.5–3 m ledges, drop-off terraces, 1–4 m gaps, 0.12–1 m beams,
+  25/45° ridges, 30/60° valleys, spikes, logs, and 0.1–0.6 m curbs.
+- **Back field:** irregular, steep, open-tread, and spiral stairs; bar grates
+  with gaps narrower and wider than the capsule; a 40° dome; 30/60° cones; a
+  sweeper bar; a fast carousel, elevator, and shuttle; and a hinged plank bridge.
+- **North:** inside wall corners of 30/60/90/120°.
+
+Some obstacles intentionally exceed the controller's limits. Platform motion
+runs before fixed physics steps, independent of rendering.
+
+In development, the Leva panel's **Controller** folder tunes the character
+controller (speeds, skid, air control, jump arc, skin width, step height,
+ground snap, slope limit) live in this world only; other worlds use
+`src/gameplay/controllerTuning.ts`. **Copy values** copies the current
+settings as JSON; **Reset defaults** restores them. **Test zones** teleports
+to any lane. `[` and `]` cycle lanes, and `R` restarts the current one.
 
 ## Player animation source
 
-The editable character is `art/characters/Casual_Male_gameplay.blend`; the original
+The editable character is `public/assets/characters/Casual_Male_gameplay.blend`; the original
 pack file is untouched. It retains the original actions and adds ledge grab,
 hang and pull-up, jump rise/fall/landing, sit enter/idle/exit, and two retimed
 sword slashes. These are authored/derived skeletal actions, not motion capture.
@@ -105,13 +142,13 @@ so ordinary sloped riverbanks cannot be mistaken for hanging ledges.
 At a ledge, Space starts the one-second pull-up and backward movement drops.
 The controller supplies climb translation; the clip supplies the body pose.
 Use E at a seat to sit or stand. The Blender pose sheet is
-`art/characters/animation-poses.png` (source material colours, before game styling).
+`public/assets/characters/animation-poses.png` (source material colours, before game styling).
 
 To regenerate with Blender installed:
 
 ```bash
 blender -b 'public/assets/Ultimate Animated Character Pack - Nov 2019-20260917T180531Z-1-001/Ultimate Animated Character Pack - Nov 2019/Blends/Casual_Male.blend' --python scripts/buildCharacterAnimations.py
-blender -b art/characters/Casual_Male_gameplay.blend --python scripts/previewCharacterAnimations.py
+blender -b public/assets/characters/Casual_Male_gameplay.blend --python scripts/previewCharacterAnimations.py
 ```
 
 ## Verification

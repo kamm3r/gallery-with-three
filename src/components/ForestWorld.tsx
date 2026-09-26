@@ -11,6 +11,7 @@ import { PortalPainting } from "./PortalPainting";
 import { ThirdPersonPlayer } from "./ThirdPersonPlayer";
 import { PortalFrameCollider } from "./PortalFrameCollider";
 import { Butterflies } from "./Butterflies";
+import { ForestRuins } from "./ForestRuins";
 
 const UltimateNature = lazy(() =>
   import("./UltimateNature").then((module) => ({ default: module.UltimateNature })),
@@ -61,6 +62,7 @@ export function ForestWorld({
         <meshStandardMaterial color="#34452e" roughness={1} />
       </mesh>
       <UltimateNature />
+      <ForestRuins />
       <MeadowGrass />
       <WindFlowers />
       <Butterflies />
@@ -79,6 +81,7 @@ export function ForestWorld({
             rotation={[portal.flat ? -Math.PI / 2 : 0, 0, 0]}
             scale={portal.scale}
             beacon={portal.id === "gallery"}
+            variant={portal.variant}
             active={nearPortal === portal.id || portalImpact === portal.id}
             impact={portalImpact === portal.id}
           />

@@ -1,10 +1,11 @@
 import { useFrame, useThree } from "@react-three/fiber";
 import { useGame } from "../gameSettings";
-import { useBeforePhysicsStep, useRapier } from "@react-three/rapier";
-import { Ecctrl, type EcctrlHandle } from "ecctrl";
+import { useRapier } from "@react-three/rapier";
 import {
+  useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type Dispatch,
@@ -14,29 +15,31 @@ import {
 } from "react";
 import * as THREE from "three";
 import { groundHeight } from "../gameplay/terrain";
-import type { Encounter } from "../gameplay/bossEncounter";
+import { controllerDefaults, type ControllerTuning } from "../gameplay/controllerTuning";
+import { PLAYER_HURT_TIME, type Encounter } from "../gameplay/bossEncounter";
 import { CLIP_SECONDS, LEDGE_HAND_HEIGHT, climbProgress } from "../gameplay/characterAnimations";
 import { playSound } from "../gameplay/sound";
 import { isResultScreenActive } from "../gameplay/resultScreen";
+import { isSprintAllowed } from "../gameplay/sprintGate";
+import { SPIN_COOLDOWN, SPIN_TIME, type PlatformerLink } from "../gameplay/platformerLink";
+import { cameraRig } from "../gameplay/cameraRig";
 import { useWorld } from "koota/react";
 import { PlayerView } from "../gameplay/ecs/traits";
 import {
   canEnterPortal,
   canGrabLedge,
   consumeRollPress,
-  downhillSnapSpeed,
-  DOWNHILL_SNAP_FEET,
-  getGravityScale,
   HANG_TIMEOUT,
   LEDGE_TOP_MAX,
   LEDGE_WALL_REACH,
   ROLL_COOLDOWN,
   ROLL_DURATION,
   ROLL_SPEED,
-  shouldStickToGround,
 } from "../gameplay/playerRules";
 import { usePlayerControls, type PlayerControls } from "../hooks/usePlayerControls";
+import { useReducedMotion } from "../hooks/useReducedMotion";
 import { AnimatedCharacter, type ActionName } from "./AnimatedCharacter";
+import { CharacterController, type CharacterHandle } from "./CharacterController";
 import { DustPuffs } from "./DustPuffs";
 
 type Position = [number, number, number];
@@ -62,20 +65,32 @@ interface ThirdPersonPlayerProps {
   onEnterPortal: (portalId: string) => void;
   onHangChange: (hanging: boolean) => void;
   onReady?: () => void;
+  /** Controller overrides (playground tuning panel); defaults elsewhere. */
+  tuning?: ControllerTuning;
+  /** Set to a spawn point to move the player there on the next frame. */
+  teleportRef?: MutableRefObject<Position | null>;
+  /** Something carried in the right hand (e.g. Hollow Lane's flashlight). */
+  held?: "flashlight";
+  /** Warp Room worlds: spin attack, crate bounces, death freeze. */
+  platformer?: MutableRefObject<PlatformerLink>;
 }
 
 interface PlayerRuntimeProps {
   combat?: MutableRefObject<Encounter>;
+  platformer?: MutableRefObject<PlatformerLink>;
   seatRef: MutableRefObject<{
     active: boolean;
     press: number;
     standing: number;
     elapsed: number;
+    /** Buffered sit intent, seconds. Covers E pressed mid-hop or one step out. */
+    want: number;
     position: THREE.Vector3;
     yaw: number;
   }>;
   respawn: Position;
-  controllerRef: RefObject<EcctrlHandle | null>;
+  controllerRef: RefObject<CharacterHandle | null>;
+  jumpSpeed: number;
   headingRef: RefObject<THREE.Group | null>;
   characterVisualRef: RefObject<THREE.Group | null>;
   controlsRef: MutableRefObject<PlayerControls>;
@@ -92,6 +107,7 @@ interface PlayerRuntimeProps {
   onNearPortal: (portalId: string | null) => void;
   onEnterPortal: (portalId: string) => void;
   onHangChange: (hanging: boolean) => void;
+  teleportRef?: MutableRefObject<Position | null>;
 }
 
 interface HangState {
@@ -117,12 +133,12 @@ interface RollState {
   dir: THREE.Vector3;
 }
 
-const PLAYER_CENTER_HEIGHT = 1.12;
-/** Center to capsule bottom: halfHeight (0.5) + radius (0.42). */
-const CAPSULE_BOTTOM_OFFSET = 0.92;
-const JUMP_SPEED = 8.4;
-const WALK_SPEED = 4.8;
-const RUN_SPEED = 7.5;
+const CAPSULE_HALF_HEIGHT = 0.5;
+const CAPSULE_RADIUS = 0.42;
+/** Body center above the feet: the capsule rests one skin width off the ground. */
+const PLAYER_CENTER_HEIGHT = CAPSULE_HALF_HEIGHT + CAPSULE_RADIUS + controllerDefaults.skinWidth;
+/** How long an E press keeps trying to sit (landing, walking into range). */
+const SIT_BUFFER_SECONDS = 0.45;
 
 const cameraTarget = new THREE.Vector3();
 const desiredCameraPosition = new THREE.Vector3();
@@ -130,20 +146,36 @@ const cameraGround = new THREE.Vector3();
 const cameraForward = new THREE.Vector3();
 const cameraRayDirection = new THREE.Vector3();
 const renderedPlayerPosition = new THREE.Vector3();
+const cameraOffset = new THREE.Vector3();
+const IDENTITY_ROTATION = { x: 0, y: 0, z: 0, w: 1 };
+/** Clearance kept between the lens and any wall. */
+const CAMERA_PROBE_RADIUS = 0.35;
+const CAMERA_MIN_DISTANCE = 0.6;
+/** Over-the-shoulder framing used indoors (see cameraRig). */
+const INDOOR_DISTANCE = 3;
+const INDOOR_SHOULDER = 0.95;
+const cameraRight = new THREE.Vector3();
+let indoorBlend = 0;
+// TEMP-PROOF (revert before ship): ?debugseat=N teleports next to log marker N.
+const DEBUG_SEAT =
+  typeof window === "undefined" ||
+  new URLSearchParams(window.location.search).get("debugseat") === null
+    ? Number.NaN
+    : Number(new URLSearchParams(window.location.search).get("debugseat"));
 // Scratch temps for the ledge-grab prototype (no per-frame allocation).
 const ledgeOrigin = new THREE.Vector3();
 const ledgeDirection = new THREE.Vector3();
 const ledgeTopOrigin = new THREE.Vector3();
 const ledgeDown = new THREE.Vector3(0, -1, 0);
 const hangTarget = new THREE.Vector3();
-// Scratch origin for the downhill snap ray (no per-frame allocation).
-const stickOrigin = new THREE.Vector3();
 
 function PlayerRuntime({
   combat: combatRef,
+  platformer: platformerRef,
   seatRef,
   respawn,
   controllerRef,
+  jumpSpeed,
   headingRef,
   characterVisualRef,
   controlsRef,
@@ -160,9 +192,11 @@ function PlayerRuntime({
   onNearPortal,
   onEnterPortal,
   onHangChange,
+  teleportRef,
 }: PlayerRuntimeProps) {
   const { camera, scene } = useThree();
   const { world, rapier } = useRapier();
+  const cameraProbe = useMemo(() => new rapier.Ball(CAMERA_PROBE_RADIUS), [rapier]);
   const wasGrounded = useRef(true);
   const previousVerticalSpeed = useRef(0);
   const landingCompression = useRef(0);
@@ -171,20 +205,10 @@ function PlayerRuntime({
   const actionRef = useRef<ActionName>("Idle");
   const landingTime = useRef(0);
   const stepTime = useRef(0);
+  const dbgTeleported = useRef(false); // TEMP-PROOF: revert.
+  const reducedMotion = useReducedMotion();
 
-  useBeforePhysicsStep(() => {
-    const player = controllerRef.current;
-    if (!player || !player.body || player.isOnGround) return;
-    // Hanging freezes gravity; the hang branch in useFrame owns the body.
-    if (hangRef.current.active || seatRef.current.active) {
-      player.body.setGravityScale(0, true);
-      return;
-    }
-    const velocity = player.body.linvel();
-    player.body.setGravityScale(getGravityScale(velocity.y, controlsRef.current.jump), true);
-  });
-
-  useFrame((_, rawDelta) => {
+  useFrame((frame, rawDelta) => {
     const player = controllerRef.current;
     const headingGroup = headingRef.current;
     if (!player || !player.body || !headingGroup) return;
@@ -192,13 +216,30 @@ function PlayerRuntime({
     const delta = Math.min(rawDelta, 0.05);
     const body = player.body;
     const position = body.translation();
-    const velocity = body.linvel();
+    const velocity = player.velocity;
+    // TEMP-PROOF: revert before ship.
+    if (!Number.isNaN(DEBUG_SEAT) && !dbgTeleported.current) {
+      const marker = scene.getObjectByName(`log-seat-${DEBUG_SEAT}`);
+      if (marker) {
+        const seat = seatRef.current;
+        marker.getWorldPosition(seat.position);
+        const x = seat.position.x + 1.2;
+        const z = seat.position.z + 1.2;
+        body.setTranslation({ x, y: groundHeight(x, z) + PLAYER_CENTER_HEIGHT + 0.12, z }, true);
+        dbgTeleported.current = true;
+      }
+    }
+    if (!Number.isNaN(DEBUG_SEAT)) {
+      (window as unknown as { __seatdbg?: unknown }).__seatdbg = {
+        active: seatRef.current.active,
+        elapsed: seatRef.current.elapsed,
+        action: actionRef.current,
+      };
+    }
     if (combatRef && combatRef.current.health <= 0) {
       rollRef.current.active = false;
       hangRef.current.active = false;
-      body.setBodyType(rapier.RigidBodyType.KinematicPositionBased, true);
-      body.setLinvel({ x: 0, y: 0, z: 0 }, true);
-      body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+      velocity.set(0, 0, 0);
       body.setNextKinematicTranslation(position);
       body.setNextKinematicRotation(body.rotation());
       if (characterVisualRef.current) {
@@ -211,13 +252,15 @@ function PlayerRuntime({
       }
       return;
     }
-    if (position.y < -20) {
+    const teleport = teleportRef?.current;
+    if (position.y < -20 || teleport) {
+      const target = teleport ?? respawn;
+      if (teleportRef) teleportRef.current = null;
       body.setTranslation(
-        { x: respawn[0], y: respawn[1] + PLAYER_CENTER_HEIGHT, z: respawn[2] },
+        { x: target[0], y: target[1] + PLAYER_CENTER_HEIGHT, z: target[2] },
         true,
       );
-      body.setLinvel({ x: 0, y: 0, z: 0 }, true);
-      body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+      velocity.set(0, 0, 0);
       body.setRotation({ x: 0, y: 1, z: 0, w: 0 }, true);
       enteringRef.current = false;
       hangRef.current.active = false;
@@ -225,7 +268,7 @@ function PlayerRuntime({
       seatRef.current.active = false;
       seatRef.current.standing = 0;
       cameraYawRef.current = 0;
-      camera.position.set(respawn[0], respawn[1] + 3.6, respawn[2] + cameraDistance);
+      camera.position.set(target[0], target[1] + 3.6, target[2] + cameraDistance);
       onHangChange(false);
       onNearPortal(null);
       return;
@@ -233,43 +276,80 @@ function PlayerRuntime({
     const grounded = player.isOnGround;
     const input = controlsRef.current;
     const seat = seatRef.current;
+    const link = platformerRef?.current;
+    if (link) {
+      // Mutable handshake with the Warp Room world, not React state.
+      // eslint-disable-next-line react-hooks/immutability
+      link.x = position.x;
+      link.y = position.y - PLAYER_CENTER_HEIGHT;
+      link.z = position.z;
+      link.vy = velocity.y;
+      link.grounded = grounded;
+      link.spinTime = Math.max(0, link.spinTime - delta);
+      link.spinCooldown = Math.max(0, link.spinCooldown - delta);
+      // Click, J or E: all spin. The first frame just learns the counters.
+      const spinPresses = input.attackPress + input.interactPress;
+      if (link.lastSpinPress < 0) link.lastSpinPress = spinPresses;
+      if (spinPresses !== link.lastSpinPress) {
+        link.lastSpinPress = spinPresses;
+        if (
+          link.spinTime === 0 &&
+          link.spinCooldown === 0 &&
+          !link.frozen &&
+          !hangRef.current.active
+        ) {
+          link.spinTime = SPIN_TIME;
+          link.spinCooldown = SPIN_TIME + SPIN_COOLDOWN;
+          playSound("spin");
+        }
+      }
+      if (link.bounce > 0) {
+        player.launch(link.bounce);
+        link.bounce = 0;
+      }
+    }
+    seat.want = Math.max(0, seat.want - delta);
+    const sitReady =
+      grounded && !hangRef.current.active && !rollRef.current.active && !enteringRef.current;
+    const trySit = () => {
+      // Tolerate gaps and future logs: scan until the markers run out.
+      for (let i = 0; i < 8; i++) {
+        const marker = scene.getObjectByName(`log-seat-${i}`);
+        if (!marker) continue;
+        marker.getWorldPosition(seat.position);
+        if (
+          Math.hypot(position.x - seat.position.x, position.z - seat.position.z) < 2.1 &&
+          Math.abs(position.y - PLAYER_CENTER_HEIGHT - seat.position.y) < 1.5
+        ) {
+          seat.active = true;
+          seat.elapsed = 0;
+          seat.want = 0;
+          seat.yaw = marker.rotation.y;
+          velocity.set(0, 0, 0);
+          for (let c = 0; c < body.numColliders(); c++) body.collider(c).setEnabled(false);
+          return true;
+        }
+      }
+      return false;
+    };
     if (input.interactPress !== seat.press) {
       seat.press = input.interactPress;
       if (seat.active) {
         if (seat.standing === 0) seat.standing = CLIP_SECONDS.SitExit;
-      } else if (
-        grounded &&
-        !hangRef.current.active &&
-        !rollRef.current.active &&
-        !enteringRef.current
-      ) {
-        for (let i = 0; i < 3; i++) {
-          const marker = scene.getObjectByName(`log-seat-${i}`);
-          if (!marker) continue;
-          marker.getWorldPosition(seat.position);
-          if (
-            Math.hypot(position.x - seat.position.x, position.z - seat.position.z) < 2.1 &&
-            Math.abs(position.y - PLAYER_CENTER_HEIGHT - seat.position.y) < 1.5
-          ) {
-            seat.active = true;
-            seat.elapsed = 0;
-            seat.yaw = marker.rotation.y;
-            body.setBodyType(rapier.RigidBodyType.KinematicPositionBased, true);
-            for (let c = 0; c < body.numColliders(); c++) body.collider(c).setEnabled(false);
-            body.resetForces(true);
-            body.resetTorques(true);
-            break;
-          }
-        }
+      } else if (sitReady) {
+        if (!trySit()) seat.want = SIT_BUFFER_SECONDS;
+      } else {
+        // Pressed mid-hop or mid-roll: hold the intent briefly instead of
+        // eating the press.
+        seat.want = SIT_BUFFER_SECONDS;
       }
+    } else if (!seat.active && seat.want > 0 && sitReady) {
+      trySit();
     }
     if (seat.active) {
       seat.elapsed += delta;
       rollRef.current.lastPress = input.rollPress;
       hangRef.current.lastJumpPress = input.jumpPress;
-      body.setGravityScale(0, true);
-      body.setLinvel({ x: 0, y: 0, z: 0 }, true);
-      body.setAngvel({ x: 0, y: 0, z: 0 }, true);
       body.setTranslation(
         { x: seat.position.x, y: seat.position.y + PLAYER_CENTER_HEIGHT, z: seat.position.z },
         true,
@@ -298,11 +378,8 @@ function PlayerRuntime({
             y: groundHeight(x, z) + PLAYER_CENTER_HEIGHT + 0.12,
             z,
           });
-          body.setBodyType(rapier.RigidBodyType.Dynamic, true);
           for (let c = 0; c < body.numColliders(); c++) body.collider(c).setEnabled(true);
-          body.setLinvel({ x: 0, y: 0, z: 0 }, true);
-          body.setAngvel({ x: 0, y: 0, z: 0 }, true);
-          body.setGravityScale(1, true);
+          velocity.set(0, 0, 0);
         }
       }
     }
@@ -333,11 +410,13 @@ function PlayerRuntime({
       }
       fight.invulnerable =
         rollRef.current.active && rollRef.current.elapsed > 0.08 && rollRef.current.elapsed < 0.55;
+      // A landed blow interrupts the swing: no trading through hitstun.
+      if (fight.hurtTime > 0) fight.attackTime = 0;
     }
     const enabled =
       !enteringRef.current &&
       !seat.active &&
-      (!fight || (fight.health > 0 && fight.attackTime === 0));
+      (!fight || (fight.health > 0 && fight.attackTime === 0 && fight.hurtTime === 0));
     const relativeVelocity = player.relativeVelOnPlane;
     const planarSpeedForAnimation = Math.hypot(relativeVelocity.x, relativeVelocity.z);
     const movementInput = input.forward || input.backward || input.left || input.right;
@@ -348,8 +427,8 @@ function PlayerRuntime({
     const hang = hangRef.current;
     const roll = rollRef.current;
 
-    // Roll (F): edge-triggered one-shot burst. Ecctrl keeps owning every
-    // physics frame after the trigger, so this can't fight the controller.
+    // Roll (F): edge-triggered one-shot burst. The controller keeps owning
+    // every physics step after the trigger, so this can't fight it.
     roll.cooldown = Math.max(0, roll.cooldown - delta);
     const rollRequest = consumeRollPress({
       grounded: grounded && enabled && !hang.active && (!fight || fight.stamina >= 25),
@@ -375,7 +454,7 @@ function PlayerRuntime({
             .normalize();
         } else {
           // Souls-like: no input rolls toward where the character faces.
-          // Ecctrl steers body +Z into travel, exposed as bodyZAxis.
+          // The controller steers body +Z into travel, exposed as bodyZAxis.
           const facing = player.bodyZAxis;
           const facingLength = Math.hypot(facing.x, facing.z);
           if (facingLength > 0.01) {
@@ -389,10 +468,8 @@ function PlayerRuntime({
         roll.elapsed = 0;
         roll.cooldown = ROLL_COOLDOWN;
         roll.lastPress = input.rollPress;
-        body.setLinvel(
-          { x: roll.dir.x * ROLL_SPEED, y: velocity.y, z: roll.dir.z * ROLL_SPEED },
-          true,
-        );
+        velocity.x = roll.dir.x * ROLL_SPEED;
+        velocity.z = roll.dir.z * ROLL_SPEED;
       } else if (!grounded) {
         // Swallow presses made mid-air so landing doesn't auto-roll.
         roll.lastPress = input.rollPress;
@@ -400,15 +477,23 @@ function PlayerRuntime({
     }
     if (roll.active) {
       roll.elapsed += delta;
-      // Sustain the burst every frame: Ecctrl's speed regulation would eat
-      // a one-shot impulse within a frame or two. Ease off toward the end.
+      // Sustain the burst every frame: the controller's speed regulation
+      // would bleed it back to run speed. Ease off toward the end.
       const progress = Math.min(roll.elapsed / ROLL_DURATION, 1);
       const speed = ROLL_SPEED * (1 - 0.35 * progress);
-      body.setLinvel({ x: roll.dir.x * speed, y: velocity.y, z: roll.dir.z * speed }, true);
+      velocity.x = roll.dir.x * speed;
+      velocity.z = roll.dir.z * speed;
       if (roll.elapsed >= ROLL_DURATION) {
         roll.active = false;
         roll.lastPress = input.rollPress;
       }
+    }
+
+    if (fight && fight.hurtTime > 0 && fight.health > 0) {
+      // Staggered: carried by the blow, easing out over the hitstun.
+      const carry = fight.hurtTime / PLAYER_HURT_TIME;
+      velocity.x = fight.knockX * carry;
+      velocity.z = fight.knockZ * carry;
     }
 
     if (!hang.active && enabled && !grounded && velocity.y < -0.5) {
@@ -471,10 +556,7 @@ function PlayerRuntime({
             hang.forward.set(approachX, 0, approachZ);
             hang.normal.set(-approachX, 0, -approachZ);
             hang.lastJumpPress = input.jumpPress;
-            body.setGravityScale(0, true);
-            body.setBodyType(rapier.RigidBodyType.KinematicPositionBased, true);
-            body.setLinvel({ x: 0, y: 0, z: 0 }, true);
-            body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+            velocity.set(0, 0, 0);
           }
         }
       }
@@ -482,11 +564,9 @@ function PlayerRuntime({
 
     if (hang.active) {
       hang.time += delta;
-      // Pin the body. The parent movement frame feeds zeros while hanging
-      // (enabled is false), so Ecctrl never fights the pin.
-      body.setGravityScale(0, true);
-      body.setLinvel({ x: 0, y: 0, z: 0 }, true);
-      body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+      // Pin the body. The controller is suspended while hanging, so it
+      // never fights the pin.
+      velocity.set(0, 0, 0);
       // Ease into the hang pose: chest below the lip, close to the wall.
       hangTarget.set(
         hang.point.x - hang.forward.x * 0.43,
@@ -552,16 +632,12 @@ function PlayerRuntime({
       body.setRotation(facing, true);
       body.setNextKinematicRotation(facing);
       if (!hang.active) {
-        body.setBodyType(rapier.RigidBodyType.Dynamic, true);
-        body.setGravityScale(1, true);
-        body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+        velocity.set(0, 0, 0);
       } else if (hang.climbTime < 0 && (input.backward || hang.time > HANG_TIMEOUT)) {
         // Drop: push gently off the wall, or time out.
         hang.active = false;
-        body.setBodyType(rapier.RigidBodyType.Dynamic, true);
         hang.lastJumpPress = input.jumpPress;
-        body.setGravityScale(1, true);
-        body.setLinvel({ x: hang.normal.x * 2.5, y: 0, z: hang.normal.z * 2.5 }, true);
+        velocity.set(hang.normal.x * 2.5, 0, hang.normal.z * 2.5);
       }
     }
 
@@ -571,52 +647,12 @@ function PlayerRuntime({
       onHangChange(hang.active);
     }
 
-    // Downhill snap: briefly airborne after running off a slope/step edge
-    // while walkable ground is still close below -> pull down so the hover
-    // spring re-catches instead of bouncing. Only runs on the
-    // grounded -> airborne edge, so real jumps and falls are untouched.
-    if (
-      enabled &&
-      !hang.active &&
-      !roll.active &&
-      wasGrounded.current &&
-      !grounded &&
-      velocity.y <= 0 &&
-      movementInput
-    ) {
-      stickOrigin.set(position.x, position.y, position.z);
-      const snapHit = world.castRayAndGetNormal(
-        new rapier.Ray(stickOrigin, ledgeDown),
-        CAPSULE_BOTTOM_OFFSET + DOWNHILL_SNAP_FEET + 0.1,
-        true,
-        rapier.QueryFilterFlags.EXCLUDE_SENSORS,
-        undefined,
-        undefined,
-        body,
-      );
-      const feetAboveGround = snapHit ? snapHit.timeOfImpact - CAPSULE_BOTTOM_OFFSET : null;
-      if (
-        shouldStickToGround({
-          wasGrounded: wasGrounded.current,
-          grounded,
-          verticalSpeed: velocity.y,
-          moving: movementInput,
-          enabled: true,
-          feetAboveGround,
-          groundNormalY: snapHit?.normal.y,
-        })
-      ) {
-        body.setLinvel(
-          { x: velocity.x, y: downhillSnapSpeed(velocity.y, delta), z: velocity.z },
-          true,
-        );
-      }
-    }
-
     landingTime.current = Math.max(0, landingTime.current - delta);
     if (grounded && !wasGrounded.current && previousVerticalSpeed.current < -2) {
       landingCompression.current = 1;
-      playSound("land");
+      playSound("land", {
+        intensity: Math.min(1, (-previousVerticalSpeed.current - 2) / 12),
+      });
       landingTime.current = CLIP_SECONDS.JumpLand;
     }
     wasGrounded.current = grounded;
@@ -626,7 +662,7 @@ function PlayerRuntime({
     if (visual) {
       landingCompression.current = Math.max(0, landingCompression.current - delta * 8);
       const compression = landingCompression.current;
-      const stretch = grounded ? 0 : Math.min(Math.abs(velocity.y) / JUMP_SPEED, 1) * 0.035;
+      const stretch = grounded ? 0 : Math.min(Math.abs(velocity.y) / jumpSpeed, 1) * 0.035;
       visual.scale.set(
         1 + compression * 0.05 - stretch * 0.25,
         1 - compression * 0.1 + stretch,
@@ -638,45 +674,56 @@ function PlayerRuntime({
         10,
         delta,
       );
+      // Tornado spin: two full turns, fastest at the start.
+      visual.rotation.y =
+        link && link.spinTime > 0
+          ? (1 - Math.pow(link.spinTime / SPIN_TIME, 1.6)) * Math.PI * 4
+          : 0;
     }
 
     const nextAction: ActionName =
-      fight && fight.health <= 0
+      (fight && fight.health <= 0) || link?.frozen
         ? "Death"
-        : fight && fight.attackTime > 0
-          ? fight.attackId % 2
-            ? "SwordSlashQuick"
-            : "SwordSlashHeavy"
-          : seat.active
-            ? seat.standing > 0
-              ? "SitExit"
-              : seat.elapsed < CLIP_SECONDS.SitEnter
-                ? "SitEnter"
-                : "SeatedIdle"
-            : hang.active
-              ? hang.climbTime >= 0
-                ? "LedgeClimb"
-                : hang.time < CLIP_SECONDS.LedgeGrab
-                  ? "LedgeGrab"
-                  : "LedgeHang"
-              : roll.active
-                ? "Roll"
-                : !grounded
-                  ? velocity.y > 0
-                    ? "JumpRise"
-                    : "JumpFall"
-                  : landingTime.current > 0 && !moving
-                    ? "JumpLand"
-                    : moving
-                      ? planarSpeedForAnimation > 5.4
-                        ? "Run"
-                        : "Walk"
-                      : "Idle";
+        : fight && fight.bossHealth <= 0 && grounded
+          ? "Victory"
+          : fight && fight.hurtTime > 0
+            ? "RecieveHit"
+            : fight && fight.attackTime > 0
+              ? fight.attackId % 2
+                ? "SwordSlashQuick"
+                : "SwordSlashHeavy"
+              : seat.active
+                ? seat.standing > 0
+                  ? "SitExit"
+                  : seat.elapsed < CLIP_SECONDS.SitEnter
+                    ? "SitEnter"
+                    : "SeatedIdle"
+                : hang.active
+                  ? hang.climbTime >= 0
+                    ? "LedgeClimb"
+                    : hang.time < CLIP_SECONDS.LedgeGrab
+                      ? "LedgeGrab"
+                      : "LedgeHang"
+                  : roll.active
+                    ? "Roll"
+                    : !grounded
+                      ? velocity.y > 0
+                        ? "JumpRise"
+                        : "JumpFall"
+                      : landingTime.current > 0 && !moving
+                        ? "JumpLand"
+                        : moving
+                          ? planarSpeedForAnimation > 5.4
+                            ? "Run"
+                            : "Walk"
+                          : "Idle";
     if (nextAction !== actionRef.current) {
       if (nextAction === "JumpRise") playSound("jump");
       if (nextAction === "SwordSlashQuick" || nextAction === "SwordSlashHeavy") playSound("slash");
       actionRef.current = nextAction;
       setAction(nextAction);
+      if (nextAction === "Roll") playSound("roll");
+      if (nextAction === "LedgeGrab") playSound("grab");
     }
     if (nextAction === "Walk" || nextAction === "Run") {
       stepTime.current += delta;
@@ -701,37 +748,47 @@ function PlayerRuntime({
     }
     if (correctedX !== position.x || correctedZ !== position.z) {
       body.setTranslation({ x: correctedX, y: position.y, z: correctedZ }, true);
-      body.setLinvel(
-        {
-          x: correctedX === position.x ? velocity.x : 0,
-          y: velocity.y,
-          z: correctedZ === position.z ? velocity.z : 0,
-        },
-        true,
-      );
+      if (correctedX !== position.x) velocity.x = 0;
+      if (correctedZ !== position.z) velocity.z = 0;
     }
 
     // Follow the interpolated render transform, not Rapier's discrete pose.
     // Keeping the player and camera on the same timeline removes visual jitter.
     headingGroup.getWorldPosition(renderedPlayerPosition);
     cameraForward.set(-Math.sin(cameraYawRef.current), 0, -Math.cos(cameraYawRef.current));
+    // Indoors, blend to a close over-the-shoulder rig: the same mouse pitch,
+    // remapped from "high above" to "just over the shoulder".
+    indoorBlend = THREE.MathUtils.damp(indoorBlend, cameraRig.indoor ? 1 : 0, 5, delta);
+    const pitch = (cameraHeightRef.current - 2.65) / (4.8 - 2.65);
+    const height = THREE.MathUtils.lerp(cameraHeightRef.current, 1.7 + pitch * 0.9, indoorBlend);
+    const distance = THREE.MathUtils.lerp(cameraDistance, INDOOR_DISTANCE, indoorBlend);
+    cameraRight
+      .set(Math.cos(cameraYawRef.current), 0, -Math.sin(cameraYawRef.current))
+      .multiplyScalar(INDOOR_SHOULDER * indoorBlend);
     cameraTarget.set(
-      renderedPlayerPosition.x,
-      renderedPlayerPosition.y + 1.25,
-      renderedPlayerPosition.z,
+      renderedPlayerPosition.x + cameraRight.x,
+      renderedPlayerPosition.y + THREE.MathUtils.lerp(1.25, 1.45, indoorBlend),
+      renderedPlayerPosition.z + cameraRight.z,
     );
 
     desiredCameraPosition
       .copy(cameraForward)
-      .multiplyScalar(-cameraDistance)
-      .setY(renderedPlayerPosition.y + cameraHeightRef.current)
-      .add(cameraGround.set(renderedPlayerPosition.x, 0, renderedPlayerPosition.z));
+      .multiplyScalar(-distance)
+      .setY(renderedPlayerPosition.y + height)
+      .add(cameraGround.set(renderedPlayerPosition.x, 0, renderedPlayerPosition.z))
+      .add(cameraRight);
 
     cameraRayDirection.copy(desiredCameraPosition).sub(cameraTarget);
     const desiredCameraDistance = cameraRayDirection.length();
     cameraRayDirection.normalize();
-    const cameraHit = world.castRay(
-      new rapier.Ray(cameraTarget, cameraRayDirection),
+    // Sweep a ball, not a ray: the near plane has width, and a thin ray
+    // slips past corners that the frustum still clips into.
+    const cameraHit = world.castShape(
+      cameraTarget,
+      IDENTITY_ROTATION,
+      cameraRayDirection,
+      cameraProbe,
+      0,
       desiredCameraDistance,
       true,
       rapier.QueryFilterFlags.EXCLUDE_SENSORS,
@@ -739,14 +796,28 @@ function PlayerRuntime({
       undefined,
       body,
     );
-    if (cameraHit) {
-      desiredCameraPosition
-        .copy(cameraRayDirection)
-        .multiplyScalar(Math.max(1, cameraHit.timeOfImpact - 0.2))
-        .add(cameraTarget);
-    }
+    const allowedDistance = cameraHit
+      ? Math.max(CAMERA_MIN_DISTANCE, cameraHit.time_of_impact - 0.05)
+      : desiredCameraDistance;
+    desiredCameraPosition
+      .copy(cameraRayDirection)
+      .multiplyScalar(allowedDistance)
+      .add(cameraTarget);
     camera.position.lerp(desiredCameraPosition, 1 - Math.exp(-9 * delta));
+    // Never let smoothing drag the lens behind geometry: pull in instantly,
+    // ease back out.
+    cameraOffset.copy(camera.position).sub(cameraTarget);
+    if (cameraOffset.length() > allowedDistance) {
+      camera.position.copy(cameraTarget).addScaledVector(cameraOffset.normalize(), allowedDistance);
+    }
     camera.lookAt(cameraTarget);
+    if (fight && fight.shake > 0 && !reducedMotion) {
+      // Smooth pseudo-noise shake; lookAt resets the orientation next frame.
+      const amount = fight.shake * fight.shake * 0.03;
+      const t = frame.clock.elapsedTime;
+      camera.rotateX((Math.sin(t * 47) + Math.sin(t * 29.3)) * amount);
+      camera.rotateY((Math.sin(t * 41.7) + Math.sin(t * 23.1)) * amount);
+    }
 
     const feetHeight = position.y - PLAYER_CENTER_HEIGHT;
     let nearestPortal: PlayerPortal | undefined;
@@ -814,13 +885,17 @@ export function ThirdPersonPlayer({
   onEnterPortal,
   onHangChange,
   onReady,
+  tuning,
+  teleportRef,
+  platformer,
+  held,
 }: ThirdPersonPlayerProps) {
   const runtime = useWorld();
-  const controllerRef = useRef<EcctrlHandle>(null);
+  const controllerRef = useRef<CharacterHandle>(null);
   const headingRef = useRef<THREE.Group>(null);
   const characterVisualRef = useRef<THREE.Group>(null);
   const [initialPosition] = useState(start);
-  const controlsRef = usePlayerControls(Boolean(combat));
+  const controlsRef = usePlayerControls(Boolean(combat || platformer));
   const { paused, settings } = useGame();
   const { camera, gl } = useThree();
   const cameraYawRef = useRef(startYaw - Math.PI);
@@ -833,6 +908,7 @@ export function ThirdPersonPlayer({
     elapsed: 0,
     position: new THREE.Vector3(),
     yaw: 0,
+    want: 0,
   });
   const hangRef = useRef<HangState>({
     active: false,
@@ -852,6 +928,14 @@ export function ThirdPersonPlayer({
     dir: new THREE.Vector3(0, 0, -1),
   });
   const [action, setAction] = useState<ActionName>("Idle");
+  // Hang, seat and death pin the body themselves; the controller stands down.
+  const suspended = useCallback(
+    () =>
+      hangRef.current.active ||
+      seatRef.current.active ||
+      Boolean(combat && combat.current.health <= 0),
+    [combat],
+  );
 
   useLayoutEffect(() => {
     const entity = runtime.spawn(PlayerView({ object: headingRef.current }));
@@ -970,7 +1054,14 @@ export function ThirdPersonPlayer({
     if (!player) return;
     const input = controlsRef.current;
     const roll = rollRef.current;
-    if (paused || (combat && (combat.current.health <= 0 || combat.current.bossHealth <= 0))) {
+    if (
+      paused ||
+      platformer?.current.frozen ||
+      (combat &&
+        (combat.current.health <= 0 ||
+          combat.current.bossHealth <= 0 ||
+          combat.current.hurtTime > 0))
+    ) {
       roll.active = false;
       player.setMovement({
         forward: false,
@@ -983,7 +1074,7 @@ export function ThirdPersonPlayer({
       return;
     }
     if (roll.active) {
-      // Souls-like commitment: feed Ecctrl the roll direction as live input
+      // Souls-like commitment: feed the controller the roll direction as live input
       // so it accelerates with the burst (instead of braking against it)
       // and keeps the body facing the roll. Jump stays off mid-roll.
       const yaw = cameraYawRef.current;
@@ -1010,15 +1101,15 @@ export function ThirdPersonPlayer({
       backward: enabled && input.backward,
       leftward: enabled && input.left,
       rightward: enabled && input.right,
-      run: enabled && input.run,
+      run: enabled && input.run && isSprintAllowed(),
       jump: enabled && input.jump,
     });
   });
 
   return (
     <>
-      <Ecctrl
-        enabledRotations={[false, true, false]}
+      <CharacterController
+        ref={controllerRef}
         enable={
           ![
             "SitEnter",
@@ -1032,58 +1123,26 @@ export function ThirdPersonPlayer({
             "LedgeClimb",
           ].includes(action)
         }
-        autoBalance={
-          ![
-            "Death",
-            "SitEnter",
-            "SeatedIdle",
-            "SitExit",
-            "LedgeGrab",
-            "LedgeHang",
-            "LedgeClimb",
-          ].includes(action)
-        }
-        ref={controllerRef}
+        suspended={suspended}
         position={[
           initialPosition[0],
           initialPosition[1] + PLAYER_CENTER_HEIGHT,
           initialPosition[2],
         ]}
-        // Face away from the spawn camera: Ecctrl steers body +Z toward
-        // movement and the Quaternius model faces +Z locally.
-        rotation={[0, startYaw, 0]}
-        capsuleHalfHeight={0.5}
-        capsuleRadius={0.42}
-        floatHeight={0.2}
-        springK={180}
-        dampingC={30}
-        moveImpulsePointOffset={0}
-        // Wide snap window: keeps contact running down the 0.48m steps and
-        // the 40 deg slope instead of flickering airborne each edge.
-        rayHitForgiveness={0.55}
-        // Longer feelers so the landing is already in range at run speed.
-        rayLength={2}
-        maxWalkVel={WALK_SPEED}
-        maxRunVel={RUN_SPEED}
-        accDeltaTime={0.34}
-        decDeltaTime={0.3}
-        jumpVel={JUMP_SPEED}
-        jumpDuration={0.12}
-        fallingGravityScale={1}
-        enableToggleRun={false}
-        slopeMaxAngle={THREE.MathUtils.degToRad(50)}
-        autoBalanceSpringOnY={0.2}
-        autoBalanceDampingOnY={0.02}
-        canSleep={false}
-        ccd
-        friction={0}
-        restitution={0}
+        // Face away from the spawn camera: the controller steers body +Z
+        // toward movement and the Quaternius model faces +Z locally.
+        yaw={startYaw}
+        capsuleHalfHeight={CAPSULE_HALF_HEIGHT}
+        capsuleRadius={CAPSULE_RADIUS}
+        tuning={tuning}
       >
         <PlayerRuntime
           combat={combat}
+          platformer={platformer}
           seatRef={seatRef}
           respawn={respawn ?? initialPosition}
           controllerRef={controllerRef}
+          jumpSpeed={(tuning ?? controllerDefaults).jumpSpeed}
           headingRef={headingRef}
           characterVisualRef={characterVisualRef}
           controlsRef={controlsRef}
@@ -1100,6 +1159,7 @@ export function ThirdPersonPlayer({
           onNearPortal={onNearPortal}
           onEnterPortal={onEnterPortal}
           onHangChange={onHangChange}
+          teleportRef={teleportRef}
         />
         <group
           ref={headingRef}
@@ -1108,10 +1168,15 @@ export function ThirdPersonPlayer({
         >
           <group ref={characterVisualRef}>
             {/* No Y flip: model +Z matches body +Z, so it faces travel direction. */}
-            <AnimatedCharacter animation={action} armed={Boolean(combat)} scale={0.82} />
+            <AnimatedCharacter
+              animation={action}
+              armed={Boolean(combat)}
+              held={held}
+              scale={0.82}
+            />
           </group>
         </group>
-      </Ecctrl>
+      </CharacterController>
       {/* World-space dust: sibling of the physics body, never inside it. */}
       <DustPuffs controllerRef={controllerRef} headingRef={headingRef} action={action} />
     </>

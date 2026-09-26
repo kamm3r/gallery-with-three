@@ -1,7 +1,7 @@
 import { useFrame } from "@react-three/fiber";
 import { useEffect, useMemo, useRef, type RefObject } from "react";
 import * as THREE from "three";
-import type { EcctrlHandle } from "ecctrl";
+import type { CharacterHandle } from "./CharacterController";
 import type { ActionName } from "./AnimatedCharacter";
 import { useReducedMotion } from "../hooks/useReducedMotion";
 
@@ -158,7 +158,7 @@ class DustPool {
 }
 
 interface DustPuffsProps {
-  controllerRef: RefObject<EcctrlHandle | null>;
+  controllerRef: RefObject<CharacterHandle | null>;
   headingRef: RefObject<THREE.Group | null>;
   action: ActionName;
 }
@@ -168,7 +168,7 @@ const feetPos = new THREE.Vector3();
 /**
  * Mario Odyssey-style dust: run/walk trail at the feet plus takeoff and
  * landing bursts. One pooled THREE.Points draw call, world-space positions,
- * so it mounts as a sibling of the physics body (never inside <Ecctrl>).
+ * so it mounts as a sibling of the physics body (never inside the controller).
  */
 export function DustPuffs({ controllerRef, headingRef, action }: DustPuffsProps) {
   const pointsRef = useRef<THREE.Points>(null);
@@ -194,11 +194,11 @@ export function DustPuffs({ controllerRef, headingRef, action }: DustPuffsProps)
   useFrame((state, rawDelta) => {
     const player = controllerRef.current;
     const heading = headingRef.current;
-    if (!player || !heading || !pointsRef.current) return;
+    if (!player || !player.body || !heading || !pointsRef.current) return;
 
     const delta = Math.min(rawDelta, 0.05);
     pool.setViewport(state.size.height * state.gl.getPixelRatio());
-    const velocity = player.body.linvel();
+    const velocity = player.velocity;
     const grounded = player.isOnGround;
     heading.getWorldPosition(feetPos);
     const fx = feetPos.x;

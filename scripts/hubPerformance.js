@@ -14,7 +14,12 @@ export async function measureGrassStreaming(state, budgetMs = 16.7) {
       samples.push(performance.now() - start);
     }
     const measured = samples.slice(2);
-    return { samples, budgetMs, pass: Math.max(...measured) < budgetMs, worstMs: Math.max(...measured) };
+    return {
+      samples,
+      budgetMs,
+      pass: Math.max(...measured) < budgetMs,
+      worstMs: Math.max(...measured),
+    };
   } finally {
     state.camera.position.copy(position);
   }

@@ -44,5 +44,5 @@ scene.display.shading.background_type = 'WORLD'
 scene.world.color = (.08, .08, .08)
 scene.render.resolution_x = 1400; scene.render.resolution_y = 850; scene.render.resolution_percentage = 100
 scene.render.image_settings.file_format = 'PNG'
-scene.render.filepath = str(root / 'art/characters/animation-poses.png')
+scene.render.filepath = str(root / 'public/assets/characters/animation-poses.png')
 bpy.ops.render.render(write_still=True)

@@ -14,8 +14,15 @@ test("five distinct, larger paintings sit on dry land with clear approaches", ()
     assert.ok(Math.hypot(portal.x, portal.z) < PLAY_RADIUS - 5);
     assert.equal(allowsGrass(portal.x, portal.z), false);
     assert.ok(existsSync(`public${portal.image}`));
-    assert.ok(["/gallery", "/playground", "/seasons", "/boss"].includes(portal.destination));
+    assert.ok(
+      ["/gallery", "/playground", "/seasons", "/boss", "/warp"].includes(portal.destination),
+    );
   }
+  assert.equal(
+    new Set(HUB_PORTALS.map((p) => p.destination)).size,
+    5,
+    "every painting leads somewhere new",
+  );
 });
 
 test("painting footprints are flat terrain, including the face-up painting", () => {

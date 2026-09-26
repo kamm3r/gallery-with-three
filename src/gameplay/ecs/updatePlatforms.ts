@@ -16,9 +16,18 @@ export function updatePlatforms(world: World, delta: number) {
     position.y = motion.y + (motion.axis === "y" ? offset : 0);
     position.z = motion.z + (motion.axis === "z" ? offset : 0);
     view.body.setNextKinematicTranslation(position);
-    if (motion.spin) {
-      rotation.y = Math.sin((elapsed * motion.spin) / 2);
-      rotation.w = Math.cos((elapsed * motion.spin) / 2);
+    if (motion.spin || motion.tiltAmp) {
+      // Yaw from spin composed with pitch oscillation: q = qY * qX.
+      const halfSpin = (elapsed * motion.spin) / 2;
+      const halfPitch = (Math.sin(elapsed * motion.tiltSpeed) * motion.tiltAmp) / 2;
+      const sy = Math.sin(halfSpin);
+      const cy = Math.cos(halfSpin);
+      const px = Math.sin(halfPitch);
+      const cx = Math.cos(halfPitch);
+      rotation.x = cy * px;
+      rotation.y = sy * cx;
+      rotation.z = -sy * px;
+      rotation.w = cy * cx;
       view.body.setNextKinematicRotation(rotation);
     }
   });

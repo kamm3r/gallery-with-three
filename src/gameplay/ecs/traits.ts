@@ -42,4 +42,6 @@ export const PlatformMotion = trait({
   speed: 1,
   phase: 0,
   spin: 0,
+  tiltAmp: 0,
+  tiltSpeed: 1,
 });

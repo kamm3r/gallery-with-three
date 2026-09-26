@@ -7,6 +7,7 @@ import { daylightAt } from "../gameplay/daylight";
 import { mulberry32 } from "../gameplay/terrain";
 import { useGame } from "../gameSettings";
 import { useReducedMotion } from "../hooks/useReducedMotion";
+import { sunlight } from "../gameplay/sunlight";
 
 class SkySystem {
   readonly noise: THREE.Data3DTexture;
@@ -14,11 +15,13 @@ class SkySystem {
   readonly sunDirection = new THREE.Vector3();
   readonly center = new THREE.Vector3();
   readonly fogColor = new THREE.Color();
-  readonly dayFog = new THREE.Color("#b7cad5");
-  readonly nightFog = new THREE.Color("#111d36");
-  readonly sunsetFog = new THREE.Color("#d59472");
-  readonly dayFill = new THREE.Color("#d9edff");
-  readonly dayGround = new THREE.Color("#797854");
+  readonly dayFog = new THREE.Color("#9fb484");
+  readonly nightFog = new THREE.Color("#122033");
+  readonly sunsetFog = new THREE.Color("#dca579");
+  readonly dayFill = new THREE.Color("#bcd6cb");
+  readonly dayGround = new THREE.Color("#58602f");
+  readonly daySun = new THREE.Color("#ffe2b3");
+  readonly lowSun = new THREE.Color("#ffb867");
   constructor() {
     const random = mulberry32(8251);
     const data = new Uint8Array(32 ** 3);
@@ -62,13 +65,14 @@ class SkySystem {
         void main() {
           vec3 ray = normalize(vWorld - cameraPosition);
           float horizon = pow(1.0 - max(ray.y, 0.0), 3.0);
-          vec3 day = mix(vec3(0.13, 0.36, 0.66), vec3(0.64, 0.75, 0.79), horizon);
+          vec3 day = mix(vec3(0.2, 0.4, 0.6), vec3(0.76, 0.79, 0.64), horizon);
           vec3 night = mix(vec3(0.006, 0.012, 0.035), vec3(0.035, 0.055, 0.1), horizon);
           vec3 sky = mix(night, day, uDay);
           sky = mix(sky, vec3(0.8, 0.3, 0.12), uSunset * horizon * 0.6);
           float sun = pow(max(dot(ray, uSun), 0.0), 1200.0);
           float moon = pow(max(dot(ray, -uSun), 0.0), 2200.0);
-          sky += vec3(1.0, 0.8, 0.5) * sun * uDay * 3.0;
+          float glow = pow(max(dot(ray, uSun), 0.0), 14.0);
+          sky += vec3(1.0, 0.8, 0.5) * (sun * 6.0 + glow * 0.45) * uDay;
           sky += vec3(0.6, 0.74, 1.0) * moon * (1.0 - uDay);
           vec2 starCell = floor(ray.xz / max(0.1, ray.y) * 310.0);
           float star = fract(sin(dot(starCell, vec2(12.9898, 78.233))) * 43758.5453);
@@ -110,7 +114,8 @@ class SkySystem {
     player: { x: number; y: number; z: number; valid: boolean },
   ) {
     const day = daylightAt(seconds);
-    this.sunDirection.set(Math.cos(day.angle), Math.sin(day.angle), 0.38).normalize();
+    // A low arc (about 42° at noon) keeps raking, golden light all day long.
+    this.sunDirection.set(Math.cos(day.angle), Math.sin(day.angle) * 0.55, 0.62).normalize();
     const uniforms = this.material.uniforms;
     uniforms.uTime.value = reduced ? 0 : seconds;
     uniforms.uDay.value = day.daylight;
@@ -123,9 +128,13 @@ class SkySystem {
       .add(this.center);
     light.target.position.copy(this.center);
     light.target.updateMatrixWorld();
-    light.intensity = day.elevation > 0 ? 0.45 + day.daylight * 2.4 : 0.45;
-    light.color.set(day.elevation > 0 ? "#fff0d2" : "#91b6f1");
-    fill.intensity = 0.55 + day.daylight * 1.15;
+    light.intensity = day.elevation > 0 ? 0.45 + day.daylight * 2.9 : 0.45;
+    if (day.elevation > 0)
+      light.color
+        .copy(this.lowSun)
+        .lerp(this.daySun, THREE.MathUtils.smoothstep(this.sunDirection.y, 0.1, 0.55));
+    else light.color.set("#91b6f1");
+    fill.intensity = 0.45 + day.daylight * 0.95;
     fill.color.set("#647ea9").lerp(this.dayFill, day.daylight);
     fill.groundColor.set("#29374a").lerp(this.dayGround, day.daylight);
     sky.position.copy(camera.position);
@@ -134,6 +143,10 @@ class SkySystem {
       .lerp(this.dayFog, day.daylight)
       .lerp(this.sunsetFog, day.sunset * 0.45);
     if (scene.fog) scene.fog.color.copy(this.fogColor);
+    sunlight.direction.value.copy(this.sunDirection).multiplyScalar(day.elevation > 0 ? 1 : -1);
+    sunlight.color.value.copy(light.color).multiplyScalar(light.intensity);
+    sunlight.daylight.value = day.daylight;
+    sunlight.fogColor.value.copy(this.fogColor);
   }
 }
 
@@ -168,8 +181,8 @@ export function DayNightSky() {
   );
   return (
     <>
-      <fog attach="fog" args={["#b7cad5", 65, 215]} />
-      <hemisphereLight ref={fill} args={["#d9edff", "#797854", 1.7]} />
+      {/* Distance haze comes from the post atmosphere, not scene fog. */}
+      <hemisphereLight ref={fill} args={["#bcd6cb", "#58602f", 1.4]} />
       <directionalLight
         ref={sun}
         castShadow

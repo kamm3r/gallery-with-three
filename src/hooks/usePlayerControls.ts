@@ -1,6 +1,14 @@
 import { useEffect, useRef } from "react";
 
-export type ControlName = "forward" | "backward" | "left" | "right" | "jump" | "run" | "roll";
+export type ControlName =
+  | "forward"
+  | "backward"
+  | "left"
+  | "right"
+  | "jump"
+  | "run"
+  | "roll"
+  | "interact";
 
 export type PlayerControls = Record<ControlName, boolean> & {
   jumpPress: number;
@@ -9,7 +17,16 @@ export type PlayerControls = Record<ControlName, boolean> & {
   attackPress: number;
 };
 
-const controlNames: ControlName[] = ["forward", "backward", "left", "right", "jump", "run", "roll"];
+const controlNames: ControlName[] = [
+  "forward",
+  "backward",
+  "left",
+  "right",
+  "jump",
+  "run",
+  "roll",
+  "interact",
+];
 
 const keyMap: Record<string, ControlName | undefined> = {
   ArrowDown: "backward",
@@ -34,6 +51,7 @@ const state: PlayerControls = {
   jump: false,
   run: false,
   roll: false,
+  interact: false,
   jumpPress: 0,
   rollPress: 0,
   interactPress: 0,
@@ -42,6 +60,14 @@ const state: PlayerControls = {
 
 const listeners = new Set<(next: PlayerControls) => void>();
 let controlsPaused = false;
+
+// TEMP-PROOF: diagnose E-ignore. Revert.
+if (typeof window !== "undefined") {
+  (window as unknown as { __cpaused?: () => boolean }).__cpaused = () => controlsPaused;
+}
+
+/** Live, read-only view of the held controls, for per-frame game logic. */
+export const heldControls = (): Readonly<PlayerControls> => state;
 
 export function setControlsPaused(paused: boolean) {
   controlsPaused = paused;
@@ -52,6 +78,7 @@ export function setPlayerControl(control: ControlName, active: boolean) {
   if (controlsPaused && active) return;
   if (control === "jump" && active && !state.jump) state.jumpPress += 1;
   if (control === "roll" && active && !state.roll) state.rollPress += 1;
+  if (control === "interact" && active && !state.interact) state.interactPress += 1;
   state[control] = active;
   listeners.forEach((listener) => listener(state));
 }
@@ -71,16 +98,15 @@ export function usePlayerControls(mouseAttack = false) {
       controls.current = { ...next };
     };
     const handleKey = (active: boolean) => (event: KeyboardEvent) => {
-      if (
-        controlsPaused ||
-        (event.target instanceof HTMLElement &&
-          event.target.closest('input, select, textarea, button, [contenteditable="true"]'))
-      )
-        return;
-      if (event.code === "KeyE" && active && !event.repeat) {
+      // Interact/attack are window-level verbs with no text-field use in game,
+      // so they fire regardless of DOM focus (a focused menu or touch button
+      // must never silently swallow E). Movement keys keep the focus filter
+      // below so sliders and selects stay operable.
+      if (controlsPaused) return;
+      if (event.code === "KeyE") {
+        // Pressed counts once; held stays true until release (hold-to-search).
         event.preventDefault();
-        state.interactPress++;
-        listeners.forEach((listener) => listener(state));
+        if (!event.repeat) setPlayerControl("interact", active);
         return;
       }
       if (event.code === "KeyJ" && active && !event.repeat) {
@@ -89,6 +115,11 @@ export function usePlayerControls(mouseAttack = false) {
         listeners.forEach((listener) => listener(state));
         return;
       }
+      if (
+        event.target instanceof HTMLElement &&
+        event.target.closest('input, select, textarea, button, [contenteditable="true"]')
+      )
+        return;
       const control = keyMap[event.code];
       if (!control) return;
       event.preventDefault();

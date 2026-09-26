@@ -1,4 +1,7 @@
 import { Sky } from "@react-three/drei";
+import { useRef } from "react";
+import { parkZones, type Tuple3 } from "../gameplay/collisionCourse";
+import { useControllerTuning, useZoneTeleport } from "../hooks/usePlaygroundTuning";
 import { CollisionCourse } from "./CollisionCourse";
 import { KinematicPlatform, PlatformSystem } from "./KinematicPlatform";
 import { PortalFrameCollider } from "./PortalFrameCollider";
@@ -14,6 +17,9 @@ interface PlaygroundWorldProps {
   onReady: () => void;
 }
 
+const PORTAL_Z = 30;
+const START = parkZones[0].spawn;
+
 export function PlaygroundWorld({
   nearPortal,
   portalImpact,
@@ -22,6 +28,9 @@ export function PlaygroundWorld({
   onHangChange,
   onReady,
 }: PlaygroundWorldProps) {
+  const tuning = useControllerTuning();
+  const teleportRef = useRef<Tuple3 | null>(null);
+  useZoneTeleport(teleportRef);
   return (
     <>
       <color attach="background" args={["#b9cad3"]} />
@@ -45,52 +54,96 @@ export function PlaygroundWorld({
       />
       <CollisionCourse />
       <PlatformSystem />
+      {/* Blue kinematic set: rotating disc, elevator, shuttles. */}
       <KinematicPlatform
-        position={[-4.5, 1.1, -6.5]}
-        axis="y"
-        distance={0.9}
-        speed={1.25}
-        color="#d49b58"
+        name="platform-disc"
+        position={[-24, 0.7, -12]}
+        shape="cylinder"
+        radius={4}
+        size={[8, 0.4, 8]}
+        spin={0.5}
       />
-      <KinematicPlatform position={[4.5, 1.4, -6.5]} axis="x" distance={2.4} speed={0.85} />
       <KinematicPlatform
-        position={[8, 0.8, -30]}
+        position={[-15, 1.1, -12]}
+        axis="y"
+        distance={1.1}
+        speed={0.8}
+        size={[3, 0.4, 3]}
+      />
+      <KinematicPlatform
+        position={[-24, 1.0, -19]}
+        axis="x"
+        distance={4}
+        speed={0.6}
+        phase={Math.PI / 2}
+        size={[3, 0.4, 3]}
+      />
+      <KinematicPlatform
+        position={[-15, 1.0, -19]}
         axis="z"
-        distance={5}
+        distance={3}
         speed={0.7}
-        color="#67a1bd"
+        size={[2.6, 0.4, 2.6]}
+      />
+      {/* Orange animated deck: kinematic pitch oscillation. */}
+      <KinematicPlatform
+        name="platform-tilt"
+        position={[2, 1.3, -19]}
+        tiltAmp={0.32}
+        tiltSpeed={0.9}
+        size={[4.2, 0.3, 2.2]}
+        color="#e09543"
+      />
+      {/* Sweeper bar (jump it or get shoved), fast carousel, tall elevator,
+          fast shuttle: platform-carry and kinematic-push stress. */}
+      <KinematicPlatform
+        name="platform-sweeper"
+        position={[27, 0.45, -64]}
+        spin={0.9}
+        size={[9, 0.5, 0.5]}
+        color="#d63c2f"
       />
       <KinematicPlatform
-        position={[19, 0.65, -33]}
-        spin={0.45}
-        size={[8, 0.4, 3]}
-        color="#d49b58"
+        name="platform-carousel"
+        position={[36, 0.3, -62]}
+        shape="cylinder"
+        radius={3}
+        size={[6, 0.3, 6]}
+        spin={2.2}
       />
       <KinematicPlatform
-        position={[7, 1.8, 25]}
+        position={[36, 2.2, -71]}
         axis="y"
-        distance={1.5}
-        speed={0.65}
-        size={[4, 0.4, 4]}
-        color="#cead59"
+        distance={2}
+        speed={0.6}
+        size={[3, 0.4, 3]}
+      />
+      <KinematicPlatform
+        position={[26, 0.8, -72]}
+        axis="x"
+        distance={4}
+        speed={1.8}
+        size={[2.6, 0.4, 2.6]}
       />
       <PortalPainting
         image="/assets/plaster.jpg"
-        position={[0, 2.2, 13.3]}
+        position={[0, 2.2, PORTAL_Z]}
         rotation={[0, Math.PI, 0]}
         active={nearPortal || portalImpact}
         impact={portalImpact}
       />
-      <PortalFrameCollider position={[0, 2.2, 13.3]} rotation={[0, Math.PI, 0]} />
+      <PortalFrameCollider position={[0, 2.2, PORTAL_Z]} rotation={[0, Math.PI, 0]} />
       <ThirdPersonPlayer
-        start={[0, 0, 7.2]}
-        portals={[{ id: "forest", position: [0, 0, 13.3] }]}
+        start={START}
+        portals={[{ id: "forest", position: [0, 0, PORTAL_Z] }]}
         bounds={[78, 78]}
         cameraDistance={4.8}
         onNearPortal={(id) => onNearPortal(Boolean(id))}
         onEnterPortal={onExit}
         onHangChange={onHangChange}
         onReady={onReady}
+        tuning={tuning}
+        teleportRef={teleportRef}
       />
     </>
   );

@@ -51,6 +51,7 @@ export function ExperienceHud({ title, prompt, leaving, ready }: ExperienceHudPr
         <TouchButton control="right" label="Right" />
         <TouchButton control="jump" label="Jump" />
         <TouchButton control="roll" label="Roll" />
+        <TouchButton control="interact" label="Use" />
       </div>
       <div className={`portal-prompt ${prompt ? "is-visible" : ""}`} role="status">
         {prompt}

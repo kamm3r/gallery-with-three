@@ -200,7 +200,7 @@ sword.location = (0, -.14, 0)
 
 for action in bpy.data.actions: action.use_fake_user = True
 scene.frame_start = 0; scene.frame_end = 60
-blend = ROOT / 'art/characters/Casual_Male_gameplay.blend'
+blend = ROOT / 'public/assets/characters/Casual_Male_gameplay.blend'
 glb = ROOT / 'public/assets/quaternius/ultimate-animated-character/Casual_Male_gameplay.glb'
 blend.parent.mkdir(parents=True, exist_ok=True)
 bpy.context.preferences.filepaths.save_version = 0

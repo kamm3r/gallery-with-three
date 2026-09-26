@@ -8,6 +8,7 @@ import { ExperienceHud } from "../components/ExperienceHud";
 import { PlaygroundWorld } from "../components/PlaygroundWorld";
 import { useDocumentMetadata } from "../hooks/useDocumentMetadata";
 import { useReducedMotion } from "../hooks/useReducedMotion";
+import { setMood } from "../gameplay/sound";
 
 export default function PlaygroundLevel() {
   const navigate = useNavigate();
@@ -24,6 +25,9 @@ export default function PlaygroundLevel() {
   const reducedMotion = useReducedMotion();
   const markReady = useCallback(() => setReady(true), []);
   useDocumentMetadata("The proving grounds | The painted forest");
+  useEffect(() => {
+    setMood("meadow");
+  }, []);
 
   const returnToForest = useCallback(() => {
     if (transitionTimer.current) return;

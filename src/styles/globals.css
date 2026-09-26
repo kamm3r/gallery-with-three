@@ -386,6 +386,7 @@ button {
   color: #d2bd88;
 }
 .vital-bar {
+  position: relative;
   height: 0.7rem;
   background: #1c1816da;
   border: 1px solid #9b865c;
@@ -395,19 +396,56 @@ button {
   overflow: hidden;
 }
 .vital-bar > span {
-  display: block;
-  height: 100%;
-  background: linear-gradient(#a24b3c, #6d2625);
+  position: absolute;
+  inset: 0;
   transform-origin: left;
+}
+.vital-fill {
+  background: linear-gradient(#a24b3c, #6d2625);
   transition: transform 160ms ease-out;
+}
+.vital-trail {
+  background: #e6cf98c0;
+  transition: transform 420ms ease-in;
 }
 .vital-bar.is-stamina {
   margin-top: 0.55rem;
   width: 85%;
   height: 0.55rem;
 }
-.vital-bar.is-stamina > span {
+.vital-bar.is-stamina > .vital-fill {
   background: linear-gradient(#75915b, #435b36);
+}
+.vital-bar.is-boss {
+  height: 0.8rem;
+  border-color: #8c7a58;
+}
+.vital-bar.is-boss > .vital-fill {
+  background: linear-gradient(#b0422d, #6a1f18);
+}
+.combat-hud.is-enraged .vital-bar.is-boss {
+  border-color: #c7702f;
+  box-shadow:
+    0 0 10px #ff5a1f66,
+    inset 0 0 3px #000;
+}
+.combat-hud.is-enraged .vital-bar.is-boss > .vital-fill {
+  background: linear-gradient(#e0662c, #8c2513);
+}
+.hurt-flash {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, transparent 45%, #8a0f0a88 100%);
+  opacity: 0;
+  animation: hurt-flash 520ms ease-out;
+}
+@keyframes hurt-flash {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
 }
 .warden-vitals {
   position: absolute;
@@ -416,25 +454,63 @@ button {
   width: 60%;
 }
 .warden-vitals h2 {
+  display: flex;
+  align-items: baseline;
+  gap: 0.9rem;
   font:
     400 clamp(1rem, 2vw, 1.45rem) Georgia,
     serif;
   margin: 0 0 0.5rem;
 }
+.warden-vitals h2 small {
+  font-size: 0.7em;
+  font-style: italic;
+  color: #e58348;
+  letter-spacing: 0.04em;
+}
 .combat-result {
   position: absolute;
-  top: 40%;
+  top: 50%;
   width: 100%;
+  translate: 0 -50%;
   text-align: center;
-  background: #14120cbb;
-  padding: 1.5rem 0;
+  padding: 2.2rem 0 1.6rem;
+  background: linear-gradient(transparent, #0b0908e6 22%, #0b0908e6 78%, transparent);
+  animation: result-band 900ms var(--ease-out) both;
 }
 .combat-result h2 {
   font:
-    400 clamp(2rem, 5vw, 4rem) Georgia,
+    400 clamp(2.4rem, 7vw, 5.2rem) Georgia,
     serif;
-  color: #cbb788;
-  margin: 0 0 1rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin: 0 0 1.4rem;
+  animation: result-title 2400ms var(--ease-out) both;
+}
+.combat-result.is-death h2 {
+  color: #a3201a;
+  text-shadow: 0 0 24px #5a0a0699;
+}
+.combat-result.is-victory h2 {
+  color: #d9b86c;
+  text-shadow: 0 0 24px #c0873a88;
+}
+.combat-result-actions {
+  display: flex;
+  justify-content: center;
+  gap: 0.75rem;
+  animation: result-band 600ms 900ms var(--ease-out) both;
+}
+@keyframes result-band {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes result-title {
+  from {
+    opacity: 0;
+    letter-spacing: 0.02em;
+  }
 }
 .combat-result button {
   pointer-events: auto;
@@ -466,6 +542,443 @@ button {
 @media (prefers-reduced-motion: reduce) {
   .vital-bar > span {
     transition: none;
+  }
+  .hurt-flash,
+  .combat-result,
+  .combat-result h2,
+  .combat-result-actions {
+    animation: none;
+  }
+}
+
+/* Hollow Lane: survival HUD. */
+.lane-hud {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  color: #e9e3ef;
+  text-shadow: 0 2px 6px #000;
+}
+.lane-overlay,
+.lane-overlay > .hollow-danger,
+.lane-hidden {
+  position: absolute;
+  inset: 0;
+}
+.hollow-danger {
+  background: radial-gradient(ellipse at center, transparent 40%, #5c0606 100%);
+  opacity: calc(var(--danger, 0) * 0.85);
+  animation: dread-pulse 900ms ease-in-out infinite;
+}
+@keyframes dread-pulse {
+  50% {
+    filter: brightness(0.6);
+  }
+}
+.lane-hidden {
+  display: grid;
+  place-items: end center;
+  padding-bottom: 22vh;
+  background: radial-gradient(ellipse at center, transparent 35%, #030805ee 90%);
+  opacity: 0;
+  transition: opacity 400ms ease-out;
+}
+.lane-hidden span {
+  font:
+    italic 400 1rem Georgia,
+    serif;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: #9fb39a;
+}
+.lane-overlay[data-hidden="wardrobe"] .lane-hidden,
+.lane-overlay[data-hidden="hedge"] .lane-hidden {
+  opacity: 1;
+}
+/* Peeking through wardrobe slats... */
+.lane-overlay[data-hidden="wardrobe"] .lane-hidden {
+  background:
+    repeating-linear-gradient(180deg, #030204 0 5vh, #030204cc 5vh 6vh, transparent 6vh 8vh),
+    radial-gradient(ellipse at center, transparent 30%, #030204 85%);
+}
+/* ...or through leaves. */
+.lane-overlay[data-hidden="hedge"] .lane-hidden {
+  background:
+    radial-gradient(circle at 15% 20%, #07120aee 0 14%, transparent 15%),
+    radial-gradient(circle at 85% 30%, #07120aee 0 16%, transparent 17%),
+    radial-gradient(circle at 30% 85%, #07120aee 0 18%, transparent 19%),
+    radial-gradient(circle at 80% 85%, #07120aee 0 15%, transparent 16%),
+    radial-gradient(ellipse at center, transparent 35%, #030805ee 90%);
+}
+.lane-objectives {
+  position: absolute;
+  top: 2rem;
+  left: 2rem;
+  max-width: 21rem;
+  padding: 0.9rem 1.1rem;
+  background: linear-gradient(90deg, #07060bcc, #07060b00);
+}
+.lane-objectives h2 {
+  margin: 0 0 0.5rem;
+  font:
+    400 clamp(1rem, 1.8vw, 1.3rem) Georgia,
+    serif;
+  letter-spacing: 0.04em;
+}
+.lane-objectives p {
+  margin: 0.55rem 0 0.2rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #b7a9c9;
+}
+.lane-objectives ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.lane-objectives li {
+  position: relative;
+  padding-left: 1.4rem;
+  font-size: 0.92rem;
+  line-height: 1.55;
+}
+.lane-objectives li::before {
+  content: "";
+  position: absolute;
+  left: 0.1rem;
+  top: 0.42em;
+  width: 0.7rem;
+  height: 0.7rem;
+  border: 1px solid #b7a9c9;
+}
+.lane-objectives li.is-done {
+  color: #8c8496;
+  text-decoration: line-through;
+}
+.lane-objectives li.is-done::before {
+  background: #e0762a;
+  border-color: #ffb45e;
+  box-shadow: 0 0 8px #ff7a2a;
+}
+.lane-objectives li.is-goal {
+  color: #ffd08a;
+}
+.lane-objectives li.is-goal::before {
+  border: none;
+  width: 0;
+  height: 0;
+  border-left: 0.55rem solid #ffd08a;
+  border-top: 0.35rem solid transparent;
+  border-bottom: 0.35rem solid transparent;
+}
+.lane-objectives small {
+  display: block;
+  margin-top: 0.7rem;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  opacity: 0.7;
+}
+.lane-hud.is-injured .lane-objectives h2::after {
+  content: " · injured";
+  font-size: 0.75em;
+  font-style: italic;
+  color: #e0554a;
+}
+.lane-awareness {
+  position: absolute;
+  top: 2rem;
+  left: 50%;
+  translate: -50% 0;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0;
+  font:
+    400 0.95rem Georgia,
+    serif;
+  letter-spacing: 0.06em;
+  color: #9a93a6;
+  transition: color 300ms ease-out;
+}
+.lane-eye {
+  width: 1.6rem;
+  height: 0.9rem;
+  border: 2px solid currentColor;
+  border-radius: 50% / 100% 100% 100% 100%;
+  display: grid;
+  place-items: center;
+  transition: height 300ms ease-out;
+}
+.lane-eye::after {
+  content: "";
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: currentColor;
+}
+.lane-overlay[data-awareness="asleep"] .lane-eye,
+.lane-overlay[data-awareness="unaware"] .lane-eye {
+  height: 0.15rem;
+}
+.lane-overlay[data-awareness="suspicious"] .lane-awareness {
+  color: #f0c060;
+}
+.lane-overlay[data-awareness="hunting"] .lane-awareness {
+  color: #ff4b3a;
+  animation: dread-pulse 700ms ease-in-out infinite;
+}
+.lane-prompt {
+  position: absolute;
+  left: 50%;
+  bottom: 28vh;
+  translate: -50% 0;
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  align-items: center;
+  gap: 0.2rem 0.55rem;
+  min-width: min(40vw, 16rem);
+  font-size: 0.95rem;
+  letter-spacing: 0.04em;
+  opacity: 0;
+  transition: opacity 180ms ease-out;
+}
+.lane-overlay[data-prompt="true"] .lane-prompt {
+  opacity: 1;
+}
+.lane-prompt kbd {
+  display: grid;
+  place-items: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  border: 1px solid #e9e3ef;
+  border-radius: 0.3rem;
+  background: #0b0a10cc;
+  font:
+    700 0.85rem system-ui,
+    sans-serif;
+}
+.lane-prompt small {
+  display: none;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: #ffd08a;
+}
+.lane-overlay[data-hold="true"] .lane-prompt small {
+  display: block;
+}
+.lane-prompt i {
+  grid-column: 1 / -1;
+  height: 0.3rem;
+  border: 1px solid #ffb45e66;
+  background: linear-gradient(90deg, #ff8a2a, #ffd27a) 0 0 / calc(var(--channel, 0) * 100%) 100%
+    no-repeat #1a0f0acc;
+  opacity: 0;
+}
+.lane-overlay[data-hold="true"] .lane-prompt i {
+  opacity: 1;
+}
+.lane-objectives kbd {
+  padding: 0 0.3rem;
+  border: 1px solid #e9e3ef88;
+  border-radius: 0.2rem;
+  font-size: 0.7rem;
+}
+.lane-stamina {
+  position: absolute;
+  left: 50%;
+  bottom: 5.6rem;
+  translate: -50% 0;
+  width: min(30vw, 14rem);
+  height: 0.3rem;
+  background: #0c0b0fbb;
+  border: 1px solid #ffffff22;
+  transition: opacity 600ms ease-out;
+}
+.lane-stamina i {
+  position: absolute;
+  inset: 0;
+  right: auto;
+  width: calc(var(--stamina, 1) * 100%);
+  background: #d9d2c4;
+}
+.lane-stamina::after {
+  /* Injured: the tail of the bar you can't refill. */
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--stamina-max, 1) * 100%);
+  right: 0;
+  background: repeating-linear-gradient(45deg, #5c0606aa 0 3px, transparent 3px 6px);
+}
+.lane-overlay[data-rested="true"] .lane-stamina {
+  opacity: 0;
+}
+.lane-overlay[data-winded="true"] .lane-stamina i {
+  background: #b0443a;
+}
+/* Inventory hotbar, shared by any world that opens an inventory. */
+.inventory-bar {
+  position: absolute;
+  left: 50%;
+  bottom: 1.2rem;
+  translate: -50% 0;
+  display: grid;
+  justify-items: center;
+  gap: 0.3rem;
+  pointer-events: auto;
+}
+.inventory-bar ol {
+  display: flex;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.inventory-bar li {
+  position: relative;
+}
+.inventory-bar button {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 3.1rem;
+  height: 3.1rem;
+  padding: 0;
+  border: 1px solid #ffffff2a;
+  border-radius: 0.35rem;
+  background: #09080dcc;
+  color: #d9d3e2;
+  cursor: pointer;
+  transition:
+    border-color 150ms ease-out,
+    box-shadow 150ms ease-out;
+}
+.inventory-bar button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+.inventory-bar button:focus-visible {
+  outline: 2px solid #eee7d4;
+  outline-offset: 2px;
+}
+.inventory-bar button.is-selected {
+  border-color: #b7a9c9;
+}
+.inventory-bar button.is-on {
+  border-color: #ffd08a;
+  box-shadow:
+    0 0 12px #ffb45e55,
+    inset 0 0 10px #ffb45e33;
+  color: #ffe2b0;
+}
+.inventory-bar svg {
+  width: 1.7rem;
+  height: 1.7rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.inventory-bar kbd {
+  position: absolute;
+  top: 0.15rem;
+  left: 0.3rem;
+  font:
+    600 0.62rem system-ui,
+    sans-serif;
+  opacity: 0.6;
+}
+.inventory-bar li p {
+  position: absolute;
+  bottom: calc(100% + 0.5rem);
+  left: 50%;
+  translate: -50% 0;
+  width: 10rem;
+  margin: 0;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid #ffffff22;
+  border-radius: 0.3rem;
+  background: #09080de6;
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+.inventory-bar li p strong {
+  display: block;
+  margin-bottom: 0.2rem;
+  font-size: 0.8rem;
+}
+.inventory-bar small {
+  font-size: 0.68rem;
+  opacity: 0.6;
+}
+.inventory-bar small kbd {
+  position: static;
+  opacity: 1;
+}
+@media (max-width: 600px) {
+  .inventory-bar {
+    left: 1rem;
+    translate: none;
+    justify-items: start;
+  }
+  .inventory-bar button {
+    width: 2.6rem;
+    height: 2.6rem;
+  }
+  .inventory-bar small {
+    display: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .inventory-bar button {
+    transition: none;
+  }
+}
+.hollow-message {
+  position: absolute;
+  top: 22%;
+  width: 100%;
+  margin: 0;
+  text-align: center;
+  font:
+    400 clamp(1.1rem, 2.4vw, 1.7rem) Georgia,
+    serif;
+  letter-spacing: 0.04em;
+  opacity: 0;
+  transition: opacity 500ms ease-out;
+}
+.hollow-message.is-visible {
+  opacity: 1;
+}
+@media (max-width: 600px) {
+  .lane-objectives {
+    top: 1rem;
+    left: 1rem;
+    max-width: 60vw;
+    font-size: 0.85rem;
+  }
+  .lane-awareness {
+    top: auto;
+    bottom: 3.5rem;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hollow-message,
+  .lane-hidden,
+  .lane-stamina,
+  .lane-prompt,
+  .lane-awareness,
+  .lane-eye {
+    transition: none;
+  }
+  .hollow-danger,
+  .lane-overlay[data-awareness="hunting"] .lane-awareness {
+    animation: none;
   }
 }
 
@@ -659,6 +1172,10 @@ button {
     grid-column: 5;
     grid-row: 2;
   }
+  .touch-interact {
+    grid-column: 5;
+    grid-row: 1;
+  }
   .portal-prompt {
     bottom: 8rem;
   }
@@ -734,4 +1251,228 @@ button {
 }
 .boss-meter {
   margin-top: 1rem;
+}
+
+/* --- Warp Room ---------------------------------------------------------- */
+.warp-hud {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  color: #fff6e0;
+  text-shadow:
+    0 2px 0 #3a1c05,
+    0 3px 10px #000a;
+}
+.warp-counters {
+  position: absolute;
+  top: 1.2rem;
+  left: 1.4rem;
+  display: flex;
+  gap: 1.4rem;
+  align-items: center;
+}
+.warp-counters p {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  font:
+    800 1.8rem/1 ui-rounded,
+    "Arial Rounded MT Bold",
+    system-ui,
+    sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+.warp-fruit-icon {
+  width: 1.5rem;
+  height: 1.6rem;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #ffd08a, #ff8a1c 45%, #c94f00);
+  box-shadow: 0 2px 0 #7a2e00;
+}
+.warp-crate-icon {
+  width: 1.5rem;
+  height: 1.5rem;
+  background: #c98a45;
+  border: 3px solid #7a4a1f;
+  box-shadow: inset 0 0 0 2px #e0a867;
+}
+.warp-slots {
+  gap: 0.7rem !important;
+}
+.warp-crystal-icon,
+.warp-gem-icon {
+  display: inline-block;
+  width: 1.2rem;
+  height: 1.8rem;
+  clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+  background: #4b3f5c80;
+}
+.warp-crystal-icon.is-owned {
+  background: linear-gradient(135deg, #f1d4ff, #c77dff 45%, #6a1fb8);
+  filter: drop-shadow(0 0 6px #c77dff);
+}
+.warp-gem-icon {
+  width: 1.6rem;
+  height: 1.4rem;
+  clip-path: polygon(25% 0, 75% 0, 100% 35%, 50% 100%, 0 35%);
+}
+.warp-gem-icon.is-owned {
+  background: linear-gradient(160deg, #ffffff, #8fe9ff 50%, #3a8ee0);
+  filter: drop-shadow(0 0 6px #8fe9ff);
+}
+.warp-mask-icon {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.6rem;
+  height: 2rem;
+  padding: 0 0.2rem;
+  border-radius: 45% 45% 50% 50%;
+  background: #d9a55a;
+  border-top: 5px solid #4fc26a;
+  font-size: 0.8rem;
+  color: #3a1c05;
+  text-shadow: none;
+}
+.warp-message {
+  position: absolute;
+  top: 22%;
+  width: 100%;
+  margin: 0;
+  text-align: center;
+  font:
+    900 clamp(1.6rem, 4.5vw, 3rem) ui-rounded,
+    "Arial Rounded MT Bold",
+    system-ui,
+    sans-serif;
+  letter-spacing: 0.03em;
+  color: #ffe08a;
+  opacity: 0;
+  scale: 0.9;
+  transition:
+    opacity 200ms var(--ease-out),
+    scale 300ms var(--ease-out);
+}
+.warp-message.is-visible {
+  opacity: 1;
+  scale: 1;
+}
+.warp-help {
+  position: absolute;
+  bottom: 1.2rem;
+  left: 1.4rem;
+  max-width: 34rem;
+  margin: 0;
+  font-size: 0.85rem;
+  opacity: 0.85;
+}
+.warp-help kbd {
+  font: inherit;
+  padding: 0 0.3rem;
+  border: 1px solid #fff6e080;
+  border-radius: 0.25rem;
+}
+.warp-level-card {
+  position: absolute;
+  top: 1.2rem;
+  right: 1.4rem;
+  width: min(20rem, 70vw);
+  padding: 1rem 1.2rem;
+  background: #1a1440d9;
+  border: 1px solid #8a6bff;
+  border-radius: 0.6rem;
+  text-shadow: none;
+}
+.warp-level-card h2 {
+  margin: 0 0 0.3rem;
+  font:
+    800 1.5rem/1.1 ui-rounded,
+    system-ui,
+    sans-serif;
+}
+.warp-level-card h2 small {
+  display: block;
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #b4a6ff;
+}
+.warp-level-card p {
+  margin: 0.3rem 0 0;
+  font-size: 0.9rem;
+}
+.warp-level-rewards {
+  display: flex;
+  gap: 0.8rem;
+}
+.warp-level-rewards span {
+  opacity: 0.45;
+}
+.warp-level-rewards span::before {
+  content: "○ ";
+}
+.warp-level-rewards span.is-done {
+  opacity: 1;
+  color: #c9f7a8;
+}
+.warp-level-rewards span.is-done::before {
+  content: "✓ ";
+}
+.warp-tally {
+  list-style: none;
+  margin: 0 0 1.4rem;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+  font-size: 1.1rem;
+  color: #eee7d4;
+}
+.warp-tally .is-done::before {
+  content: "✓ ";
+  color: #c9f7a8;
+}
+.warp-tally .is-missing {
+  opacity: 0.6;
+}
+.warp-boss-health {
+  position: absolute;
+  top: 1.2rem;
+  left: 50%;
+  translate: -50% 0;
+  text-align: center;
+}
+.warp-boss-health h2 {
+  margin: 0 0 0.4rem;
+  font:
+    900 1.4rem ui-rounded,
+    system-ui,
+    sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.warp-boss-health p {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+  margin: 0;
+}
+.warp-boss-health span {
+  width: 2.4rem;
+  height: 0.9rem;
+  border-radius: 0.3rem;
+  background: #2a1418;
+  border: 2px solid #ffb07a;
+  transition: background 300ms var(--ease-out);
+}
+.warp-boss-health span.is-full {
+  background: linear-gradient(#ff9a5a, #d8401a);
+}
+@media (max-width: 600px) {
+  .warp-counters p {
+    font-size: 1.3rem;
+  }
+  .warp-help {
+    display: none;
+  }
 }

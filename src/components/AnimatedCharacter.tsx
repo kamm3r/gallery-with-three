@@ -5,6 +5,7 @@ import * as THREE from "three";
 import { clone } from "three/addons/utils/SkeletonUtils.js";
 import { ROLL_DURATION } from "../gameplay/playerRules";
 import { CHARACTER_MODEL, CLIP_SECONDS } from "../gameplay/characterAnimations";
+import { heldItems } from "../gameplay/heldItems";
 
 const MODEL_PATH = CHARACTER_MODEL;
 
@@ -50,24 +51,120 @@ export type ActionName =
 type AnimatedCharacterProps = ThreeElements["group"] & {
   animation?: ActionName;
   armed?: boolean;
+  /** Per-material colour overrides, by material name (keep the object stable). */
+  palette?: Record<string, THREE.ColorRepresentation>;
+  /** Scales the held blade (e.g. down to a kitchen knife). */
+  weaponScale?: number;
+  /** Playback speed for looping clips (e.g. a slow, heavy walk). */
+  pace?: number;
+  /** Something held in the right hand instead of the sword. */
+  held?: "flashlight";
 };
 
 export function AnimatedCharacter({
   animation = "Idle",
   armed = false,
+  palette,
+  weaponScale = 1,
+  pace = 1,
+  held,
   ...props
 }: AnimatedCharacterProps) {
   const group = useRef<THREE.Group>(null);
   const { scene, animations } = useGLTF(MODEL_PATH);
   const character = useMemo(() => clone(scene), [scene]);
   const { actions } = useAnimations(animations, group);
+  // TEMP-PROOF: expose mixer state for diagnosis. Revert.
+  useFrame(() => {
+    if (
+      typeof window !== "undefined" &&
+      new URLSearchParams(window.location.search).get("debugseat") !== null
+    ) {
+      const weights: Record<string, number> = {};
+      for (const [name, action] of Object.entries(actions)) {
+        weights[name] = action ? Number(action.getEffectiveWeight().toFixed(3)) : -1;
+      }
+      (window as unknown as { __animdbg?: unknown }).__animdbg = {
+        current: animation,
+        keys: Object.keys(actions),
+        weights,
+      };
+    }
+  });
   const currentAction = useRef<THREE.AnimationAction | null>(null);
+  const paceRef = useRef(pace);
+  useEffect(() => {
+    paceRef.current = pace;
+    const action = currentAction.current;
+    if (action && action.loop === THREE.LoopRepeat) action.setEffectiveTimeScale(pace);
+  }, [pace]);
   const targetAction = useRef<THREE.AnimationAction | null>(null);
+
+  // A flashlight gripped where the sword would be: same mount, same forward axis.
+  useLayoutEffect(() => {
+    if (held !== "flashlight") return;
+    // glTF node names lose their dots on load ("Fist.R" becomes "FistR").
+    const fist = character.getObjectByName("FistR") ?? character.getObjectByName("Fist.R");
+    if (!fist) return;
+    const torch = new THREE.Group();
+    torch.position.set(0, 0.14, 0);
+    torch.quaternion.set(Math.SQRT1_2, 0, 0, Math.SQRT1_2);
+    const metal = new THREE.MeshStandardMaterial({
+      color: "#2a2b30",
+      metalness: 0.7,
+      roughness: 0.35,
+    });
+    const lensMaterial = new THREE.MeshBasicMaterial({
+      color: new THREE.Color(0.15, 0.15, 0.12),
+      toneMapped: false,
+    });
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.3, 12), metal);
+    body.position.y = 0.1;
+    const head = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.05, 0.1, 14), metal);
+    head.position.y = 0.3;
+    const lens = new THREE.Mesh(new THREE.CircleGeometry(0.066, 14), lensMaterial);
+    lens.position.y = 0.352;
+    lens.rotation.x = -Math.PI / 2;
+    // A soft halo on the lens so the lit torch reads from a distance.
+    const haloMaterial = new THREE.MeshBasicMaterial({
+      color: new THREE.Color(2.4, 2.1, 1.6),
+      transparent: true,
+      opacity: 0.5,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      toneMapped: false,
+    });
+    const halo = new THREE.Mesh(new THREE.SphereGeometry(0.06, 12, 8), haloMaterial);
+    halo.position.y = 0.37;
+    for (const mesh of [body, head]) mesh.castShadow = true;
+    torch.add(body, head, lens, halo);
+    torch.scale.setScalar(1.3);
+    fist.add(torch);
+    heldItems.flashlightLens = lens;
+    let frame = 0;
+    const glow = () => {
+      lensMaterial.color.setScalar(heldItems.flashlightOn ? 3 : 0.12);
+      halo.visible = heldItems.flashlightOn;
+      frame = requestAnimationFrame(glow);
+    };
+    frame = requestAnimationFrame(glow);
+    return () => {
+      cancelAnimationFrame(frame);
+      fist.remove(torch);
+      if (heldItems.flashlightLens === lens) heldItems.flashlightLens = null;
+      for (const mesh of [body, head, lens, halo]) mesh.geometry.dispose();
+      metal.dispose();
+      lensMaterial.dispose();
+      haloMaterial.dispose();
+    };
+  }, [character, held]);
 
   useLayoutEffect(() => {
     const sword = character.getObjectByName("PlayerSword");
-    if (sword) sword.visible = armed;
-  }, [character, armed]);
+    if (!sword) return;
+    sword.visible = armed;
+    sword.scale.setScalar(weaponScale);
+  }, [character, armed, weaponScale]);
 
   useLayoutEffect(() => {
     character.traverse((object) => {
@@ -80,8 +177,9 @@ export function AnimatedCharacter({
           : [object.material];
         const styledMaterials = materials.map((sourceMaterial) => {
           const material = sourceMaterial.clone();
-          if (material instanceof THREE.MeshStandardMaterial && MATERIAL_COLORS[material.name]) {
-            material.color.set(MATERIAL_COLORS[material.name]);
+          const color = palette?.[material.name] ?? MATERIAL_COLORS[material.name];
+          if (material instanceof THREE.MeshStandardMaterial && color) {
+            material.color.set(color);
             material.roughness = 0.82;
             material.metalness = 0;
           }
@@ -90,7 +188,7 @@ export function AnimatedCharacter({
         object.material = hasMultipleMaterials ? styledMaterials : styledMaterials[0];
       }
     });
-  }, [character]);
+  }, [character, palette]);
 
   useEffect(() => {
     const action = actions[animation];
@@ -98,7 +196,9 @@ export function AnimatedCharacter({
 
     const playOnce =
       animation in CLIP_SECONDS ||
-      ["Jump", "Roll", "SitDown", "StandUp", "Punch", "Death"].includes(animation);
+      ["Jump", "Roll", "SitDown", "StandUp", "Punch", "Death", "RecieveHit", "Victory"].includes(
+        animation,
+      );
     const previous = currentAction.current;
     if (!previous) {
       for (const clip of Object.values(actions)) clip?.setEffectiveWeight(0);
@@ -121,7 +221,7 @@ export function AnimatedCharacter({
       playOnce ? 1 : Number.POSITIVE_INFINITY,
     );
     const duration = animation === "Roll" ? ROLL_DURATION : CLIP_SECONDS[animation];
-    action.setEffectiveTimeScale(duration ? action.getClip().duration / duration : 1);
+    action.setEffectiveTimeScale(duration ? action.getClip().duration / duration : paceRef.current);
     action.setEffectiveWeight(previous ? existingWeight : 1).play();
     currentAction.current = action;
     targetAction.current = action;

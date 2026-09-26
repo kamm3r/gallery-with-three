@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { allowsGrass, createGrassPatch } from "../src/gameplay/grass.ts";
+import {
+  GRASS_HEIGHT,
+  allowsGrass,
+  createGrassPatch,
+  grassHeightScale,
+} from "../src/gameplay/grass.ts";
 import { groundHeight } from "../src/gameplay/terrain.ts";
 
 test("grass leaves spawn, paths, and portal gardens clear", () => {
@@ -26,6 +31,11 @@ test("grass patches are reproducible, grounded, and stay within their chunk", ()
     assert.ok(blade.x >= -30 && blade.x < -20);
     assert.ok(blade.z >= 20 && blade.z < 30);
     assert.equal(blade.y, groundHeight(blade.x, blade.z) - 0.025);
-    assert.ok(blade.height >= 0.36 && blade.height <= 0.84);
+    const scale = grassHeightScale(blade.x, blade.z);
+    assert.ok(scale >= 0.3 && scale <= 1);
+    assert.ok(
+      blade.height >= GRASS_HEIGHT * 0.75 * scale - 1e-9 &&
+        blade.height <= GRASS_HEIGHT * 1.5 * scale + 1e-9,
+    );
   }
 });

@@ -8,6 +8,8 @@ import { ExperienceHud } from "../components/ExperienceHud";
 import { GalleryLabyrinth as GalleryWorld } from "../components/GalleryLabyrinth";
 import { useDocumentMetadata } from "../hooks/useDocumentMetadata";
 import { useReducedMotion } from "../hooks/useReducedMotion";
+import { setMood } from "../gameplay/sound";
+import { GALLERY_SEQUENCE } from "../gameplay/galleryLayout";
 
 export default function GalleryLevel() {
   const navigate = useNavigate();
@@ -20,11 +22,24 @@ export default function GalleryLevel() {
   const [ready, setReady] = useState(false);
   const [hanging, setHanging] = useState(false);
   const [puzzleProgress, setPuzzleProgress] = useState(0);
+  const [notice, setNotice] = useState<string | null>(null);
+  const noticeTimer = useRef<number | null>(null);
   const transitionTimer = useRef<number | null>(null);
   const routeTimer = useRef<number | null>(null);
   const reducedMotion = useReducedMotion();
   const markReady = useCallback(() => setReady(true), []);
+  const showNotice = useCallback(
+    (message: string) => {
+      if (noticeTimer.current) cancel(noticeTimer.current);
+      setNotice(message);
+      noticeTimer.current = schedule(() => setNotice(null), 3600);
+    },
+    [cancel, schedule],
+  );
   useDocumentMetadata("The collection | The painted forest");
+  useEffect(() => {
+    setMood("museum");
+  }, []);
 
   const returnToForest = useCallback(() => {
     if (transitionTimer.current) return;
@@ -45,6 +60,7 @@ export default function GalleryLevel() {
     return () => {
       if (transitionTimer.current) cancel(transitionTimer.current);
       if (routeTimer.current) cancel(routeTimer.current);
+      if (noticeTimer.current) cancel(noticeTimer.current);
     };
   }, [cancel]);
 
@@ -61,6 +77,7 @@ export default function GalleryLevel() {
               onReady={markReady}
               onHangChange={setHanging}
               onPuzzleProgress={setPuzzleProgress}
+              onNotice={showNotice}
             />
           </Physics>
         </Suspense>
@@ -73,9 +90,8 @@ export default function GalleryLevel() {
             ? undefined
             : nearPortal
               ? "Jump through to return"
-              : puzzleProgress === 5
-                ? "The painting is open"
-                : undefined
+              : (notice ??
+                (puzzleProgress === GALLERY_SEQUENCE.length ? "The painting is open" : undefined))
         }
         leaving={leaving}
         ready={ready}

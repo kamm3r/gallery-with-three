@@ -53,6 +53,7 @@ test("death suppresses held movement and an active roll in the real frame callba
       hangRef: { current: { active: false } },
       seatRef: { current: { active: false } },
       combat: { current: { health: 0, bossHealth: 300, attackTime: 0 } },
+      platformer: undefined,
       paused: false,
     };
     new Function(...Object.keys(args), `return (${callback})();`)(...Object.values(args));

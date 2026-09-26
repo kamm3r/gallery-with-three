@@ -117,10 +117,10 @@ export interface TerrainGrid {
 function groundColor(x: number, z: number, h: number): [number, number, number] {
   const patch = valueNoise(x * 0.05 + 31, z * 0.05 + 7);
   const grain = valueNoise(x * 0.35 + 3, z * 0.35 + 11);
-  // Meadow base, lightness jitter.
-  let r = 0.26 + grain * 0.07;
-  let g = 0.38 + grain * 0.09;
-  let b = 0.2 + grain * 0.05;
+  // Mossy forest floor, lightness jitter.
+  let r = 0.22 + grain * 0.07;
+  let g = 0.33 + grain * 0.09;
+  let b = 0.17 + grain * 0.05;
   // Dry sunlit tint on hilltops.
   const dry = smoothstep(1.1, 2.4, h);
   r += dry * 0.16;

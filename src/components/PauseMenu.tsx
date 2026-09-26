@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "re
 import { useLocation, useNavigate } from "react-router-dom";
 import { defaultSettings, useGame } from "../gameSettings";
 import { isResultScreenActive } from "../gameplay/resultScreen";
+import { playSound } from "../gameplay/sound";
 
 type Page = "pause" | "options" | "video" | "game" | "controls" | "return";
 const titles: Record<Page, string> = {
@@ -42,7 +43,8 @@ export function PauseMenu() {
   const navigate = useNavigate();
   const resume = useCallback(() => setPaused(false), [setPaused]);
   const back = useCallback(() => {
-    if (page === "pause") resume();
+    playSound("ui");
+    if (page === "pause") setPaused(false);
     else
       setPage(
         page === "controls"
@@ -51,7 +53,7 @@ export function PauseMenu() {
             ? "pause"
             : "options",
       );
-  }, [controlsParent, page, resume]);
+  }, [controlsParent, page, setPaused]);
 
   useEffect(() => {
     const element = dialog.current;
@@ -129,6 +131,7 @@ export function PauseMenu() {
         onClick={() => {
           setPage("pause");
           setPaused(true);
+          playSound("ui");
         }}
       >
         <span aria-hidden="true">Ⅱ</span> Menu <kbd>Esc</kbd>
@@ -145,7 +148,14 @@ export function PauseMenu() {
           <Ornament />
           {page === "pause" && (
             <nav className="menu-links" aria-label="Pause menu">
-              <button onClick={resume}>Continue</button>
+              <button
+                onClick={() => {
+                  playSound("ui");
+                  resume();
+                }}
+              >
+                Continue
+              </button>
               <button onClick={() => setPage("options")}>Options</button>
               <button
                 onClick={() => {
@@ -155,6 +165,17 @@ export function PauseMenu() {
               >
                 Controls
               </button>
+              {location.pathname.startsWith("/warp/") && (
+                <button
+                  onClick={() => {
+                    const from = location.pathname.slice("/warp/".length);
+                    void navigate("/warp", { state: { returnPortal: from } });
+                    resume();
+                  }}
+                >
+                  Back to the Warp Room
+                </button>
+              )}
               {location.pathname !== "/" && (
                 <button onClick={() => setPage("return")}>Return to the forest</button>
               )}
@@ -229,7 +250,7 @@ export function PauseMenu() {
           {page === "game" && (
             <div className="menu-settings">
               <label className="setting-row">
-                Sound effects
+                Sound volume
                 <span className="setting-slider">
                   <input
                     aria-label="Sound effects volume"
@@ -327,6 +348,12 @@ export function PauseMenu() {
                   <dt>Attack in boss arena</dt>
                   <dd>
                     Left mouse button / <kbd>J</kbd>
+                  </dd>
+                </div>
+                <div>
+                  <dt>Spin attack in the Warp Room</dt>
+                  <dd>
+                    Left mouse button / <kbd>J</kbd> / <kbd>E</kbd>
                   </dd>
                 </div>
                 <div>

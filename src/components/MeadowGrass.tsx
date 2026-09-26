@@ -6,15 +6,34 @@ import * as THREE from "three";
 import { useGame } from "../gameSettings";
 import { useReducedMotion } from "../hooks/useReducedMotion";
 import { GRASS_CHUNK_SIZE } from "../gameplay/grass";
+import { sunlight } from "../gameplay/sunlight";
+
+/** Blades kept at a distance: all up close, 30% from GRASS_THIN_END on. */
+const GRASS_THIN_START = 20;
+const GRASS_THIN_END = 45;
+const GRASS_THIN_AMOUNT = 0.7;
+function grassKeep(distance: number) {
+  return (
+    1 - THREE.MathUtils.smoothstep(distance, GRASS_THIN_START, GRASS_THIN_END) * GRASS_THIN_AMOUNT
+  );
+}
+/** A patch's nearest blade is at most half a chunk diagonal from its centre. */
+const PATCH_REACH = (GRASS_CHUNK_SIZE / 2) * Math.SQRT2;
 
 // Original implementation of curved, instanced grass. Technique reference:
 // https://github.com/simondevyoutube/Quick_Grass
 const declarations = /* glsl */ `
+  attribute float grassRank;
   uniform float uGrassTime;
   uniform float uGrassWind;
   uniform vec3 uGrassPlayer;
   varying float vGrassHeight;
   varying float vGrassShade;
+  varying float vGrassPatch;
+  varying vec3 vGrassRoot;
+  float grassKeep(float d) {
+    return 1.0 - smoothstep(${GRASS_THIN_START.toFixed(1)}, ${GRASS_THIN_END.toFixed(1)}, d) * ${GRASS_THIN_AMOUNT};
+  }
 `;
 const bend = /* glsl */ `
   vec3 transformed = vec3(position);
@@ -35,12 +54,17 @@ const bend = /* glsl */ `
   transformed += transpose(basis) * worldBend / dot(basis[0], basis[0]);
   float distanceToCamera = distance(cameraPosition.xz, root.xz);
   float fade = 1.0 - smoothstep(36.0, 49.0, distanceToCamera);
-  float seed = fract(sin(dot(root.xz, vec2(12.9898, 78.233))) * 43758.5453);
-  float thin = smoothstep(16.0 + seed * 12.0, 25.0 + seed * 12.0, distanceToCamera);
-  float lod = seed < 0.55 ? 1.0 - thin : 1.0;
+  // Distant blades thin out in rank order. The CPU trims each patch's
+  // instance count along the same ranks, but only past blades that have
+  // already shrunk to nothing here, so thinning never pops.
+  float keep = grassKeep(distanceToCamera);
+  float lod = 1.0 - smoothstep(keep - 0.12, keep, grassRank);
   transformed *= fade * lod;
   vGrassHeight = position.y;
   vGrassShade = 0.86 + 0.14 * sin(root.x * 0.3 + root.z * 0.2);
+  // Broad sun-dried drifts, like brush strokes across the meadow.
+  vGrassPatch = 0.5 + 0.5 * sin(root.x * 0.11 + sin(root.z * 0.07) * 2.0) * sin(root.z * 0.09 + 1.3);
+  vGrassRoot = root;
 `;
 
 function createBlades() {
@@ -48,7 +72,7 @@ function createBlades() {
   const indices: number[] = [];
   for (let i = 0; i <= 3; i++) {
     const t = i / 3;
-    const width = 0.075 * (1 - t);
+    const width = 0.11 * (1 - t);
     // Quadratic curve: increasingly bent toward the tip.
     vertices.push(-width, t, t * t * 0.26, width, t, t * t * 0.26);
     if (i < 3) {
@@ -68,7 +92,7 @@ class GrassAppearance {
   readonly wind = { value: 1 };
   readonly player = { value: new THREE.Vector3(1000, 1000, 1000) };
   readonly material = new THREE.MeshStandardMaterial({
-    color: "#789744",
+    color: "#6f9241",
     roughness: 1,
     side: THREE.DoubleSide,
   });
@@ -78,6 +102,7 @@ class GrassAppearance {
         uGrassTime: this.time,
         uGrassWind: this.wind,
         uGrassPlayer: this.player,
+        uSunDirection: sunlight.direction,
       });
       shader.vertexShader = declarations + shader.vertexShader;
       shader.vertexShader = shader.vertexShader.replace("#include <begin_vertex>", bend);
@@ -89,16 +114,29 @@ class GrassAppearance {
       `,
       );
       shader.fragmentShader =
-        "varying float vGrassHeight; varying float vGrassShade;\n" + shader.fragmentShader;
+        "uniform vec3 uSunDirection; varying float vGrassHeight; varying float vGrassShade;\n" +
+        "varying float vGrassPatch; varying vec3 vGrassRoot;\n" +
+        shader.fragmentShader;
       shader.fragmentShader = shader.fragmentShader.replace(
         "#include <color_fragment>",
         `
         #include <color_fragment>
-        diffuseColor.rgb *= mix(vec3(0.38, 0.47, 0.29), vec3(1.12, 1.06, 0.73), vGrassHeight) * vGrassShade;
+        diffuseColor.rgb *= mix(vec3(0.32, 0.42, 0.27), vec3(1.12, 1.06, 0.73), vGrassHeight) * vGrassShade;
+        diffuseColor.rgb *= mix(vec3(1.0), vec3(1.28, 1.1, 0.62), vGrassPatch * vGrassPatch * 0.55 * vGrassHeight);
+      `,
+      );
+      // Backlit translucency: amplify the (already shadowed) direct light when
+      // looking toward the sun, so sunlit tips glow and shaded ones do not.
+      shader.fragmentShader = shader.fragmentShader.replace(
+        "#include <lights_fragment_end>",
+        `
+        #include <lights_fragment_end>
+        float grassBacklit = pow(max(dot(normalize(vGrassRoot - cameraPosition), uSunDirection), 0.0), 3.0);
+        reflectedLight.directDiffuse *= 1.0 + grassBacklit * 3.0 * vGrassHeight * vGrassHeight;
       `,
       );
     };
-    this.material.customProgramCacheKey = () => "meadow-grass-v1";
+    this.material.customProgramCacheKey = () => "meadow-grass-v3";
   }
   update(time: number, reduced: boolean, player: { x: number; y: number; z: number }) {
     this.time.value = time;
@@ -130,7 +168,13 @@ class GrassStream {
   update(camera: THREE.Camera) {
     if (this.ready) {
       const { key, x, z, matrices } = this.ready;
-      const mesh = new THREE.InstancedMesh(this.geometry, this.material, matrices.length / 16);
+      const count = matrices.length / 16;
+      // Blades arrive in random spatial order, so index order is a fair rank.
+      const ranks = new Float32Array(count);
+      for (let i = 0; i < count; i++) ranks[i] = (i + 0.5) / count;
+      const geometry = this.geometry.clone();
+      geometry.setAttribute("grassRank", new THREE.InstancedBufferAttribute(ranks, 1));
+      const mesh = new THREE.InstancedMesh(geometry, this.material, count);
       mesh.name = "meadow-grass-patch";
       mesh.instanceMatrix.array.set(matrices);
       mesh.instanceMatrix.needsUpdate = true;
@@ -149,8 +193,9 @@ class GrassStream {
       const center = mesh.boundingSphere!.center;
       const distance = Math.hypot(camera.position.x - center.x, camera.position.z - center.z);
       mesh.visible = distance < 57;
-      // Actually stop submitting distant vertices, not just shrink them in GLSL.
-      mesh.count = Math.ceil(count * (1 - THREE.MathUtils.smoothstep(distance, 20, 45) * 0.7));
+      // Actually stop submitting distant vertices, not just shrink them in
+      // GLSL: keep every rank the patch's nearest blade could still show.
+      mesh.count = Math.ceil(count * grassKeep(Math.max(0, distance - PATCH_REACH)));
     }
     if (this.busy) return;
     const cx = Math.floor(camera.position.x / GRASS_CHUNK_SIZE);
@@ -183,6 +228,7 @@ class GrassStream {
       }
       const old = this.patches.get(evict)!;
       this.group.remove(old.mesh);
+      old.mesh.geometry.dispose();
       old.mesh.dispose();
       this.patches.delete(evict);
     }
@@ -193,6 +239,7 @@ class GrassStream {
     this.worker.terminate();
     for (const { mesh } of this.patches.values()) {
       this.group.remove(mesh);
+      mesh.geometry.dispose();
       mesh.dispose();
     }
     this.patches.clear();

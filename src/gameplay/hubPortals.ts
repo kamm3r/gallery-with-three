@@ -12,13 +12,14 @@ export const HUB_PORTALS = [
   },
   {
     id: "grove",
-    label: "Halloween Hollow",
+    label: "Hollow Lane",
     x: -67,
     z: -69,
     yaw: -0.9,
     flat: false,
     image: "/assets/oilpainting.jpg",
     destination: "/seasons",
+    variant: "hollow" as const,
   },
   {
     id: "north",
@@ -29,6 +30,7 @@ export const HUB_PORTALS = [
     flat: false,
     image: "/assets/tree.jpg",
     destination: "/boss",
+    variant: "ash" as const,
   },
   {
     id: "playground",
@@ -42,13 +44,14 @@ export const HUB_PORTALS = [
   },
   {
     id: "island",
-    label: "Fallen painting",
+    label: "The Warp Room",
     x: -28,
     z: 102,
     yaw: 0,
     flat: true,
-    image: "/assets/hands.jpg",
-    destination: "/gallery",
+    image: "/assets/pocket_monsters.jpg",
+    destination: "/warp",
+    variant: "warp" as const,
   },
 ];
 

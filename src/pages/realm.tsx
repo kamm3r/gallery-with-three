@@ -1,89 +1,20 @@
-import { Suspense, useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
-import { useFrame } from "@react-three/fiber";
-import { CylinderCollider, Physics, RigidBody, type RapierRigidBody } from "@react-three/rapier";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { Physics } from "@react-three/rapier";
 import { useLocation, useNavigate } from "react-router-dom";
-import * as THREE from "three";
 import { GameCanvas } from "../components/GameCanvas";
 import { ThirdPersonPlayer } from "../components/ThirdPersonPlayer";
-import { PortalPainting } from "../components/PortalPainting";
 import { PortalFrameCollider } from "../components/PortalFrameCollider";
 import { ExperienceHud } from "../components/ExperienceHud";
-import { HalloweenGrove } from "../components/HalloweenGrove";
+import { AshArena, ASH_ATMOSPHERE, FogGate } from "../components/AshArena";
+import { AshWarden } from "../components/AshWarden";
+import { combatTuning } from "../gameplay/combatTuning";
 import { useGame } from "../gameSettings";
-import { createEncounter, stepEncounter, type Encounter } from "../gameplay/bossEncounter";
+import { useGameTimeout } from "../hooks/useGameTimeout";
+import { createEncounter } from "../gameplay/bossEncounter";
 import { setResultScreenActive } from "../gameplay/resultScreen";
+import { setMood } from "../gameplay/sound";
 
-function Warden({
-  combat,
-  report,
-}: {
-  combat: MutableRefObject<Encounter>;
-  report: (state: Encounter) => void;
-}) {
-  const body = useRef<RapierRigidBody>(null);
-  const arms = useRef<THREE.Group>(null);
-  const warning = useRef<THREE.Mesh>(null);
-  const timer = useRef(0);
-  useFrame((_, dt) => {
-    const s = combat.current;
-    stepEncounter(s, dt);
-    body.current?.setNextKinematicTranslation({
-      x: s.bossX,
-      y: s.bossHealth <= 0 ? -3 : 0,
-      z: s.bossZ,
-    });
-    body.current?.setNextKinematicRotation(
-      new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), s.bossYaw),
-    );
-    if (arms.current)
-      arms.current.rotation.x = s.phase === "windup" ? -2.2 : s.phase === "strike" ? 0.8 : 0;
-    if (warning.current) warning.current.visible = s.phase === "windup" || s.phase === "strike";
-    timer.current += dt;
-    if (timer.current > 0.1) {
-      timer.current = 0;
-      report({ ...s });
-    }
-  });
-  return (
-    <RigidBody ref={body} type="kinematicPosition" colliders={false} position={[0, 0, -7]}>
-      <CylinderCollider args={[1.8, 1.05]} position={[0, 1.8, 0]} />
-      <mesh position={[0, 2.1, 0]} castShadow receiveShadow>
-        <dodecahedronGeometry args={[1.4, 0]} />
-        <meshStandardMaterial color="#454b50" roughness={0.95} />
-      </mesh>
-      <mesh position={[0, 3.6, 0.1]} castShadow>
-        <dodecahedronGeometry args={[0.7, 0]} />
-        <meshStandardMaterial color="#68655b" />
-      </mesh>
-      {[-0.26, 0.26].map((x) => (
-        <mesh key={x} position={[x, 3.7, 0.68]}>
-          <boxGeometry args={[0.18, 0.09, 0.08]} />
-          <meshStandardMaterial color="#ffba63" emissive="#ff7430" emissiveIntensity={3} />
-        </mesh>
-      ))}
-      <group ref={arms} position={[0, 2.7, 0]}>
-        {[-1.35, 1.35].map((x) => (
-          <mesh key={x} position={[x, -0.6, 0.35]} castShadow>
-            <boxGeometry args={[0.8, 1.8, 0.9]} />
-            <meshStandardMaterial color="#545957" />
-          </mesh>
-        ))}
-      </group>
-      <mesh ref={warning} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.025, 0]}>
-        <ringGeometry args={[2, 4.8, 48, 1, Math.PI, Math.PI]} />
-        <meshBasicMaterial
-          color="#ef9c42"
-          transparent
-          opacity={0.55}
-          depthWrite={false}
-          side={THREE.DoubleSide}
-        />
-      </mesh>
-    </RigidBody>
-  );
-}
-
-function RealmRun({ boss, retry }: { boss: boolean; retry: () => void }) {
+function RealmRun({ retry }: { retry: () => void }) {
   const { paused } = useGame();
   const navigate = useNavigate();
   const { state } = useLocation();
@@ -91,7 +22,16 @@ function RealmRun({ boss, retry }: { boss: boolean; retry: () => void }) {
   const [snapshot, setSnapshot] = useState(createEncounter);
   const [ready, setReady] = useState(false);
   const [near, setNear] = useState(false);
-  const resultOpen = boss && (snapshot.health <= 0 || snapshot.bossHealth <= 0);
+  const died = snapshot.health <= 0;
+  const over = died || snapshot.bossHealth <= 0;
+  const [resultOpen, setResultOpen] = useState(false);
+  const { schedule, cancel } = useGameTimeout();
+  useEffect(() => {
+    if (!over) return;
+    // Let the fall (or the Warden's collapse) play before the banner.
+    const id = schedule(() => setResultOpen(true), died ? 1600 : 3400);
+    return () => cancel(id);
+  }, [over, died, schedule, cancel]);
   const retryButton = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     setResultScreenActive(resultOpen);
@@ -99,71 +39,28 @@ function RealmRun({ boss, retry }: { boss: boolean; retry: () => void }) {
     return () => setResultScreenActive(false);
   }, [resultOpen]);
   const markReady = useCallback(() => setReady(true), []);
+  useEffect(() => {
+    setMood("ash");
+  }, []);
   const exit = useCallback(
     () => navigate("/", { state: { returnPortal: state?.fromPortal } }),
     [navigate, state],
   );
   return (
     <main className="experience">
-      <GameCanvas shadows="percentage" camera={{ position: [0, 4, 14], fov: 52 }}>
-        <color attach="background" args={[boss ? "#20252b" : "#191426"]} />
-        <fog attach="fog" args={[boss ? "#20252b" : "#30263d", boss ? 25 : 16, boss ? 65 : 48]} />
-        <hemisphereLight
-          args={[boss ? "#abbacb" : "#a0a6dc", boss ? "#586047" : "#473325", boss ? 1.5 : 1]}
-        />
-        <directionalLight
-          position={[8, 16, 6]}
-          intensity={boss ? 2 : 1.8}
-          color={boss ? "#edb784" : "#bac9f6"}
-          castShadow
-          shadow-mapSize={[2048, 2048]}
-          shadow-camera-left={-24}
-          shadow-camera-right={24}
-          shadow-camera-top={24}
-          shadow-camera-bottom={-24}
-          shadow-bias={-0.0003}
-        />
+      <GameCanvas
+        shadows="percentage"
+        camera={{ position: [0, 4, 14], fov: 52 }}
+        atmosphere={ASH_ATMOSPHERE}
+      >
         <Suspense fallback={null}>
           <Physics gravity={[0, -30, 0]} paused={paused}>
-            <RigidBody type="fixed" colliders="cuboid" position={[0, -0.5, 0]}>
-              <mesh receiveShadow>
-                <boxGeometry args={[48, 1, 48]} />
-                <meshStandardMaterial color={boss ? "#555852" : "#514333"} roughness={1} />
-              </mesh>
-            </RigidBody>
-            {boss ? (
-              <>
-                <Warden combat={combat} report={setSnapshot} />
-                {Array.from({ length: 14 }, (_, i) => {
-                  const a = ((i + 1) / 16) * Math.PI * 2;
-                  return (
-                    <RigidBody
-                      key={i}
-                      type="fixed"
-                      colliders="cuboid"
-                      position={[Math.sin(a) * 19, 3, Math.cos(a) * 19]}
-                    >
-                      <mesh castShadow receiveShadow rotation={[0, a, 0]}>
-                        <boxGeometry args={[1.5, 6, 1.5]} />
-                        <meshStandardMaterial color="#454d52" />
-                      </mesh>
-                    </RigidBody>
-                  );
-                })}
-              </>
-            ) : (
-              <HalloweenGrove />
-            )}
-            <PortalPainting
-              image="/assets/tree.jpg"
-              position={[0, 2.6, 14]}
-              rotation={[0, Math.PI, 0]}
-              scale={1.2}
-              active={near}
-            />
+            <AshArena combat={combat} />
+            <AshWarden combat={combat} report={setSnapshot} />
+            <FogGate position={[0, 2.6, 14]} rotation={[0, Math.PI, 0]} scale={1.2} active={near} />
             <PortalFrameCollider position={[0, 2.6, 14]} rotation={[0, Math.PI, 0]} scale={1.2} />
             <ThirdPersonPlayer
-              combat={boss ? combat : undefined}
+              combat={combat}
               start={[0, 0, 5]}
               boundary={21}
               portals={[{ id: "forest", position: [0, 0, 14], yaw: Math.PI, scale: 1.2 }]}
@@ -176,41 +73,57 @@ function RealmRun({ boss, retry }: { boss: boolean; retry: () => void }) {
         </Suspense>
       </GameCanvas>
       <ExperienceHud
-        chapter={boss ? "Trial of ash" : "Halloween"}
-        title={boss ? "The Ash Warden" : "Halloween Hollow"}
+        chapter="Trial of ash"
+        title="The Ash Warden"
         ready={ready}
         leaving={false}
-        prompt={near ? "Jump through to return to the forest" : undefined}
+        prompt={near ? "Jump through the fog to return to the forest" : undefined}
       />
-      {ready && !paused && boss && (
-        <section className="combat-hud" aria-label="Combat status">
-          {boss ? (
-            <>
-              <div className="player-vitals">
-                <span className="vital-crest" aria-hidden="true">
-                  ✧
-                </span>
-                <div>
-                  <VitalBar label="Health" value={snapshot.health} max={100} />
-                  <VitalBar label="Stamina" value={snapshot.stamina} max={100} stamina />
-                </div>
+      {ready && !paused && (
+        <section
+          className={`combat-hud${snapshot.enraged ? " is-enraged" : ""}`}
+          aria-label="Combat status"
+        >
+          {snapshot.playerHitId > 0 && (
+            <div key={snapshot.playerHitId} className="hurt-flash" aria-hidden="true" />
+          )}
+          <div className="player-vitals">
+            <span className="vital-crest" aria-hidden="true">
+              ✧
+            </span>
+            <div>
+              <VitalBar label="Health" value={snapshot.health} max={combatTuning.playerMaxHealth} />
+              <VitalBar label="Stamina" value={snapshot.stamina} max={100} stamina />
+            </div>
+          </div>
+          {!resultOpen && (
+            <div className="warden-vitals">
+              <h2>
+                The Ash Warden
+                {snapshot.enraged && <small>Kindled in wrath</small>}
+              </h2>
+              <VitalBar
+                label="The Ash Warden health"
+                value={snapshot.bossHealth}
+                max={combatTuning.bossMaxHealth}
+                boss
+              />
+            </div>
+          )}
+          {resultOpen && (
+            <div
+              className={`combat-result ${died ? "is-death" : "is-victory"}`}
+              role="dialog"
+              aria-label="Encounter result"
+            >
+              <h2>{died ? "You died" : "Warden felled"}</h2>
+              <div className="combat-result-actions">
+                <button ref={retryButton} onClick={retry}>
+                  Retry encounter
+                </button>
+                <button onClick={exit}>Return to the forest</button>
               </div>
-              <div className="warden-vitals">
-                <h2>The Ash Warden</h2>
-                <VitalBar label="The Ash Warden health" value={snapshot.bossHealth} max={300} />
-              </div>
-              {resultOpen && (
-                <div className="combat-result" role="dialog" aria-label="Encounter result">
-                  <h2>{snapshot.health <= 0 ? "You fell" : "Warden defeated"}</h2>
-                  <button ref={retryButton} onClick={retry}>
-                    Retry encounter
-                  </button>{" "}
-                  <button onClick={exit}>Return to the forest</button>
-                </div>
-              )}
-            </>
-          ) : (
-            <p>Follow the jack-o’-lantern trail. The painting leads home.</p>
+            </div>
           )}
         </section>
       )}
@@ -223,28 +136,38 @@ function VitalBar({
   value,
   max,
   stamina = false,
+  boss = false,
 }: {
   label: string;
   value: number;
   max: number;
   stamina?: boolean;
+  boss?: boolean;
 }) {
   const bounded = Math.max(0, Math.min(max, value));
+  // Soulslike damage trail: a pale chunk lingers, then drains after the hit.
+  const [lagging, setLagging] = useState(bounded);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setLagging(bounded), 650);
+    return () => window.clearTimeout(timer);
+  }, [bounded]);
+  const trail = Math.max(lagging, bounded);
   return (
     <div
-      className={`vital-bar${stamina ? " is-stamina" : ""}`}
+      className={`vital-bar${stamina ? " is-stamina" : ""}${boss ? " is-boss" : ""}`}
       role="meter"
       aria-label={label}
       aria-valuemin={0}
       aria-valuemax={max}
       aria-valuenow={Math.round(bounded)}
     >
-      <span style={{ transform: `scaleX(${bounded / max})` }} />
+      {!stamina && <span className="vital-trail" style={{ transform: `scaleX(${trail / max})` }} />}
+      <span className="vital-fill" style={{ transform: `scaleX(${bounded / max})` }} />
     </div>
   );
 }
 
-export default function RealmLevel({ boss = false }: { boss?: boolean }) {
+export default function RealmLevel() {
   const [attempt, setAttempt] = useState(0);
-  return <RealmRun key={`${boss}-${attempt}`} boss={boss} retry={() => setAttempt((n) => n + 1)} />;
+  return <RealmRun key={attempt} retry={() => setAttempt((n) => n + 1)} />;
 }
