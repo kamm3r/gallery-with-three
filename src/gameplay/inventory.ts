@@ -17,7 +17,7 @@ export interface ItemDef {
   consumable?: boolean;
 }
 
-export interface Slot {
+interface Slot {
   id: string;
   /** For toggle items. */
   on: boolean;

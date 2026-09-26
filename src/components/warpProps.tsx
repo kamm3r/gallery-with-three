@@ -151,7 +151,7 @@ function crateMaterials(kind: CrateKind) {
 }
 
 const crateMaterialCache = new Map<CrateKind, THREE.Material[]>();
-export function crateMaterial(kind: CrateKind) {
+function crateMaterial(kind: CrateKind) {
   let materials = crateMaterialCache.get(kind);
   if (!materials) {
     materials = crateMaterials(kind);

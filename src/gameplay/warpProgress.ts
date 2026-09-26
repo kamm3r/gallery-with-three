@@ -9,7 +9,7 @@ export interface WarpProgress {
   boss: boolean;
 }
 
-export const warpProgressKey = "painted-forest.warp.v1";
+const warpProgressKey = "painted-forest.warp.v1";
 
 type Store = Pick<Storage, "getItem" | "setItem">;
 const browserStore = (): Store | undefined =>
@@ -31,7 +31,7 @@ export function readWarpProgress(store = browserStore()): WarpProgress {
   }
 }
 
-export function saveWarpProgress(progress: WarpProgress, store = browserStore()) {
+function saveWarpProgress(progress: WarpProgress, store = browserStore()) {
   try {
     store?.setItem(warpProgressKey, JSON.stringify(progress));
   } catch {

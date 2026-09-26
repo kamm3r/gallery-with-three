@@ -13,7 +13,7 @@ import { isWarpLevelId, WARP_LEVELS, type WarpLevel } from "../gameplay/warpLeve
 import { createRun, type RunEvent } from "../gameplay/warpRun";
 import { recordLevel } from "../gameplay/warpProgress";
 
-export interface WarpHud {
+interface WarpHud {
   fruit: number;
   crates: number;
   crateTotal: number;

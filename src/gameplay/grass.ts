@@ -2,7 +2,7 @@ import { groundHeight, isDryLand, mulberry32, smoothstep, valueNoise } from "./t
 import { inPortalGarden, firstPathDistance } from "./hubPortals.ts";
 
 export const GRASS_CHUNK_SIZE = 10;
-export const GRASS_RADIUS = 124;
+const GRASS_RADIUS = 124;
 /**
  * Blade height like Quick_Grass (GRASS_HEIGHT with a 0.75-1.5 random
  * multiplier): tall meadow grass instead of lawn.

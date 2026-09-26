@@ -15,7 +15,7 @@ type GLTFResult = GLTF & {
   };
 };
 
-export type TreeVariant = "branched" | "conical" | "oval" | "round" | "spreading";
+type TreeVariant = "branched" | "conical" | "oval" | "round" | "spreading";
 
 type TreeProps = ThreeElements["group"] & {
   variant?: TreeVariant;

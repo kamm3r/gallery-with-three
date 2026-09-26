@@ -5,11 +5,11 @@
 import { WARP_LEVEL_IDS, type Vec3, type WarpLevelId } from "./warpLevels.ts";
 
 export const WARP_ROOM_RADIUS = 17;
-export const PORTAL_RING = 12.5;
+const PORTAL_RING = 12.5;
 /** Raised center pad that becomes the boss portal. */
 export const BOSS_PAD = { radius: 2.8, top: 0.35 };
 
-export type WarpRoomPortalId = "forest" | WarpLevelId;
+type WarpRoomPortalId = "forest" | WarpLevelId;
 
 export interface WarpRoomPortal {
   id: WarpRoomPortalId;

@@ -42,9 +42,9 @@ export const BOSS = {
   ] as BossPhase[],
 };
 
-export type BossMode = "intro" | "leap" | "land" | "dazed" | "hurt" | "defeated";
+type BossMode = "intro" | "leap" | "land" | "dazed" | "hurt" | "defeated";
 
-export interface Ring {
+interface Ring {
   x: number;
   z: number;
   radius: number;
@@ -106,7 +106,7 @@ export function createBoss(): BossFight {
   };
 }
 
-export const bossPhase = (fight: BossFight) =>
+const bossPhase = (fight: BossFight) =>
   BOSS.phases[Math.min(BOSS.phases.length - 1, BOSS.maxHealth - fight.health)];
 
 /** Height of the boss's feet above the floor (leap arc). */
@@ -115,9 +115,6 @@ export function bossLift(fight: BossFight) {
   const t = 1 - fight.timer / fight.duration;
   return Math.sin(t * Math.PI) * 7;
 }
-
-export const headHeight = (fight: BossFight) =>
-  fight.mode === "dazed" ? BOSS.dazedHeadHeight : BOSS.headHeight;
 
 function setMode(fight: BossFight, mode: BossMode, duration: number) {
   fight.mode = mode;

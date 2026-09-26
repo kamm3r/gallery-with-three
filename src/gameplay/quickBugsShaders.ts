@@ -74,7 +74,7 @@ float noise11(float p) {
 }
 `;
 
-export const QUICK_BUGS_VSH = /* glsl */ `
+const QUICK_BUGS_VSH = /* glsl */ `
 #define PHONG
 varying vec3 vViewPosition;
 #include <common>
@@ -179,7 +179,7 @@ void main() {
 }
 `;
 
-export const QUICK_BUGS_FSH = /* glsl */ `
+const QUICK_BUGS_FSH = /* glsl */ `
 #define PHONG
 uniform vec3 diffuse;
 uniform vec3 emissive;
@@ -247,7 +247,7 @@ void main() {
 }
 `;
 
-export const BUGS_COUNT = 8;
+const BUGS_COUNT = 8;
 export const BUGS_SPAWN_RANGE = 40;
 export const BUGS_MAX_DIST = 100;
 

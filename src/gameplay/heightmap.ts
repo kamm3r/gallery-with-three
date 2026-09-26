@@ -3,7 +3,7 @@ import { groundHeight } from "./terrain.ts";
 
 /** World-space meters covered by the baked height texture (hub is ±140). */
 export const HEIGHTMAP_WORLD = 280;
-export const HEIGHTMAP_RES = 512;
+const HEIGHTMAP_RES = 512;
 
 export interface HeightField {
   resolution: number;
@@ -12,7 +12,7 @@ export interface HeightField {
 }
 
 /** World position of a height-field texel. Row 0 is +world/2 in z. */
-export function heightFieldPosition(
+function heightFieldPosition(
   resolution: number,
   world: number,
   i: number,

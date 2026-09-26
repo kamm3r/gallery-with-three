@@ -48,7 +48,7 @@ export const isPart = (loot: Loot): loot is Part => (PARTS as readonly string[])
 
 /** Each night only a few containers per house are worth searching (and glint). */
 export const LIVE_PER_HOUSE = 2;
-export const LIVE_OUTDOORS = 3;
+const LIVE_OUTDOORS = 3;
 
 export const NIGHT = {
   maxStamina: 100,
@@ -131,16 +131,9 @@ export const KILLER = {
   driftRadius: 30,
 } as const;
 
-export type KillerMode =
-  | "dormant"
-  | "patrol"
-  | "investigate"
-  | "chase"
-  | "attack"
-  | "recover"
-  | "search";
+type KillerMode = "dormant" | "patrol" | "investigate" | "chase" | "attack" | "recover" | "search";
 
-export interface Killer extends Point {
+interface Killer extends Point {
   yaw: number;
   mode: KillerMode;
   path: Point[];
@@ -163,20 +156,20 @@ export interface Killer extends Point {
   bash: number;
 }
 
-export interface DoorState {
+interface DoorState {
   open: boolean;
   locked: boolean;
   broken: boolean;
 }
 
 /** What E would do right now. */
-export type FocusKind = "search" | "pickup" | "hide" | "unhide" | "door" | "car" | "phone";
+type FocusKind = "search" | "pickup" | "hide" | "unhide" | "door" | "car" | "phone";
 export interface Focus {
   kind: FocusKind;
   index: number;
 }
 
-export interface Survivor extends Point {
+interface Survivor extends Point {
   stamina: number;
   exhausted: boolean;
   regenWait: number;
@@ -336,7 +329,7 @@ export function createNight(random: () => number = Math.random): Night {
   };
 }
 
-export function partsFound(night: Night) {
+function partsFound(night: Night) {
   return PARTS.filter((part) => night.found[part]).length;
 }
 
@@ -456,7 +449,7 @@ function walk(killer: Killer, night: Night, speed: number, dt: number) {
 }
 
 /** Standing in a streetlamp's pool makes you visible from much further. */
-export function inLamplight(p: Point) {
+function inLamplight(p: Point) {
   return STREET_LAMPS.some((lamp) => distance(lamp, p) < LAMP_GLOW);
 }
 

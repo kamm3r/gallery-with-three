@@ -6,7 +6,7 @@ export const CELL = 6;
 export const WALL_HEIGHT = 9;
 /** Walls run down into the pits so the shafts read as solid masonry. */
 export const WALL_BOTTOM = -14;
-export const WALL_THICKNESS = 0.5;
+const WALL_THICKNESS = 0.5;
 export const DOOR_WIDTH = 2.8;
 export const DOOR_HEIGHT = 4.2;
 
@@ -256,12 +256,12 @@ export const galleryDoors: GalleryDoor[] = [
 const key = (x: number, z: number) => `${x},${z}`;
 const pairKey = (a: Cell, b: Cell) => [key(...a), key(...b)].sort().join("|");
 
-export const roomById = Object.fromEntries(galleryRooms.map((room) => [room.id, room])) as Record<
+const roomById = Object.fromEntries(galleryRooms.map((room) => [room.id, room])) as Record<
   RoomId,
   GalleryRoom
 >;
 
-export const cellRoom = new Map<string, GalleryRoom>();
+const cellRoom = new Map<string, GalleryRoom>();
 for (const room of galleryRooms) {
   const [x1, x2, z1, z2] = room.rect;
   for (let x = x1; x <= x2; x++)
@@ -277,12 +277,6 @@ export function roomAt(x: number, z: number): GalleryRoom | undefined {
   return cellRoom.get(key(Math.round(x / CELL), Math.round(z / CELL)));
 }
 
-/** World-space centre of a room's floor. */
-export function roomCenter(id: RoomId): [number, number] {
-  const [x1, x2, z1, z2] = roomById[id].rect;
-  return [((x1 + x2) / 2) * CELL, ((z1 + z2) / 2) * CELL];
-}
-
 /** World-space bounds [minX, maxX, minZ, maxZ] of a room's interior. */
 export function roomBounds(id: RoomId): [number, number, number, number] {
   const [x1, x2, z1, z2] = roomById[id].rect;
@@ -291,7 +285,7 @@ export function roomBounds(id: RoomId): [number, number, number, number] {
 }
 
 /** World-space centre of the wall a door is cut into. */
-export function doorPoint(door: GalleryDoor): [number, number] {
+function doorPoint(door: GalleryDoor): [number, number] {
   return [((door.a[0] + door.b[0]) * CELL) / 2, ((door.a[1] + door.b[1]) * CELL) / 2];
 }
 
@@ -452,7 +446,7 @@ function mulberry32(seed: number) {
   };
 }
 
-export interface MazeSegment {
+interface MazeSegment {
   /** World-space endpoints on the floor plane. */
   from: [number, number];
   to: [number, number];
@@ -469,7 +463,7 @@ export interface GalleryMaze {
   distance: number;
 }
 
-export function buildMaze(room: RoomId, seed: number, cells = 6): GalleryMaze {
+function buildMaze(room: RoomId, seed: number, cells = 6): GalleryMaze {
   const [minX, maxX, minZ] = roomBounds(room);
   const size = (maxX - minX) / cells;
   const random = mulberry32(seed);

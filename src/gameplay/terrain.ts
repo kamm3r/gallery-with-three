@@ -11,11 +11,11 @@ export const HUB_SEGS = 240;
 /** Gameplay clearing: dead flat inside this radius (spawn, paths, portals). */
 export const FLAT_RADIUS = 14;
 /** Hills ramp in between FLAT_RADIUS and this radius. */
-export const HILL_START = 24;
+const HILL_START = 24;
 /** Player clamp radius; keep clear of the rim rise. */
 export const PLAY_RADIUS = 120;
 export const WATER_LEVEL = -0.45;
-export const LAKES = [
+const LAKES = [
   { x: 27, z: -48, radiusX: 21, radiusZ: 17, island: false },
   { x: 66, z: 46, radiusX: 32, radiusZ: 27, island: true },
 ];

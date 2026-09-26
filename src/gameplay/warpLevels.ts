@@ -18,7 +18,7 @@ export interface Solid {
 }
 
 /** Kinematic platform. Oscillates `distance` along `axis` (sin), like KinematicPlatform. */
-export interface Mover {
+interface Mover {
   x: number;
   z: number;
   /** Top surface height at rest. */
@@ -41,7 +41,7 @@ export type CrateKind =
   | "tnt" // stomp lights a 3s fuse, spin blows it at once
   | "nitro"; // touch it and it explodes; not counted
 
-export interface Crate {
+interface Crate {
   x: number;
   /** Bottom of the crate. */
   y: number;
@@ -67,7 +67,7 @@ export interface Enemy {
   spiky?: boolean;
 }
 
-export interface Boulder {
+interface Boulder {
   /** Where the boulder waits (its center z). */
   startZ: number;
   /** The chase starts when the player's z drops below this. */
@@ -591,13 +591,8 @@ export function solidTop(level: WarpLevel, x: number, z: number) {
   return top;
 }
 
-/** Mover top position at simulation time t (matches updatePlatforms). */
-export function moverOffset(mover: Mover, t: number) {
-  return Math.sin(t * mover.speed + (mover.phase ?? 0)) * mover.distance;
-}
-
 /** Walk-speed enemy patrol: a constant-speed triangle wave through `range`. */
-export function enemyOffset(enemy: Enemy, t: number) {
+function enemyOffset(enemy: Enemy, t: number) {
   const loop = 4 * enemy.range;
   const travelled = (((t * enemy.speed + (enemy.phase ?? 0) * loop) % loop) + loop) % loop;
   const offset =

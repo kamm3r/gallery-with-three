@@ -1,4 +1,4 @@
-export const SEAL_ORDER = ["sun", "leaf", "moon"] as const;
+const SEAL_ORDER = ["sun", "leaf", "moon"] as const;
 
 export type SealName = (typeof SEAL_ORDER)[number];
 

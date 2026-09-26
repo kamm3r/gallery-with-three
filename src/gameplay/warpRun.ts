@@ -48,7 +48,7 @@ export const RUN = {
   playerRadius: 0.42,
 } as const;
 
-export type DeathCause = "fall" | "enemy" | "explosion" | "boulder";
+type DeathCause = "fall" | "enemy" | "explosion" | "boulder";
 
 export type RunEvent =
   | { type: "crate"; index: number; kind: string }
@@ -66,7 +66,7 @@ export type RunEvent =
   | { type: "respawn"; position: Vec3 }
   | { type: "boulder"; state: "rolling" | "stopped" };
 
-export interface CrateState {
+interface CrateState {
   broken: boolean;
   /** Seconds left on a lit TNT fuse, or -1. */
   fuse: number;

@@ -1,13 +1,13 @@
 import { swordHitActive } from "./characterAnimations.ts";
 import { combatTuning } from "./combatTuning.ts";
 
-export type BossPhase = "approach" | "windup" | "strike" | "recovery" | "roar" | "defeated";
+type BossPhase = "approach" | "windup" | "strike" | "recovery" | "roar" | "defeated";
 export type BossMove = "sweep" | "slam" | "combo" | "leap" | "nova";
 
 /** Seconds the player is staggered (no input, knocked back) after a hit. */
 export const PLAYER_HURT_TIME = 0.45;
 /** The Warden keeps its fights inside the ring of pillars. */
-export const ARENA_RADIUS = 16;
+const ARENA_RADIUS = 16;
 
 export interface BossHit {
   /** Seconds into the strike phase. */
@@ -142,7 +142,7 @@ export function moveSpec(move: BossMove): MoveSpec {
 }
 
 export const LEAP_AIRTIME = 0.75;
-export const LEAP_HEIGHT = 4.5;
+const LEAP_HEIGHT = 4.5;
 export const ROAR_DURATION = 2;
 const ROAR_HIT: BossHit = { at: 0.6, damage: 10, range: 4.8, arc: -1, knockback: 12, shake: 1 };
 const MOVES: BossMove[] = ["sweep", "slam", "combo", "leap", "nova"];
@@ -267,7 +267,7 @@ function resolveHit(state: Encounter, hit: BossHit) {
 }
 
 /** Warden height during a leap: a ballistic arc landing at LEAP_AIRTIME. */
-export function leapHeight(timer: number) {
+function leapHeight(timer: number) {
   const t = Math.min(1, Math.max(0, timer / LEAP_AIRTIME));
   return 4 * LEAP_HEIGHT * t * (1 - t);
 }

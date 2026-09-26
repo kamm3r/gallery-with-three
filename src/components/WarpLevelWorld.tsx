@@ -35,7 +35,7 @@ interface WarpLevelWorldProps {
 const WOOD = "#c98a45";
 
 /** Sun that tracks the player down the corridor so shadows stay crisp. */
-export function FollowSun({
+function FollowSun({
   link,
   color,
   intensity,

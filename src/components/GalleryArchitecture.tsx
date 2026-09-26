@@ -166,7 +166,7 @@ interface InstancedBoxesProps {
 }
 
 /** One draw call for a list of axis-aligned boxes, optionally per-box coloured. */
-export function InstancedBoxes({
+function InstancedBoxes({
   boxes,
   color = "#ffffff",
   roughness = 0.85,

@@ -26,7 +26,7 @@ export const SIGIL_COLORS: Record<GallerySigil, string> = {
   ember: "#ff8a4a",
 };
 
-export function SigilShape({ sigil, scale = 1 }: { sigil: GallerySigil; scale?: number }) {
+function SigilShape({ sigil, scale = 1 }: { sigil: GallerySigil; scale?: number }) {
   switch (sigil) {
     case "sun":
       return <icosahedronGeometry args={[0.5 * scale, 0]} />;

@@ -12,9 +12,9 @@ import type { AtmosphereSettings } from "./AtmosphereEffect";
 // silhouetted ruins fading into the ash haze. Phase two sets it alight.
 
 const FLOOR_RADIUS = 23;
-export const ASH_SUN = new THREE.Vector3(0.22, 0.2, -1).normalize();
+const ASH_SUN = new THREE.Vector3(0.22, 0.2, -1).normalize();
 const HORIZON = "#4a2b23";
-export const ASH_FOG = "#34221e";
+const ASH_FOG = "#34221e";
 
 export const ASH_ATMOSPHERE: AtmosphereSettings = {
   density: 0.018,
@@ -246,7 +246,7 @@ const fireFragment = /* glsl */ `
 `;
 
 /** Billboard-ish flame for a crossed pair of planes; drive `uTime` per frame. */
-export function createFireMaterial(seed: number) {
+function createFireMaterial(seed: number) {
   return new THREE.ShaderMaterial({
     vertexShader: fireVertex,
     fragmentShader: fireFragment,

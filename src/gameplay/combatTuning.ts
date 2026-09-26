@@ -47,5 +47,3 @@ export const combatTuning = {
   // — Diagnostics —
   perfEnabled: false,
 };
-
-export type CombatTuning = typeof combatTuning;

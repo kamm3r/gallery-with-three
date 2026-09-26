@@ -35,7 +35,7 @@ export const STREETS: Rect[] = [
 ];
 export const CUL_DE_SAC: Circle = { x: 0, z: -74, r: 16 };
 
-export type HouseStyle = 0 | 1 | 2 | 3;
+type HouseStyle = 0 | 1 | 2 | 3;
 
 export interface House {
   x: number;
@@ -48,7 +48,7 @@ export interface House {
   hd: number;
 }
 
-export const HOUSE_HW = 8,
+const HOUSE_HW = 8,
   HOUSE_HD = 6.5;
 
 function house(x: number, z: number, facing: "e" | "w" | "n" | "s", style: HouseStyle): House {
@@ -86,7 +86,7 @@ export function houseToWorld(h: House, lx: number, lz: number): Point {
 }
 
 /** Axis-aligned footprint (body plus porch) in world space. */
-export function houseFootprint(h: House, porch = 2.8): Rect {
+function houseFootprint(h: House, porch = 2.8): Rect {
   const front = houseToWorld(h, 0, porch / 2);
   const sideways = Math.abs(Math.sin(h.yaw)) > 0.5;
   const hw = h.hw,
@@ -96,7 +96,7 @@ export function houseFootprint(h: House, porch = 2.8): Rect {
 
 export const GRAVEYARD: Rect = { x: -62, z: 82, hx: 13, hz: 10 };
 /** Half-width of the gap in the graveyard's east fence. */
-export const GRAVEYARD_GATE = 2.5;
+const GRAVEYARD_GATE = 2.5;
 export const PARK: Point = { x: 62, z: 82 };
 export const ESCAPE_CAR = { x: 9, z: -72, yaw: -0.4 };
 export const PAYPHONE = { x: -10, z: 1 };
@@ -252,7 +252,7 @@ export const PLAN_WALLS: WallPiece[] = LINES.flatMap((line) => {
 });
 
 /** Open doorways between rooms (no door), as floor rects to keep walkable. */
-export const PLAN_DOORWAYS: Rect[] = LINES.flatMap((line) =>
+const PLAN_DOORWAYS: Rect[] = LINES.flatMap((line) =>
   line.openings
     .filter((o) => o.kind === "doorway")
     .map((o) => {
@@ -305,7 +305,7 @@ export const PLAN_DOORS: LocalDoor[] = [
 /** Every container worth searching in a house; each night only a few are. */
 /** Every container worth searching in a house; each night only a few are.
  * Each spot is where you stand, a step in front of the furniture. */
-export const PLAN_SEARCH = [
+const PLAN_SEARCH = [
   { x: -6.85, z: -5.2, label: "kitchen drawers" },
   { x: -6.6, z: -3.8, label: "kitchen cupboard" },
   { x: -2.9, z: -1.8, label: "fridge" },
@@ -316,14 +316,14 @@ export const PLAN_SEARCH = [
   { x: 6.7, z: -1.2, label: "dresser" },
   { x: 3.1, z: -4.9, label: "nightstand" },
 ];
-export const PLAN_WARDROBE = { x: 7.1, z: -5.9 };
+const PLAN_WARDROBE = { x: 7.1, z: -5.9 };
 
 function sideways(h: House) {
   return Math.abs(Math.sin(h.yaw)) > 0.5;
 }
 
 /** A house-local rectangle in world space (houses only face the four axes). */
-export function rectToWorld(h: House, r: Rect): Rect {
+function rectToWorld(h: House, r: Rect): Rect {
   const c = houseToWorld(h, r.x, r.z);
   return sideways(h)
     ? { x: c.x, z: c.z, hx: r.hz, hz: r.hx }
@@ -367,7 +367,7 @@ export interface SearchSpot extends Point {
 }
 
 /** Garbage cans beside these houses count as outdoor search spots. */
-export const BIN_HOUSES = [0, 5, 10, 13];
+const BIN_HOUSES = [0, 5, 10, 13];
 
 /** Every place worth rummaging through. Each night only some are live. */
 export const SEARCH_SPOTS: SearchSpot[] = [
@@ -495,12 +495,12 @@ export const TREES: { inside: Tree[]; outside: Tree[] } = (() => {
 
 // --- Navigation grid --------------------------------------------------------
 
-export const CELL = 0.5;
-export const GRID = Math.round((LANE_HALF * 2 + 2) / CELL);
+const CELL = 0.5;
+const GRID = Math.round((LANE_HALF * 2 + 2) / CELL);
 const ORIGIN = -(LANE_HALF + 1);
 /** Walls stop movement and sight; hedges only stop sight; window sills only
  * stop movement; doors stop both while closed but can be opened (or broken). */
-export const FREE = 0,
+const FREE = 0,
   WALL = 1,
   HEDGE = 2,
   DOOR = 3,
@@ -520,7 +520,7 @@ export interface NavGrid {
 export type DoorsClosed = (door: number) => boolean;
 const allOpen: DoorsClosed = () => false;
 
-export function cellOf(x: number, z: number): [number, number] {
+function cellOf(x: number, z: number): [number, number] {
   return [Math.floor((x - ORIGIN) / CELL), Math.floor((z - ORIGIN) / CELL)];
 }
 
@@ -529,7 +529,7 @@ function centerOf(i: number, j: number): Point {
 }
 
 /** Solid obstacles in world space (colliders mirror the same shapes). */
-export function obstacleRects(): Rect[] {
+function obstacleRects(): Rect[] {
   // Wall slabs that reach the floor (not window heads or door lintels).
   const floorWalls = PLAN_WALLS.filter((w) => w.y0 <= FLOOR_Y && !w.window);
   const houses = HOUSES.flatMap((h) =>

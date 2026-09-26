@@ -86,7 +86,7 @@ const NatureBatch = lazy(() =>
 );
 
 const GROUND = 125;
-export const LANE_FOG = "#10101a";
+const LANE_FOG = "#10101a";
 
 export const LANE_ATMOSPHERE: AtmosphereSettings = {
   density: 0.02,
@@ -727,7 +727,7 @@ function Flashlight() {
 }
 
 /** What E does right now, as the HUD's prompt. */
-export function promptFor(night: Night, focus: Focus | null): string | null {
+function promptFor(night: Night, focus: Focus | null): string | null {
   if (!focus) return null;
   switch (focus.kind) {
     case "search":
@@ -754,7 +754,7 @@ export function promptFor(night: Night, focus: Focus | null): string | null {
   }
 }
 
-export const PART_NAME: Record<Loot, string> = {
+const PART_NAME: Record<Loot, string> = {
   medkit: "med kit",
   drink: "energy drink",
   keys: "car keys",

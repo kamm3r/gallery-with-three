@@ -44,11 +44,11 @@ export interface ParkStrip {
 
 export const PARK_EXTENT = 85;
 
-export const STATIC = "#8a8f96";
-export const FUNNEL = "#d63c2f";
+const STATIC = "#8a8f96";
+const FUNNEL = "#d63c2f";
 const DYNAMIC = "#e09543";
-export const ONE_WAY = "#e0303e";
-export const JUMP_PAD = "#d926d9";
+const ONE_WAY = "#e0303e";
+const JUMP_PAD = "#d926d9";
 const WALKABLE = "#2eff5a";
 const TOO_STEEP = "#ff2e3e";
 
@@ -90,7 +90,7 @@ function addRamp(x: number, entryZ: number, width: number, degrees: number, heig
 
 // --- Slopes: equal height, increasing angle, entry at z=16 rising toward -z.
 export const SLOPE_ANGLES = [12, 25, 40, 55];
-export const SLOPE_ENTRY_Z = 16;
+const SLOPE_ENTRY_Z = 16;
 const SLOPE_HEIGHT = 3;
 
 for (const [lane, degrees] of SLOPE_ANGLES.entries()) {
@@ -105,7 +105,7 @@ for (const [lane, degrees] of SLOPE_ANGLES.entries()) {
 
 // --- Steps: three lanes (entry z=16, ascending toward -z), landing, descent.
 export const STEP_RISERS = [0.18, 0.3, 0.48];
-export const STEP_ENTRY_Z = 16;
+const STEP_ENTRY_Z = 16;
 const STEP_TREAD = 0.7;
 const STEP_COUNT = 8;
 const STEP_WIDTH = 2.6;
@@ -313,13 +313,13 @@ export const CEILING_CLEARANCES = [2.4, 2.1, 1.8];
 }
 
 // --- Ledges: jump-height and ledge-grab ladder, 0.5 m to 3 m.
-export const LEDGE_HEIGHTS = [0.5, 1, 1.5, 2, 2.5, 3];
+const LEDGE_HEIGHTS = [0.5, 1, 1.5, 2, 2.5, 3];
 for (const [i, h] of LEDGE_HEIGHTS.entries()) {
   addStatic("box", [-52 + i * 2.6, h / 2, SOUTH_ENTRY_Z - 3], [2, h, 2]);
 }
 
 // --- Drop-offs: a 30 deg ramp to a 4 m deck, then drops of .25/.5/1/2/2.25.
-export const DROP_TERRACES = [4, 3.75, 3.25, 2.25];
+const DROP_TERRACES = [4, 3.75, 3.25, 2.25];
 {
   const x = -30;
   let z = addRamp(x, SOUTH_ENTRY_Z, 3, 30, DROP_TERRACES[0]);
@@ -330,7 +330,7 @@ export const DROP_TERRACES = [4, 3.75, 3.25, 2.25];
 }
 
 // --- Gaps: 1.2 m blocks with growing gaps; the second lane also climbs.
-export const GAP_LANES = [
+const GAP_LANES = [
   { x: -19, gaps: [1, 2, 3, 4], rise: 0 },
   { x: -14, gaps: [1, 1.5, 2, 2.5], rise: 0.5 },
 ];
@@ -345,7 +345,7 @@ for (const lane of GAP_LANES) {
 }
 
 // --- Balance beams at 1.2 m between a shared start and end deck.
-export const BEAM_WIDTHS = [0.12, 0.25, 0.5, 1.0];
+const BEAM_WIDTHS = [0.12, 0.25, 0.5, 1.0];
 {
   const deckX = 2.5;
   const deckWidth = 12;
@@ -366,7 +366,7 @@ export const BEAM_WIDTHS = [0.12, 0.25, 0.5, 1.0];
 
 // --- Ridges (walk over) and valleys (walk along). The 60 deg crevice is
 // too steep on both sides: the capsule should settle, not jitter or climb.
-export const RIDGE_ANGLES = [25, 45];
+const RIDGE_ANGLES = [25, 45];
 export const VALLEY_ANGLES = [30, 60];
 addRidge(18, SOUTH_ENTRY_Z, 3, 5, RIDGE_ANGLES[0]);
 addRidge(24, SOUTH_ENTRY_Z, 3, 3, RIDGE_ANGLES[1]);
@@ -379,7 +379,7 @@ for (let i = 0; i < 6; i++) {
     addStatic("pyramid", [45 + i * 0.6, 0.45, SOUTH_ENTRY_Z - 2 - j * 0.6], [0.5, 0.9, 0.5]);
   }
 }
-export const LOG_DIAMETERS = [0.3, 0.6, 1.0, 1.4];
+const LOG_DIAMETERS = [0.3, 0.6, 1.0, 1.4];
 {
   let z = SOUTH_ENTRY_Z - 2;
   for (const d of LOG_DIAMETERS) {
@@ -389,7 +389,7 @@ export const LOG_DIAMETERS = [0.3, 0.6, 1.0, 1.4];
 }
 
 // --- Curbs: single step-up heights, one per lane.
-export const CURB_HEIGHTS = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6];
+const CURB_HEIGHTS = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6];
 for (const [lane, h] of CURB_HEIGHTS.entries()) {
   addStatic("box", [62 + lane * 2.6, h / 2, SOUTH_ENTRY_Z - 4], [2.2, h, 3]);
 }
@@ -398,7 +398,7 @@ const BACK_ENTRY_Z = -56;
 
 // --- Stair variants: irregular risers, 45 deg steep stairs, open treads
 // (nothing under the lip), and a spiral around a column.
-export const IRREGULAR_RISERS = [0.15, 0.3, 0.12, 0.4, 0.2, 0.35, 0.1, 0.25];
+const IRREGULAR_RISERS = [0.15, 0.3, 0.12, 0.4, 0.2, 0.35, 0.1, 0.25];
 {
   let h = 0;
   for (const [i, riser] of IRREGULAR_RISERS.entries()) {
@@ -414,7 +414,7 @@ export const IRREGULAR_RISERS = [0.15, 0.3, 0.12, 0.4, 0.2, 0.35, 0.1, 0.25];
     addStatic("box", [-62, h3 - 0.04, BACK_ENTRY_Z - (i + 0.5) * 0.7], [2.6, 0.08, 0.72]);
   }
 }
-export const parkSpiral = { center: [-54, 0, BACK_ENTRY_Z - 6] as Tuple3, steps: 20, rise: 0.22 };
+const parkSpiral = { center: [-54, 0, BACK_ENTRY_Z - 6] as Tuple3, steps: 20, rise: 0.22 };
 {
   const [cx, , cz] = parkSpiral.center;
   const top = parkSpiral.steps * parkSpiral.rise;
@@ -443,7 +443,7 @@ for (const [lane, gap] of GRATE_GAPS.entries()) {
 
 // --- Hills: a buried sphere whose rim meets the ground at 40 deg, and
 // cones at 30 deg (walkable) and 60 deg (too steep).
-export const parkDome = {
+const parkDome = {
   radius: 8,
   rimDegrees: 40,
   center: [-10, 0, BACK_ENTRY_Z - 10] as Tuple3,
@@ -457,7 +457,7 @@ addStatic(
   ],
   [parkDome.radius * 2, parkDome.radius * 2, parkDome.radius * 2],
 );
-export const CONE_ANGLES = [30, 60];
+const CONE_ANGLES = [30, 60];
 for (const [i, degrees] of CONE_ANGLES.entries()) {
   const r = i === 0 ? 4 : 2;
   const h = r * Math.tan((degrees * Math.PI) / 180);
@@ -485,7 +485,7 @@ export const BRIDGE_PITCH =
 
 // --- Wall corners (north, behind the portal): acute to obtuse inside
 // corners the capsule walks straight into. Probes corner jitter.
-export const CORNER_ANGLES = [30, 60, 90, 120];
+const CORNER_ANGLES = [30, 60, 90, 120];
 for (const [i, degrees] of CORNER_ANGLES.entries()) {
   const apexX = -66 + i * 8;
   const apexZ = 38;

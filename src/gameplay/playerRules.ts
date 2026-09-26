@@ -77,9 +77,9 @@ export function canCoyoteJump(
 }
 
 export const LEDGE_WALL_REACH = 0.85;
-export const LEDGE_TOP_MIN = 0.3;
+const LEDGE_TOP_MIN = 0.3;
 export const LEDGE_TOP_MAX = 1.75;
-export const LEDGE_GRAB_MIN_FALL = -0.5;
+const LEDGE_GRAB_MIN_FALL = -0.5;
 export const HANG_TIMEOUT = 8;
 
 export interface LedgeGrabState {

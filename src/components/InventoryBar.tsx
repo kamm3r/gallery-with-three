@@ -24,7 +24,7 @@ const ICONS: Record<ItemIcon, React.JSX.Element> = {
   drink: <path d="M8 5h8l-1 15H9zM8.5 9h7M10 3h4" />,
 };
 
-export function ItemIconSvg({ icon }: { icon: ItemIcon }) {
+function ItemIconSvg({ icon }: { icon: ItemIcon }) {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
       {ICONS[icon]}
@@ -32,7 +32,7 @@ export function ItemIconSvg({ icon }: { icon: ItemIcon }) {
   );
 }
 
-export function useInventory() {
+function useInventory() {
   return useSyncExternalStore(subscribeInventory, getInventory, getInventory);
 }
 

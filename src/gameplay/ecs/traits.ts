@@ -5,7 +5,7 @@ export const PlayerPosition = trait({ x: 1000, y: 1000, z: 1000, valid: false })
 export const PlayerView = trait(() => ({ object: null as Object3D | null }));
 export const SimulationTime = trait({ elapsed: 0 });
 
-export interface InstancePoint {
+interface InstancePoint {
   x: number;
   y: number;
   z: number;
