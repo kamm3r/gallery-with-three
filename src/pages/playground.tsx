@@ -52,8 +52,12 @@ export default function PlaygroundLevel() {
   }, [cancel]);
 
   return (
-    <main className="experience">
-      <GameCanvas shadows="percentage" camera={{ position: [0, 3.9, 12], fov: 52 }}>
+    <main className="experience playground-experience">
+      <GameCanvas
+        tuningInitiallyOpen
+        shadows="percentage"
+        camera={{ position: [0, 3.9, 12], fov: 52 }}
+      >
         <Suspense fallback={null}>
           <Physics gravity={[0, -30, 0]} paused={paused}>
             <PlaygroundWorld

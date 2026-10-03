@@ -63,6 +63,10 @@ button {
   outline: 2px solid var(--parchment);
   outline-offset: 4px;
 }
+body:has(.playground-experience) .pause-trigger {
+  right: auto;
+  left: 1.5rem;
+}
 .pause-menu {
   position: fixed;
   inset: 0;

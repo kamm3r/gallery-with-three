@@ -526,6 +526,16 @@ export const parkLabels: Array<{ text: string; position: Tuple3 }> = [
   { text: "SWEEPER + FAST PLATFORMS", position: [31, 0.02, -54] },
   { text: "PLANK BRIDGE", position: [54, 0.02, -52] },
   { text: "WALL CORNERS 30 / 60 / 90 / 120", position: [-54, 0.02, 46] },
+  { text: "LIVE TREE  /  LEVA", position: [-5, 0.02, 48] },
+  { text: "BROAD CANOPY", position: [12, 0.02, 48] },
+  { text: "SPREADING CANOPY", position: [27, 0.02, 48] },
+  { text: "DARK EVERGREEN", position: [42, 0.02, 48] },
+  { text: "YOUNG CANOPY", position: [57, 0.02, 48] },
+  { text: "LIVE HALLOWEEN", position: [-5, 0.02, 76] },
+  { text: "HALLOWEEN BROAD", position: [12, 0.02, 76] },
+  { text: "HALLOWEEN SPREADING", position: [27, 0.02, 76] },
+  { text: "HALLOWEEN EVERGREEN", position: [42, 0.02, 76] },
+  { text: "HALLOWEEN YOUNG", position: [57, 0.02, 76] },
 ];
 
 /** Teleport targets for the tuning panel; every lane is walked toward -z. */
@@ -555,4 +565,7 @@ export const parkZones: Array<{ name: string; spawn: Tuple3 }> = [
   { name: "Sweeper + fast platforms", spawn: [31, 0, -51] },
   { name: "Plank bridge", spawn: [54, 0, -50] },
   { name: "Wall corners", spawn: [-54, 0, 50] },
+  { name: "Tree lab", spawn: [-5, 0, 57] },
+  { name: "Custom trees", spawn: [34, 0, 57] },
+  { name: "Halloween trees", spawn: [34, 0, 77] },
 ];

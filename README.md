@@ -120,6 +120,34 @@ labels name each lane. Lanes are entered from +z and walked toward -z.
 Some obstacles intentionally exceed the controller's limits. Platform motion
 runs before fixed physics steps, independent of rendering.
 
+The north edge of the proving grounds has two rows of five procedural trees.
+Four fixed species (broad, spreading, evergreen, and young) provide daylight
+and Halloween references. A gold-ringed pair on the west end is a live tree
+lab: both versions use the same seed and update as you change the **Procedural
+trees** controls in Leva. Select the species, enter or generate a seed, and
+adjust width, height, lobe size, and density. **Reset shape** restores the
+default proportions. Choose **Tree lab** in **Test zones** to stand between the
+live pair; **Custom trees** and **Halloween trees** show the full reference rows.
+
+Each species uses a seeded generator for its trunk, branches, and foliage
+clusters, so the same seed and settings reproduce a shape with foliage on every
+side. The Halloween row uses the daylight crowns with charcoal trunks,
+generated bare tips, and smaller crowns in copper, burgundy, moonlit blue, and
+pale sage. Their smooth, irregular foliage uses four bands of light and shadow,
+following the shading approach in
+[craftzdog's MIT-licensed example](https://github.com/craftzdog/ghibli-style-shader)
+and the supplied landscape reference. Reference seeds and Leva controls live in
+`src/components/CustomTreeShowcase.tsx`; generation lives in
+`src/gameplay/proceduralTrees.ts`.
+They are visual prototypes; the forest and Halloween world still use their
+existing tree models. Captures show the [paired layout](docs/custom-tree-variants-preview.png),
+the [live tree and Leva controls](docs/procedural-tree-leva-preview.png),
+the [daylight front](docs/custom-trees-preview.png) and
+[back](docs/custom-trees-rear-preview.png), a
+[side view](docs/custom-tree-side-preview.png), and the Halloween
+[front](docs/halloween-trees-preview.png) and
+[back](docs/halloween-trees-rear-preview.png).
+
 In development, the Leva panel's **Controller** folder tunes the character
 controller (speeds, skid, air control, jump arc, skin width, step height,
 ground snap, slope limit) live in this world only; other worlds use

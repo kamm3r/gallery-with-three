@@ -3,6 +3,7 @@ import { useRef } from "react";
 import { parkZones, type Tuple3 } from "../gameplay/collisionCourse";
 import { useControllerTuning, useZoneTeleport } from "../hooks/usePlaygroundTuning";
 import { CollisionCourse } from "./CollisionCourse";
+import { CustomTreeShowcase } from "./CustomTreeShowcase";
 import { KinematicPlatform, PlatformSystem } from "./KinematicPlatform";
 import { PortalFrameCollider } from "./PortalFrameCollider";
 import { PortalPainting } from "./PortalPainting";
@@ -53,6 +54,7 @@ export function PlaygroundWorld({
         shadow-normalBias={0.025}
       />
       <CollisionCourse />
+      <CustomTreeShowcase />
       <PlatformSystem />
       {/* Blue kinematic set: rotating disc, elevator, shuttles. */}
       <KinematicPlatform

@@ -54,8 +54,9 @@ function Diagnostics() {
 export function GameCanvas({
   children,
   atmosphere,
+  tuningInitiallyOpen = false,
   ...props
-}: CanvasProps & { atmosphere?: AtmosphereSettings }) {
+}: CanvasProps & { atmosphere?: AtmosphereSettings; tuningInitiallyOpen?: boolean }) {
   const { paused, settings } = useGame();
   return (
     <>
@@ -82,7 +83,9 @@ export function GameCanvas({
           </WorldProvider>
         </Canvas>
       </div>
-      {import.meta.env.DEV && <Leva collapsed titleBar={{ title: "Tuning", drag: true }} />}
+      {import.meta.env.DEV && (
+        <Leva collapsed={!tuningInitiallyOpen} titleBar={{ title: "Tuning", drag: true }} />
+      )}
     </>
   );
 }

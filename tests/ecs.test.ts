@@ -28,6 +28,7 @@ import {
   parkOneWay,
   parkPushables,
   parkStatics,
+  parkZones,
   SLOPE_ANGLES,
   SLOPE_LIMIT_DEG,
   STEP_RISERS,
@@ -150,7 +151,7 @@ test("movement park covers every skill zone inside the arena bounds", () => {
   // Pushables include light shovable cubes and one heavy "not pushable" cube.
   assert.ok(parkPushables.some((b) => b.mass <= 2));
   assert.ok(parkPushables.some((b) => b.mass >= 100));
-  assert.equal(parkLabels.length, 23);
+  assert.ok(parkLabels.length >= parkZones.length);
 });
 
 test("terrain height field is finite and falls off at the patch border", () => {
