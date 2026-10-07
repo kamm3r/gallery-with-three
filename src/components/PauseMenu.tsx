@@ -2,7 +2,23 @@ import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "re
 import { useLocation, useNavigate } from "react-router-dom";
 import { defaultSettings, useGame } from "../gameSettings";
 import { isResultScreenActive } from "../gameplay/resultScreen";
+import {
+  bindingLabels,
+  defaultBindings,
+  isBindableCode,
+  keyLabel,
+  rebind,
+  readSprintKey,
+  suggestedSprintKey,
+  type BindingAction,
+} from "../gameplay/controlBindings";
 import { playSound } from "../gameplay/sound";
+import {
+  graphicsPresets,
+  type GraphicsPreset,
+  type EffectDetail,
+  type Detail,
+} from "../gameplay/graphicsSettings";
 
 type Page = "pause" | "options" | "video" | "game" | "controls" | "return";
 const titles: Record<Page, string> = {
@@ -36,6 +52,7 @@ export function PauseMenu() {
   const [page, setPage] = useState<Page>("pause");
   const [controlsParent, setControlsParent] = useState<Page>("pause");
   const [fullscreen, setFullscreen] = useState(Boolean(document.fullscreenElement));
+  const [bindingAction, setBindingAction] = useState<BindingAction | "sprint" | null>(null);
   const [message, setMessage] = useState("");
   const dialog = useRef<HTMLDialogElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -97,6 +114,50 @@ export function PauseMenu() {
     document.addEventListener("fullscreenchange", onFullscreen);
     return () => document.removeEventListener("fullscreenchange", onFullscreen);
   }, []);
+
+  useEffect(() => {
+    if (!bindingAction || !paused || page !== "controls") return;
+    const capture = (event: globalThis.KeyboardEvent) => {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (event.repeat) return;
+      if (event.code === "Escape") {
+        setBindingAction(null);
+        return;
+      }
+      if (!isBindableCode(event.code)) {
+        setMessage(
+          "That key is reserved. Choose a letter, arrow, number, Space, Shift, or Control. R, M, and 1 are reserved for area abilities.",
+        );
+        return;
+      }
+      if (bindingAction === "sprint") {
+        const sprintKey = readSprintKey(event.code, settings.bindings);
+        if (!sprintKey) {
+          setMessage("Choose an unused key for sprint. Arrow keys are reserved for movement.");
+          return;
+        }
+        updateSettings({ sprintKey });
+      } else {
+        if (event.code === settings.sprintKey) {
+          setMessage("That key is assigned to sprint. Change the sprint key first.");
+          return;
+        }
+        updateSettings({ bindings: rebind(settings.bindings, bindingAction, event.code) });
+      }
+      setBindingAction(null);
+      setMessage(
+        bindingAction === "sprint"
+          ? "Sprint binding saved."
+          : "Binding saved. If that key was already assigned, the two bindings were swapped.",
+      );
+    };
+    window.addEventListener("keydown", capture, true);
+    return () => window.removeEventListener("keydown", capture, true);
+  }, [bindingAction, page, paused, settings.bindings, settings.sprintKey, updateSettings]);
+  useEffect(() => {
+    if (!paused || page !== "controls") setBindingAction(null);
+  }, [paused, page]);
 
   const toggleFullscreen = async () => {
     try {
@@ -198,15 +259,32 @@ export function PauseMenu() {
           {page === "video" && (
             <div className="menu-settings">
               <label className="setting-row">
-                Render quality
+                Graphics preset
                 <select
+                  aria-label="Graphics preset"
+                  value={settings.graphicsPreset}
+                  onChange={(e) =>
+                    updateSettings({ graphicsPreset: e.target.value as GraphicsPreset })
+                  }
+                >
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                  <option value="ultra">Ultra</option>
+                  <option value="custom">Custom</option>
+                </select>
+              </label>
+              <label className="setting-row">
+                Render scale
+                <select
+                  aria-label="Render scale"
                   value={settings.resolution}
                   onChange={(e) => updateSettings({ resolution: Number(e.target.value) })}
                 >
-                  <option value={0.75}>Low</option>
-                  <option value={1}>Standard</option>
-                  <option value={1.5}>High</option>
-                  <option value={2}>Ultra</option>
+                  <option value={0.75}>75%</option>
+                  <option value={1}>100%</option>
+                  <option value={1.5}>150%</option>
+                  <option value={2}>200%</option>
                 </select>
               </label>
               <button
@@ -215,6 +293,68 @@ export function PauseMenu() {
                 disabled={!document.fullscreenEnabled}
               >
                 Fullscreen<span>{fullscreen ? "On" : "Off"}</span>
+              </button>
+              <button
+                className="setting-row"
+                onClick={() => updateSettings({ adaptiveResolution: !settings.adaptiveResolution })}
+                aria-pressed={settings.adaptiveResolution}
+              >
+                Dynamic resolution
+                <span>{settings.adaptiveResolution ? "On" : "Off"}</span>
+              </button>
+              <label className="setting-row">
+                Automatic resolution target
+                <select
+                  aria-label="Automatic resolution target"
+                  value={settings.frameTarget}
+                  disabled={!settings.adaptiveResolution}
+                  onChange={(e) =>
+                    updateSettings({ frameTarget: Number(e.target.value) as 30 | 60 })
+                  }
+                >
+                  <option value={60}>60 FPS</option>
+                  <option value={30}>30 FPS</option>
+                </select>
+              </label>
+              {(
+                [
+                  ["shadows", "Shadows"],
+                  ["ambientOcclusion", "Ambient occlusion"],
+                  ["particleDetail", "Decorative particles"],
+                ] as const
+              ).map(([key, label]) => (
+                <label className="setting-row" key={key}>
+                  {label}
+                  <select
+                    aria-label={label}
+                    value={settings[key]}
+                    onChange={(e) => updateSettings({ [key]: e.target.value as EffectDetail })}
+                  >
+                    <option value="off">Off</option>
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                  </select>
+                </label>
+              ))}
+              <label className="setting-row">
+                World detail
+                <select
+                  aria-label="World detail"
+                  value={settings.environmentDetail}
+                  onChange={(e) => updateSettings({ environmentDetail: e.target.value as Detail })}
+                >
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                </select>
+              </label>
+              <button
+                className="setting-row"
+                aria-pressed={settings.bloom}
+                onClick={() => updateSettings({ bloom: !settings.bloom })}
+              >
+                Bloom<span>{settings.bloom ? "On" : "Off"}</span>
               </button>
               <label className="setting-row">
                 Brightness
@@ -232,14 +372,15 @@ export function PauseMenu() {
                 </span>
               </label>
               <p className="menu-note">
-                Display changes apply to the world. Settings are saved automatically.
+                Settings are saved automatically. Dynamic resolution stays within your render scale.
+                Graphics quality keeps combat timing and collision consistent.
               </p>
               <button
                 className="menu-reset"
                 onClick={() =>
                   updateSettings({
                     brightness: defaultSettings.brightness,
-                    resolution: defaultSettings.resolution,
+                    ...graphicsPresets.medium,
                   })
                 }
               >
@@ -314,52 +455,80 @@ export function PauseMenu() {
           {page === "controls" && (
             <>
               <dl className="menu-controls">
+                {(Object.keys(bindingLabels) as BindingAction[]).map((action) => (
+                  <div key={action}>
+                    <dt>{bindingLabels[action]}</dt>
+                    <dd>
+                      <button
+                        className="binding-button"
+                        aria-label={`Change ${bindingLabels[action]} binding, currently ${keyLabel(settings.bindings[action])}`}
+                        onClick={() => {
+                          setBindingAction(action);
+                          setMessage("");
+                        }}
+                      >
+                        {bindingAction === action ? (
+                          "Press a key…"
+                        ) : (
+                          <kbd>{keyLabel(settings.bindings[action])}</kbd>
+                        )}
+                      </button>
+                    </dd>
+                  </div>
+                ))}
                 <div>
-                  <dt>Move</dt>
+                  <dt>Sprint controls</dt>
                   <dd>
-                    <kbd>W A S D</kbd> / <kbd>↑ ← ↓ →</kbd>
+                    <select
+                      aria-label="Sprint controls"
+                      value={settings.sprintKey ? "separate" : "shared"}
+                      onChange={(event) => {
+                        setBindingAction(null);
+                        updateSettings({
+                          sprintKey:
+                            event.target.value === "shared"
+                              ? null
+                              : suggestedSprintKey(settings.bindings),
+                        });
+                      }}
+                    >
+                      <option value="shared">Hold dodge key</option>
+                      <option value="separate">Separate sprint key</option>
+                    </select>
                   </dd>
                 </div>
-                <div>
-                  <dt>Jump / climb ledge</dt>
-                  <dd>
-                    <kbd>Space</kbd>
-                  </dd>
-                </div>
-                <div>
-                  <dt>Run</dt>
-                  <dd>
-                    <kbd>Shift</kbd>
-                  </dd>
-                </div>
-                <div>
-                  <dt>Roll</dt>
-                  <dd>
-                    <kbd>F</kbd>
-                  </dd>
-                </div>
-                <div>
-                  <dt>Sit / stand near a log</dt>
-                  <dd>
-                    <kbd>E</kbd>
-                  </dd>
-                </div>
-                <div>
-                  <dt>Attack in boss arena</dt>
-                  <dd>
-                    Left mouse button / <kbd>J</kbd>
-                  </dd>
-                </div>
+                {settings.sprintKey && (
+                  <div>
+                    <dt>Sprint key</dt>
+                    <dd>
+                      <button
+                        className="binding-button"
+                        aria-label={`Change sprint binding, currently ${keyLabel(settings.sprintKey)}`}
+                        onClick={() => {
+                          setBindingAction("sprint");
+                          setMessage("");
+                        }}
+                      >
+                        {bindingAction === "sprint" ? (
+                          "Press a key…"
+                        ) : (
+                          <kbd>{keyLabel(settings.sprintKey)}</kbd>
+                        )}
+                      </button>
+                    </dd>
+                  </div>
+                )}
                 <div>
                   <dt>Spin attack in the Warp Room</dt>
                   <dd>
-                    Left mouse button / <kbd>J</kbd> / <kbd>E</kbd>
+                    Left mouse button / <kbd>{keyLabel(settings.bindings.attack)}</kbd> /{" "}
+                    <kbd>{keyLabel(settings.bindings.interact)}</kbd>
                   </dd>
                 </div>
                 <div>
                   <dt>Drop from ledge</dt>
                   <dd>
-                    <kbd>S</kbd> / <kbd>↓</kbd>
+                    <kbd>{keyLabel(settings.bindings.backward)}</kbd> / <kbd>↓</kbd>
                   </dd>
                 </div>
                 <div>
@@ -374,9 +543,22 @@ export function PauseMenu() {
                 </div>
               </dl>
               <p className="menu-note">
-                You can also drag to look around. Touch controls appear on smaller screens. Jump
-                into a painting to enter it.
+                Select a binding and press a new key; Esc cancels. Dodge while moving to roll or
+                while still to backstep. Choose whether sprint uses a held dodge key or its own key.
+                Arrow keys also move. Left click attacks with the pointer captured. You can also
+                drag to look around. Touch controls appear on smaller screens. Jump into a painting
+                to enter it.
               </p>
+              <button
+                className="menu-reset"
+                onClick={() => {
+                  setBindingAction(null);
+                  updateSettings({ bindings: { ...defaultBindings }, sprintKey: null });
+                  setMessage("Default controls restored.");
+                }}
+              >
+                Reset control defaults
+              </button>
             </>
           )}
           {page === "return" && (

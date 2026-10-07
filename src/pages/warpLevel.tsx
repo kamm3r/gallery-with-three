@@ -1,3 +1,4 @@
+import { useEcsRef } from "../hooks/useEcsRef";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { Physics } from "@react-three/rapier";
 import { Navigate, useNavigate, useParams } from "react-router-dom";
@@ -43,7 +44,7 @@ function LevelRun({ level }: { level: WarpLevel }) {
   const navigate = useNavigate();
   const { paused } = useGame();
   const { schedule, cancel } = useGameTimeout();
-  const run = useRef(createRun(level));
+  const run = useEcsRef("warp-run", () => createRun(level));
   const [ready, setReady] = useState(false);
   const [near, setNear] = useState(false);
   const [leaving, setLeaving] = useState(false);

@@ -1,7 +1,9 @@
+import { InventoryState } from "./ecs/gameplayTraits.ts";
+import { runtimeWorld } from "./ecs/world.ts";
 // A small inventory any world can use. It's scoped to the portal you're in:
 // a level opens its own inventory when you arrive (with its own catalogue of
 // items) and it is cleared when you leave, so nothing carries between worlds
-// yet. Plain module state with subscribe(), so React (useInventory) and
+// yet. ECS inventory with subscribe(), so React (useInventory) and
 // per-frame game code (getInventory) read the same thing.
 
 export type ItemIcon = "flashlight" | "key" | "gas" | "battery" | "fuse" | "medkit" | "drink";
@@ -35,7 +37,6 @@ export interface Inventory {
 export const MAX_SLOTS = 8;
 
 const empty: Inventory = { scope: null, catalogue: {}, slots: [], selected: 0 };
-let state: Inventory = empty;
 const listeners = new Set<() => void>();
 const users = new Set<(id: string) => boolean>();
 
@@ -51,7 +52,7 @@ export function onUse(handler: (id: string) => boolean) {
 }
 
 function commit(next: Inventory) {
-  state = next;
+  runtimeWorld.set(InventoryState, { value: next });
   listeners.forEach((listener) => listener());
 }
 
@@ -62,7 +63,7 @@ export function subscribeInventory(listener: () => void) {
   };
 }
 
-export const getInventory = () => state;
+export const getInventory = () => runtimeWorld.get(InventoryState)!.value;
 
 /** Arrive in a world: a fresh inventory with its catalogue and starting items. */
 export function openInventory(
@@ -80,29 +81,33 @@ export function openInventory(
 
 /** Leave a world: its inventory goes with it (only if it's still the open one). */
 export function closeInventory(scope: string) {
-  if (state.scope === scope) commit(empty);
+  if (getInventory().scope === scope) commit(empty);
 }
 
 export function hasItem(id: string) {
-  return state.slots.some((slot) => slot.id === id);
+  return getInventory().slots.some((slot) => slot.id === id);
 }
 
 export function isOn(id: string) {
-  return state.slots.some((slot) => slot.id === id && slot.on);
+  return getInventory().slots.some((slot) => slot.id === id && slot.on);
 }
 
 /** Returns false if there's no room or the item isn't known to this world. */
 export function addItem(id: string) {
-  if (!state.catalogue[id] || state.slots.length >= MAX_SLOTS) return false;
-  commit({ ...state, slots: [...state.slots, { id, on: false }] });
+  if (!getInventory().catalogue[id] || getInventory().slots.length >= MAX_SLOTS) return false;
+  commit({ ...getInventory(), slots: [...getInventory().slots, { id, on: false }] });
   return true;
 }
 
 export function removeItem(id: string) {
-  const index = state.slots.findIndex((slot) => slot.id === id);
+  const index = getInventory().slots.findIndex((slot) => slot.id === id);
   if (index < 0) return false;
-  const slots = state.slots.filter((_, i) => i !== index);
-  commit({ ...state, slots, selected: Math.min(state.selected, Math.max(0, slots.length - 1)) });
+  const slots = getInventory().slots.filter((_, i) => i !== index);
+  commit({
+    ...getInventory(),
+    slots,
+    selected: Math.min(getInventory().selected, Math.max(0, slots.length - 1)),
+  });
   return true;
 }
 
@@ -113,20 +118,24 @@ export function removeItem(id: string) {
 export function activateSlot(
   index: number,
 ): { item: ItemDef; on: boolean; spent?: boolean } | null {
-  const slot = state.slots[index];
+  const slot = getInventory().slots[index];
   if (!slot) return null;
-  const item = state.catalogue[slot.id];
+  const item = getInventory().catalogue[slot.id];
   if (item.consumable) {
     const spent = [...users].some((use) => use(item.id));
     if (spent) {
-      const slots = state.slots.filter((_, i) => i !== index);
-      commit({ ...state, slots, selected: Math.min(index, Math.max(0, slots.length - 1)) });
+      const slots = getInventory().slots.filter((_, i) => i !== index);
+      commit({
+        ...getInventory(),
+        slots,
+        selected: Math.min(index, Math.max(0, slots.length - 1)),
+      });
     }
     return { item, on: false, spent };
   }
   const slots = item.toggle
-    ? state.slots.map((s, i) => (i === index ? { ...s, on: !s.on } : s))
-    : state.slots;
-  commit({ ...state, slots, selected: index });
+    ? getInventory().slots.map((s, i) => (i === index ? { ...s, on: !s.on } : s))
+    : getInventory().slots;
+  commit({ ...getInventory(), slots, selected: index });
   return { item, on: slots[index].on };
 }

@@ -1,6 +1,8 @@
+import { useEcsRef } from "../hooks/useEcsRef";
 import { useFrame } from "@react-three/fiber";
 import { CylinderCollider, RigidBody, type RapierRigidBody } from "@react-three/rapier";
-import { useEffect, useMemo, useRef, type MutableRefObject } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, type MutableRefObject } from "react";
+import { batchArticulatedMeshes } from "../gameplay/batchArticulatedMeshes";
 import * as THREE from "three";
 import {
   LEAP_AIRTIME,
@@ -438,15 +440,46 @@ const trailFragment = /* glsl */ `
   }
 `;
 
+function createWardenAnimation() {
+  return {
+    pose: { ...IDLE } as Pose,
+    target: { ...IDLE } as Pose,
+    walkPhase: 0,
+    stride: 0,
+    lastX: 0,
+    lastZ: -7,
+    flinch: 0,
+    lastBossHit: 0,
+    lastPlayerHit: 0,
+    lastImpact: 0,
+    lastPhase: "approach" as Encounter["phase"],
+    lastHitIndex: 0,
+    defeatTime: 0,
+    reportTimer: 0,
+    cloakSwing: 0,
+    trailStrength: 0,
+    trailPrimed: false,
+    telegraph: 0,
+    resetVersion: 0,
+  };
+}
+
 export function AshWarden({
   combat,
   report,
+  simulate = true,
+  resetVersion = 0,
 }: {
   combat: MutableRefObject<Encounter>;
   report: (state: Encounter) => void;
+  simulate?: boolean;
+  resetVersion?: number;
 }) {
   const body = useRef<RapierRigidBody>(null);
   const root = useRef<THREE.Group>(null);
+  useLayoutEffect(() => {
+    if (root.current) return batchArticulatedMeshes(root.current);
+  }, []);
   const joints = useRef<Record<string, THREE.Object3D | null>>({});
   const bind = (name: string) => (object: THREE.Object3D | null) => {
     joints.current[name] = object;
@@ -544,32 +577,53 @@ export function AshWarden({
     [materials, telegraphMaterial, leapMaterial, cloakGeometry, blade, trail],
   );
 
-  const runtime = useRef({
-    pose: { ...IDLE } as Pose,
-    target: { ...IDLE } as Pose,
-    walkPhase: 0,
-    stride: 0,
-    lastX: 0,
-    lastZ: -7,
-    flinch: 0,
-    lastBossHit: 0,
-    lastPlayerHit: 0,
-    lastImpact: 0,
-    lastPhase: "approach" as Encounter["phase"],
-    lastHitIndex: 0,
-    defeatTime: 0,
-    reportTimer: 0,
-    cloakSwing: 0,
-    trailStrength: 0,
-    trailPrimed: false,
-    telegraph: 0,
-  });
+  const runtime = useEcsRef("warden-animation", createWardenAnimation);
 
   useFrame((state, delta) => {
     const s = combat.current;
-    const r = runtime.current;
+    let r = runtime.current;
+    if (r.resetVersion !== resetVersion) {
+      // Rapier bodies are ready in the frame loop, including StrictMode's
+      // remount. Retry resets attempt state without recreating GPU resources.
+      r = runtime.current = {
+        ...createWardenAnimation(),
+        lastX: s.bossX,
+        lastZ: s.bossZ,
+        resetVersion,
+      };
+      if (root.current) root.current.position.y = 0;
+      if (body.current) {
+        const alive = s.bossHealth > 0;
+        body.current.userData = { cameraIgnore: true, nonBlocking: !alive };
+        body.current.setEnabled(alive);
+        body.current.setTranslation({ x: s.bossX, y: s.bossY, z: s.bossZ }, true);
+        body.current.setNextKinematicTranslation({ x: s.bossX, y: s.bossY, z: s.bossZ });
+        const facing = { x: 0, y: Math.sin(s.bossYaw / 2), z: 0, w: Math.cos(s.bossYaw / 2) };
+        body.current.setRotation(facing, true);
+        body.current.setNextKinematicRotation(facing);
+      }
+      if (trailMesh.current) trailMesh.current.visible = false;
+      if (telegraph.current) telegraph.current.visible = false;
+      if (leapMarker.current) leapMarker.current.visible = false;
+      trail.material.uniforms.uStrength.value = 0;
+      telegraphMaterial.uniforms.uOpacity.value = 0;
+      leapMaterial.uniforms.uOpacity.value = 0;
+    }
+    const nearby =
+      simulate ||
+      s.bossActive ||
+      s.bossHealth <= 0 ||
+      Math.hypot(state.camera.position.x - s.bossX, state.camera.position.z - s.bossZ) < 54;
+    if (root.current) root.current.visible = nearby;
+    if (!nearby) return;
     const dt = Math.min(delta, 0.05);
-    stepEncounter(s, delta);
+    if (simulate) stepEncounter(s, delta);
+    // The corpse keeps animating, but must leave character sweeps immediately.
+    const alive = s.bossHealth > 0;
+    if (body.current && body.current.isEnabled() !== alive) {
+      body.current.userData = { cameraIgnore: true, nonBlocking: !alive };
+      body.current.setEnabled(alive);
+    }
     const time = state.clock.elapsedTime;
     const spec = moveSpec(s.move);
 
@@ -612,7 +666,9 @@ export function AshWarden({
     // --- Body transform ---
     if (s.phase === "defeated") r.defeatTime += dt;
     const sink = r.defeatTime > 3.2 ? Math.min(5, (r.defeatTime - 3.2) * 0.9) : 0;
-    body.current?.setNextKinematicTranslation({ x: s.bossX, y: s.bossY - sink, z: s.bossZ });
+    // Disabled physics bodies stop integrating; sink the visual rig independently.
+    if (root.current) root.current.position.y = -sink;
+    body.current?.setNextKinematicTranslation({ x: s.bossX, y: s.bossY, z: s.bossZ });
     body.current?.setNextKinematicRotation(rotation.setFromAxisAngle(up, s.bossYaw));
 
     // --- Locomotion ---
@@ -866,9 +922,15 @@ export function AshWarden({
 
   return (
     <>
-      <RigidBody ref={body} type="kinematicPosition" colliders={false} position={[0, 0, -7]}>
+      <RigidBody
+        userData={{ cameraIgnore: true }}
+        ref={body}
+        type="kinematicPosition"
+        colliders={false}
+        position={[0, 0, -7]}
+      >
         <CylinderCollider args={[1.8, 1.05]} position={[0, 1.8, 0]} />
-        <group ref={root}>
+        <group ref={root} name="ash-warden-rig">
           <group ref={bind("pelvis")} position={[0, HIP_HEIGHT, 0]}>
             {leg("L", -0.42)}
             {leg("R", 0.42)}
@@ -958,6 +1020,13 @@ export function AshWarden({
                     <coneGeometry args={[0.05, 0.28, 5]} />
                   </mesh>
                 ))}
+                {/* The parish bellkeeper carries a shattered bell as his crown. */}
+                <mesh position={[0, 0.88, -0.14]} material={steel} castShadow>
+                  <cylinderGeometry args={[0.27, 0.55, 0.55, 10, 1, true, 0.25, Math.PI * 1.65]} />
+                </mesh>
+                <mesh position={[0, 1.2, -0.14]} material={dark}>
+                  <torusGeometry args={[0.13, 0.04, 6, 12]} />
+                </mesh>
               </group>
               {/* Sword arm. */}
               <group ref={bind("rShoulder")} position={[1.05, 1.22, 0]}>
@@ -1009,6 +1078,22 @@ export function AshWarden({
                   <mesh position={[0, -0.92, 0]} material={armor} castShadow>
                     <boxGeometry args={[0.3, 0.32, 0.3]} />
                   </mesh>
+                  {[0, 1, 2, 3, 4].map((i) => (
+                    <mesh
+                      key={i}
+                      position={[0, -1.13 - i * 0.16, 0]}
+                      rotation={[0, i % 2 ? Math.PI / 2 : 0, 0]}
+                      material={steel}
+                    >
+                      <torusGeometry args={[0.085, 0.025, 5, 8]} />
+                    </mesh>
+                  ))}
+                  <mesh position={[0, -1.95, 0]} material={dark} castShadow>
+                    <octahedronGeometry args={[0.3]} />
+                  </mesh>
+                  <mesh position={[0, -1.96, 0.23]} material={molten}>
+                    <sphereGeometry args={[0.13, 8, 6]} />
+                  </mesh>
                 </group>
               </group>
             </group>
@@ -1045,7 +1130,9 @@ export function AshWarden({
         material={leapMaterial}
         visible={false}
       />
-      <ImpactBursts ref={bursts} />
+      <group position={[0, combat.current.groundY, 0]}>
+        <ImpactBursts ref={bursts} />
+      </group>
     </>
   );
 }

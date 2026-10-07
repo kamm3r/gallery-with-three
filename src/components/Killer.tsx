@@ -1,3 +1,4 @@
+import { useEcsRef } from "../hooks/useEcsRef";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useRef, useState, type MutableRefObject } from "react";
 import * as THREE from "three";
@@ -30,8 +31,8 @@ export function Killer({ night }: { night: MutableRefObject<Night> }) {
     animation: "Idle",
     pace: 1,
   });
-  const stride = useRef(0);
-  const last = useRef({ x: night.current.killer.x, z: night.current.killer.z });
+  const stride = useEcsRef("stride", () => 0);
+  const last = useEcsRef("last", () => ({ x: night.current.killer.x, z: night.current.killer.z }));
   const [shifting, setShifting] = useState(false);
 
   useFrame((state, delta) => {

@@ -1,13 +1,17 @@
 import { createContext, useContext } from "react";
+import { defaultBindings, readBindings, readSprintKey } from "./gameplay/controlBindings";
+import { graphicsPresets, readGraphicsSettings } from "./gameplay/graphicsSettings";
 
 export const defaultSettings = {
   soundVolume: 60,
   brightness: 100,
-  resolution: 1.5,
+  ...graphicsPresets.medium,
   sensitivity: 100,
   invertY: false,
   showHints: true,
   reducedMotion: false,
+  bindings: defaultBindings,
+  sprintKey: null as string | null,
 };
 export type GameSettings = typeof defaultSettings;
 export const settingsKey = "painted-forest.settings.v1";
@@ -15,8 +19,11 @@ export const settingsKey = "painted-forest.settings.v1";
 export function readSettings(): GameSettings {
   try {
     const saved = JSON.parse(localStorage.getItem(settingsKey) ?? "{}");
-    const settings = { ...defaultSettings };
-    for (const key of ["invertY", "showHints", "reducedMotion"] as const) {
+    const settings = {
+      ...defaultSettings,
+      ...readGraphicsSettings(saved && typeof saved === "object" ? saved : {}),
+    };
+    for (const key of ["invertY", "showHints", "reducedMotion", "adaptiveResolution"] as const) {
       if (typeof saved?.[key] === "boolean") settings[key] = saved[key];
     }
     for (const [key, min, max] of [
@@ -29,6 +36,8 @@ export function readSettings(): GameSettings {
         settings[key] = Math.min(max, Math.max(min, saved[key]));
       }
     }
+    settings.bindings = readBindings(saved?.bindings);
+    settings.sprintKey = readSprintKey(saved?.sprintKey, settings.bindings);
     return settings;
   } catch {
     return { ...defaultSettings };

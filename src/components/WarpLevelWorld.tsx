@@ -1,3 +1,4 @@
+import { useEcsRef } from "../hooks/useEcsRef";
 import { useFrame } from "@react-three/fiber";
 import { CuboidCollider, RigidBody } from "@react-three/rapier";
 import { useCallback, useMemo, useRef, useState, type MutableRefObject } from "react";
@@ -81,13 +82,13 @@ export function WarpLevelWorld({
   onEvents,
   onReady,
 }: WarpLevelWorldProps) {
-  const link = useRef(createPlatformerLink());
-  const teleport = useRef<Vec3 | null>(null);
+  const link = useEcsRef("platformer-player", createPlatformerLink);
+  const teleport = useEcsRef<Vec3 | null>("teleport", () => null);
   const bursts = useRef<Burst[]>([]);
   const [, setCrateVersion] = useState(0);
   const boulder = useRef<THREE.Group>(null);
   const critters = useRef<(THREE.Group | null)[]>([]);
-  const deadAt = useRef<number[]>(level.enemies.map(() => -1));
+  const deadAt = useEcsRef("warp-enemy-deaths", () => level.enemies.map(() => -1));
   const rumble = useRef(0);
   const { theme } = level;
 

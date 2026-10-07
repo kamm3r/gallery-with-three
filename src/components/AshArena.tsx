@@ -3,6 +3,8 @@ import { CuboidCollider, CylinderCollider, RigidBody } from "@react-three/rapier
 import { useEffect, useMemo, useRef, type MutableRefObject } from "react";
 import * as THREE from "three";
 import type { Encounter } from "../gameplay/bossEncounter";
+import { StaticScenery } from "./StaticScenery";
+import { arenaBackdropSpawns } from "../gameplay/ashenParish";
 import { sunlight } from "../gameplay/sunlight";
 import { Embers, NOISE_GLSL, type EmbersHandle } from "./ashFx";
 import type { AtmosphereSettings } from "./AtmosphereEffect";
@@ -17,14 +19,15 @@ const HORIZON = "#4a2b23";
 const ASH_FOG = "#34221e";
 
 export const ASH_ATMOSPHERE: AtmosphereSettings = {
-  density: 0.018,
+  density: 0.009,
   falloff: 0.11,
-  fogStart: 6,
+  fogStart: 12,
   skyFog: 0.35,
-  scatter: 0.55,
-  shafts: 0.9,
+  scatter: 0.22,
+  shafts: 0.35,
   shaftDensity: 0.028,
   shaftDistance: 42,
+  shaftSteps: 12,
 };
 
 function seeded(seed: number) {
@@ -375,21 +378,7 @@ function RuinedPillar({
 }
 
 function DistantRuins() {
-  const pieces = useMemo(() => {
-    const random = seeded(31);
-    return Array.from({ length: 26 }, (_, i) => {
-      const angle = (i / 26) * Math.PI * 2 + random() * 0.15;
-      const radius = 40 + random() * 34;
-      return {
-        x: Math.sin(angle) * radius,
-        z: Math.cos(angle) * radius,
-        yaw: angle + Math.PI / 2,
-        kind: i % 3,
-        height: 10 + random() * 26,
-        lean: (random() - 0.5) * 0.25,
-      };
-    });
-  }, []);
+  const pieces = arenaBackdropSpawns;
   return (
     <group>
       {pieces.map((piece, i) => (
@@ -434,6 +423,7 @@ function DistantRuins() {
 }
 
 export function AshArena({ combat }: { combat: MutableRefObject<Encounter> }) {
+  const sun = useRef<THREE.DirectionalLight>(null);
   const textures = useMemo(floorTextures, []);
   useEffect(
     () => () => {
@@ -483,6 +473,39 @@ export function AshArena({ combat }: { combat: MutableRefObject<Encounter> }) {
 
   useFrame((state, delta) => {
     const s = combat.current;
+    if (sun.current) {
+      // A local shadow window follows the player instead of rendering the
+      // arena's distant casters throughout the entire parish visit.
+      const texel = 52 / 1024;
+      const x = Math.round(s.playerX / texel) * texel;
+      const z = Math.round(s.playerZ / texel) * texel;
+      sun.current.position.set(x + ASH_SUN.x * 40, s.playerY + ASH_SUN.y * 40, z + ASH_SUN.z * 40);
+      sun.current.target.position.set(x, s.playerY, z);
+      sun.current.target.updateMatrixWorld();
+    }
+    const fighting = s.bossActive || s.enraged;
+    sunlight.fogColor.value.set(fighting ? ASH_FOG : "#73776c");
+    if (state.scene.fog instanceof THREE.Fog) {
+      state.scene.fog.color.copy(sunlight.fogColor.value);
+      // Distant traversable landmarks remain readable during exploration.
+      state.scene.fog.near = THREE.MathUtils.damp(
+        state.scene.fog.near,
+        fighting ? 24 : 40,
+        3,
+        Math.min(delta, 0.05),
+      );
+      state.scene.fog.far = THREE.MathUtils.damp(
+        state.scene.fog.far,
+        fighting ? 95 : 190,
+        3,
+        Math.min(delta, 0.05),
+      );
+    }
+    skyMaterial.uniforms.uHorizon.value.set(fighting ? HORIZON : "#81705d");
+    if (sun.current) {
+      sun.current.color.set(fighting ? "#ff9f68" : "#e4d6bd");
+      sun.current.intensity = fighting ? 2.4 : 1.65;
+    }
     const f = fx.current;
     const dt = Math.min(delta, 0.05);
     f.enrage = THREE.MathUtils.damp(f.enrage, s.enraged && s.phase !== "defeated" ? 1 : 0, 1.2, dt);
@@ -505,11 +528,12 @@ export function AshArena({ combat }: { combat: MutableRefObject<Encounter> }) {
       <fog attach="fog" args={[ASH_FOG, 24, 95]} />
       <hemisphereLight args={["#6f7892", "#2a1b16", 0.75]} />
       <directionalLight
+        ref={sun}
         position={ASH_SUN.clone().multiplyScalar(40).toArray()}
         intensity={2.4}
         color="#ff9f68"
         castShadow
-        shadow-mapSize={[2048, 2048]}
+        shadow-mapSize={[1024, 1024]}
         shadow-camera-left={-26}
         shadow-camera-right={26}
         shadow-camera-top={26}
@@ -524,10 +548,10 @@ export function AshArena({ combat }: { combat: MutableRefObject<Encounter> }) {
       </mesh>
 
       <RigidBody type="fixed" colliders={false}>
-        <CuboidCollider args={[40, 0.5, 40]} position={[0, -0.5, 0]} />
+        <CuboidCollider args={[23, 0.5, 23]} position={[0, -0.5, 0]} />
       </RigidBody>
       <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-        <circleGeometry args={[FLOOR_RADIUS, 96]} />
+        <planeGeometry args={[FLOOR_RADIUS * 2, FLOOR_RADIUS * 2]} />
         <meshStandardMaterial
           ref={floor}
           map={textures.map}
@@ -537,19 +561,21 @@ export function AshArena({ combat }: { combat: MutableRefObject<Encounter> }) {
           roughness={0.9}
         />
       </mesh>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.02, 0]} receiveShadow>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -12, 0]} receiveShadow>
         <ringGeometry args={[FLOOR_RADIUS - 0.2, 260, 64]} />
         <meshStandardMaterial color="#1a1614" roughness={1} />
       </mesh>
       {/* Raised curb framing the arena floor. */}
-      <mesh position={[0, 0.12, 0]} receiveShadow castShadow>
+      <mesh position={[0, 0.12, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow castShadow>
         <torusGeometry args={[FLOOR_RADIUS, 0.3, 6, 96]} />
         <meshStandardMaterial color="#2b2725" roughness={0.95} />
       </mesh>
 
-      {pillars.map((pillar, i) => (
-        <RuinedPillar key={i} {...pillar} />
-      ))}
+      <StaticScenery>
+        {pillars.map((pillar, i) => (
+          <RuinedPillar key={i} {...pillar} />
+        ))}
+      </StaticScenery>
       {[
         [11.7, 11.7],
         [-11.7, 11.7],
@@ -558,7 +584,9 @@ export function AshArena({ combat }: { combat: MutableRefObject<Encounter> }) {
       ].map(([x, z], i) => (
         <Brazier key={i} position={[x, 0, z]} seed={i} />
       ))}
-      <DistantRuins />
+      <StaticScenery>
+        <DistantRuins />
+      </StaticScenery>
 
       <Embers
         count={900}

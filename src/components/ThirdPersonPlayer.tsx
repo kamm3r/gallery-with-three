@@ -1,3 +1,11 @@
+import {
+  COMBAT_CAMERA,
+  blocksCamera,
+  createCameraArm,
+  stepCameraArm,
+} from "../gameplay/combatCamera";
+import { createCombatInput, stepCombatInput } from "../gameplay/combatInput";
+import { useEcsRef } from "../hooks/useEcsRef";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useGame } from "../gameSettings";
 import { useRapier } from "@react-three/rapier";
@@ -28,7 +36,8 @@ import { PlayerView } from "../gameplay/ecs/traits";
 import {
   canEnterPortal,
   canGrabLedge,
-  consumeRollPress,
+  BACKSTEP_DURATION,
+  BACKSTEP_SPEED,
   HANG_TIMEOUT,
   LEDGE_TOP_MAX,
   LEDGE_WALL_REACH,
@@ -61,6 +70,7 @@ interface ThirdPersonPlayerProps {
   boundary?: number;
   bounds?: [number, number];
   cameraDistance?: number;
+  cameraStyle?: "orbit" | "combat";
   onNearPortal: (portalId: string | null) => void;
   onEnterPortal: (portalId: string) => void;
   onHangChange: (hanging: boolean) => void;
@@ -98,6 +108,8 @@ interface PlayerRuntimeProps {
   boundary: number;
   bounds?: [number, number];
   cameraDistance: number;
+  cameraStyle: "orbit" | "combat";
+  cameraZoomRef: MutableRefObject<number>;
   cameraYawRef: MutableRefObject<number>;
   cameraHeightRef: MutableRefObject<number>;
   enteringRef: MutableRefObject<boolean>;
@@ -126,6 +138,7 @@ interface HangState {
 
 interface RollState {
   active: boolean;
+  backstep: boolean;
   elapsed: number;
   cooldown: number;
   lastPress: number;
@@ -155,7 +168,6 @@ const CAMERA_MIN_DISTANCE = 0.6;
 const INDOOR_DISTANCE = 3;
 const INDOOR_SHOULDER = 0.95;
 const cameraRight = new THREE.Vector3();
-let indoorBlend = 0;
 // TEMP-PROOF (revert before ship): ?debugseat=N teleports next to log marker N.
 const DEBUG_SEAT =
   typeof window === "undefined" ||
@@ -183,6 +195,8 @@ function PlayerRuntime({
   boundary,
   bounds,
   cameraDistance,
+  cameraStyle,
+  cameraZoomRef,
   cameraYawRef,
   cameraHeightRef,
   enteringRef,
@@ -195,17 +209,23 @@ function PlayerRuntime({
   teleportRef,
 }: PlayerRuntimeProps) {
   const { camera, scene } = useThree();
+  const { paused } = useGame();
   const { world, rapier } = useRapier();
   const cameraProbe = useMemo(() => new rapier.Ball(CAMERA_PROBE_RADIUS), [rapier]);
-  const wasGrounded = useRef(true);
-  const previousVerticalSpeed = useRef(0);
-  const landingCompression = useRef(0);
-  const proximity = useRef<string | null>(null);
-  const notifiedHang = useRef(false);
-  const actionRef = useRef<ActionName>("Idle");
-  const landingTime = useRef(0);
-  const stepTime = useRef(0);
-  const dbgTeleported = useRef(false); // TEMP-PROOF: revert.
+  const cameraArm = useEcsRef("camera-arm", () => createCameraArm(cameraDistance));
+  const indoorBlend = useEcsRef("camera-indoor-blend", () => 0);
+  const actionBuffer = useEcsRef("combat-input-buffer", () =>
+    createCombatInput(controlsRef.current.attackPress, controlsRef.current.rollPress),
+  );
+  const wasGrounded = useEcsRef("wasGrounded", () => true);
+  const previousVerticalSpeed = useEcsRef("previousVerticalSpeed", () => 0);
+  const landingCompression = useEcsRef("landingCompression", () => 0);
+  const proximity = useEcsRef<string | null>("proximity", () => null);
+  const notifiedHang = useEcsRef("notifiedHang", () => false);
+  const actionRef = useEcsRef<ActionName>("actionRef", () => "Idle");
+  const landingTime = useEcsRef("landingTime", () => 0);
+  const stepTime = useEcsRef("stepTime", () => 0);
+  const dbgTeleported = useEcsRef("dbgTeleported", () => false); // TEMP-PROOF: revert.
   const reducedMotion = useReducedMotion();
 
   useFrame((frame, rawDelta) => {
@@ -237,6 +257,10 @@ function PlayerRuntime({
       };
     }
     if (combatRef && combatRef.current.health <= 0) {
+      actionBuffer.current = createCombatInput(
+        controlsRef.current.attackPress,
+        controlsRef.current.rollPress,
+      );
       rollRef.current.active = false;
       hangRef.current.active = false;
       velocity.set(0, 0, 0);
@@ -253,6 +277,11 @@ function PlayerRuntime({
       return;
     }
     const teleport = teleportRef?.current;
+    if (position.y < -20 && combatRef?.current.fatalFalls && !teleport) {
+      combatRef.current.health = 0;
+      combatRef.current.playerHitId++;
+      return;
+    }
     if (position.y < -20 || teleport) {
       const target = teleport ?? respawn;
       if (teleportRef) teleportRef.current = null;
@@ -265,8 +294,26 @@ function PlayerRuntime({
       enteringRef.current = false;
       hangRef.current.active = false;
       rollRef.current.active = false;
+      rollRef.current.elapsed = 0;
+      rollRef.current.cooldown = 0;
+      rollRef.current.lastPress = controlsRef.current.rollPress;
+      wasGrounded.current = true;
+      previousVerticalSpeed.current = 0;
+      landingCompression.current = 0;
+      landingTime.current = 0;
+      stepTime.current = 0;
+      actionBuffer.current = createCombatInput(
+        controlsRef.current.attackPress,
+        controlsRef.current.rollPress,
+      );
       seatRef.current.active = false;
       seatRef.current.standing = 0;
+      seatRef.current.want = 0;
+      seatRef.current.press = controlsRef.current.interactPress;
+      hangRef.current.lastJumpPress = controlsRef.current.jumpPress;
+      actionRef.current = "Idle";
+      setAction("Idle");
+      cameraArm.current = createCameraArm(cameraZoomRef.current);
       cameraYawRef.current = 0;
       camera.position.set(target[0], target[1] + 3.6, target[2] + cameraDistance);
       onHangChange(false);
@@ -384,35 +431,57 @@ function PlayerRuntime({
       }
     }
     const fight = combatRef?.current;
+    let requested = { attack: false, dodge: false };
+    const resolveActions = () =>
+      stepCombatInput(
+        actionBuffer.current,
+        input,
+        {
+          blocked:
+            paused ||
+            enteringRef.current ||
+            seat.active ||
+            hangRef.current.active ||
+            isResultScreenActive() ||
+            Boolean(link?.frozen) ||
+            Boolean(
+              fight && (fight.health <= 0 || (fight.bossHealth <= 0 && fight.freezeOnVictory)),
+            ),
+          stunned: Boolean(fight && fight.hurtTime > 0),
+          grounded,
+          rolling: rollRef.current.active,
+          cooldown: Math.max(0, rollRef.current.cooldown - delta),
+          attackId: fight?.attackId ?? 1,
+          attackRemaining: fight?.attackTime ?? 0,
+          stamina: fight?.stamina ?? 100,
+          canAttack: Boolean(fight),
+        },
+        delta,
+      );
     if (fight) {
       // Mutable simulation state shared with the boss, not React render state.
       // eslint-disable-next-line react-hooks/immutability
       fight.playerX = position.x;
+      fight.playerY = position.y - PLAYER_CENTER_HEIGHT;
       fight.playerZ = position.z;
       fight.playerYaw = Math.atan2(player.bodyZAxis.x, player.bodyZAxis.z);
       fight.attackTime = Math.max(0, fight.attackTime - delta);
-      if (fight.inputAttack !== input.attackPress) {
-        fight.inputAttack = input.attackPress;
-        if (
-          fight.health > 0 &&
-          fight.bossHealth > 0 &&
-          grounded &&
-          !rollRef.current.active &&
-          !hangRef.current.active &&
-          fight.attackTime === 0 &&
-          fight.stamina >= 20
-        ) {
-          fight.stamina -= 20;
-          fight.attackId++;
-          fight.attackTime =
-            CLIP_SECONDS[fight.attackId % 2 ? "SwordSlashQuick" : "SwordSlashHeavy"];
-        }
+      requested = resolveActions();
+      fight.inputAttack = input.attackPress;
+      if (requested.attack) {
+        fight.stamina -= 20;
+        fight.attackId++;
+        fight.attackTime = CLIP_SECONDS[fight.attackId % 2 ? "SwordSlashQuick" : "SwordSlashHeavy"];
       }
+      if (requested.dodge) fight.attackTime = 0;
       fight.invulnerable =
-        rollRef.current.active && rollRef.current.elapsed > 0.08 && rollRef.current.elapsed < 0.55;
+        rollRef.current.active &&
+        !rollRef.current.backstep &&
+        rollRef.current.elapsed > 0.08 &&
+        rollRef.current.elapsed < 0.55;
       // A landed blow interrupts the swing: no trading through hitstun.
       if (fight.hurtTime > 0) fight.attackTime = 0;
-    }
+    } else requested = resolveActions();
     const enabled =
       !enteringRef.current &&
       !seat.active &&
@@ -427,24 +496,18 @@ function PlayerRuntime({
     const hang = hangRef.current;
     const roll = rollRef.current;
 
-    // Roll (F): edge-triggered one-shot burst. The controller keeps owning
+    // Dodge: one buffered burst. The controller keeps owning
     // every physics step after the trigger, so this can't fight it.
     roll.cooldown = Math.max(0, roll.cooldown - delta);
-    const rollRequest = consumeRollPress({
-      grounded: grounded && enabled && !hang.active && (!fight || fight.stamina >= 25),
-      rolling: roll.active,
-      cooldownRemaining: roll.cooldown,
-      rollPress: input.rollPress,
-      lastRollPress: roll.lastPress,
-    });
-    // Always consume the edge, even when unavailable. Never queue a burst.
-    roll.lastPress = rollRequest.lastPress;
+    // Buffer a short recovery/landing overlap, then consume exactly one dodge.
+    roll.lastPress = input.rollPress;
     if (!roll.active && enabled && !hang.active) {
-      if (rollRequest.start) {
+      if (requested.dodge) {
         const forwardAmount = (input.forward ? 1 : 0) - (input.backward ? 1 : 0);
         const sideAmount = (input.right ? 1 : 0) - (input.left ? 1 : 0);
         const yaw = cameraYawRef.current;
-        if (forwardAmount !== 0 || sideAmount !== 0) {
+        roll.backstep = forwardAmount === 0 && sideAmount === 0;
+        if (!roll.backstep) {
           roll.dir
             .set(
               -Math.sin(yaw) * forwardAmount + Math.cos(yaw) * sideAmount,
@@ -453,25 +516,25 @@ function PlayerRuntime({
             )
             .normalize();
         } else {
-          // Souls-like: no input rolls toward where the character faces.
+          // Stationary dodge steps backward without changing facing.
           // The controller steers body +Z into travel, exposed as bodyZAxis.
           const facing = player.bodyZAxis;
           const facingLength = Math.hypot(facing.x, facing.z);
           if (facingLength > 0.01) {
-            roll.dir.set(facing.x / facingLength, 0, facing.z / facingLength);
+            roll.dir.set(-facing.x / facingLength, 0, -facing.z / facingLength);
           } else {
-            roll.dir.set(-Math.sin(yaw), 0, -Math.cos(yaw));
+            roll.dir.set(Math.sin(yaw), 0, Math.cos(yaw));
           }
         }
         roll.active = true;
         if (fight) fight.stamina -= 25;
         roll.elapsed = 0;
-        roll.cooldown = ROLL_COOLDOWN;
+        roll.cooldown = roll.backstep ? BACKSTEP_DURATION : ROLL_COOLDOWN;
         roll.lastPress = input.rollPress;
-        velocity.x = roll.dir.x * ROLL_SPEED;
-        velocity.z = roll.dir.z * ROLL_SPEED;
+        velocity.x = roll.dir.x * (roll.backstep ? BACKSTEP_SPEED : ROLL_SPEED);
+        velocity.z = roll.dir.z * (roll.backstep ? BACKSTEP_SPEED : ROLL_SPEED);
       } else if (!grounded) {
-        // Swallow presses made mid-air so landing doesn't auto-roll.
+        // Only the bounded input buffer can survive a near-landing press.
         roll.lastPress = input.rollPress;
       }
     }
@@ -479,11 +542,12 @@ function PlayerRuntime({
       roll.elapsed += delta;
       // Sustain the burst every frame: the controller's speed regulation
       // would bleed it back to run speed. Ease off toward the end.
-      const progress = Math.min(roll.elapsed / ROLL_DURATION, 1);
-      const speed = ROLL_SPEED * (1 - 0.35 * progress);
+      const duration = roll.backstep ? BACKSTEP_DURATION : ROLL_DURATION;
+      const progress = Math.min(roll.elapsed / duration, 1);
+      const speed = (roll.backstep ? BACKSTEP_SPEED : ROLL_SPEED) * (1 - 0.35 * progress);
       velocity.x = roll.dir.x * speed;
       velocity.z = roll.dir.z * speed;
-      if (roll.elapsed >= ROLL_DURATION) {
+      if (roll.elapsed >= duration) {
         roll.active = false;
         roll.lastPress = input.rollPress;
       }
@@ -684,7 +748,10 @@ function PlayerRuntime({
     const nextAction: ActionName =
       (fight && fight.health <= 0) || link?.frozen
         ? "Death"
-        : fight && fight.bossHealth <= 0 && grounded
+        : fight &&
+            fight.bossHealth <= 0 &&
+            (fight.freezeOnVictory || isResultScreenActive()) &&
+            grounded
           ? "Victory"
           : fight && fight.hurtTime > 0
             ? "RecieveHit"
@@ -705,7 +772,9 @@ function PlayerRuntime({
                       ? "LedgeGrab"
                       : "LedgeHang"
                   : roll.active
-                    ? "Roll"
+                    ? roll.backstep
+                      ? "Backstep"
+                      : "Roll"
                     : !grounded
                       ? velocity.y > 0
                         ? "JumpRise"
@@ -722,7 +791,7 @@ function PlayerRuntime({
       if (nextAction === "SwordSlashQuick" || nextAction === "SwordSlashHeavy") playSound("slash");
       actionRef.current = nextAction;
       setAction(nextAction);
-      if (nextAction === "Roll") playSound("roll");
+      if (nextAction === "Roll" || nextAction === "Backstep") playSound("roll");
       if (nextAction === "LedgeGrab") playSound("grab");
     }
     if (nextAction === "Walk" || nextAction === "Run") {
@@ -756,27 +825,50 @@ function PlayerRuntime({
     // Keeping the player and camera on the same timeline removes visual jitter.
     headingGroup.getWorldPosition(renderedPlayerPosition);
     cameraForward.set(-Math.sin(cameraYawRef.current), 0, -Math.cos(cameraYawRef.current));
-    // Indoors, blend to a close over-the-shoulder rig: the same mouse pitch,
-    // remapped from "high above" to "just over the shoulder".
-    indoorBlend = THREE.MathUtils.damp(indoorBlend, cameraRig.indoor ? 1 : 0, 5, delta);
-    const pitch = (cameraHeightRef.current - 2.65) / (4.8 - 2.65);
-    const height = THREE.MathUtils.lerp(cameraHeightRef.current, 1.7 + pitch * 0.9, indoorBlend);
-    const distance = THREE.MathUtils.lerp(cameraDistance, INDOOR_DISTANCE, indoorBlend);
-    cameraRight
-      .set(Math.cos(cameraYawRef.current), 0, -Math.sin(cameraYawRef.current))
-      .multiplyScalar(INDOOR_SHOULDER * indoorBlend);
-    cameraTarget.set(
-      renderedPlayerPosition.x + cameraRight.x,
-      renderedPlayerPosition.y + THREE.MathUtils.lerp(1.25, 1.45, indoorBlend),
-      renderedPlayerPosition.z + cameraRight.z,
-    );
+    if (cameraStyle === "combat") {
+      // True spherical free look: keep orbit input direct and smooth only occlusion recovery.
+      cameraTarget.set(
+        renderedPlayerPosition.x,
+        renderedPlayerPosition.y + COMBAT_CAMERA.targetHeight,
+        renderedPlayerPosition.z,
+      );
+      const orbitPitch = cameraHeightRef.current;
+      desiredCameraPosition
+        .copy(cameraTarget)
+        .addScaledVector(cameraForward, -Math.cos(orbitPitch) * cameraZoomRef.current);
+      desiredCameraPosition.y += Math.sin(orbitPitch) * cameraZoomRef.current;
+    } else {
+      // Indoors, blend to a close over-the-shoulder rig: the same mouse pitch,
+      // remapped from "high above" to "just over the shoulder".
+      indoorBlend.current = THREE.MathUtils.damp(
+        indoorBlend.current,
+        cameraRig.indoor ? 1 : 0,
+        5,
+        delta,
+      );
+      const pitch = (cameraHeightRef.current - 2.65) / (4.8 - 2.65);
+      const height = THREE.MathUtils.lerp(
+        cameraHeightRef.current,
+        1.7 + pitch * 0.9,
+        indoorBlend.current,
+      );
+      const distance = THREE.MathUtils.lerp(cameraDistance, INDOOR_DISTANCE, indoorBlend.current);
+      cameraRight
+        .set(Math.cos(cameraYawRef.current), 0, -Math.sin(cameraYawRef.current))
+        .multiplyScalar(INDOOR_SHOULDER * indoorBlend.current);
+      cameraTarget.set(
+        renderedPlayerPosition.x + cameraRight.x,
+        renderedPlayerPosition.y + THREE.MathUtils.lerp(1.25, 1.45, indoorBlend.current),
+        renderedPlayerPosition.z + cameraRight.z,
+      );
 
-    desiredCameraPosition
-      .copy(cameraForward)
-      .multiplyScalar(-distance)
-      .setY(renderedPlayerPosition.y + height)
-      .add(cameraGround.set(renderedPlayerPosition.x, 0, renderedPlayerPosition.z))
-      .add(cameraRight);
+      desiredCameraPosition
+        .copy(cameraForward)
+        .multiplyScalar(-distance)
+        .setY(renderedPlayerPosition.y + height)
+        .add(cameraGround.set(renderedPlayerPosition.x, 0, renderedPlayerPosition.z))
+        .add(cameraRight);
+    }
 
     cameraRayDirection.copy(desiredCameraPosition).sub(cameraTarget);
     const desiredCameraDistance = cameraRayDirection.length();
@@ -795,15 +887,24 @@ function PlayerRuntime({
       undefined,
       undefined,
       body,
+      blocksCamera,
     );
     const allowedDistance = cameraHit
-      ? Math.max(CAMERA_MIN_DISTANCE, cameraHit.time_of_impact - 0.05)
+      ? Math.max(
+          cameraStyle === "combat" ? 0.05 : CAMERA_MIN_DISTANCE,
+          cameraHit.time_of_impact - 0.05,
+        )
       : desiredCameraDistance;
     desiredCameraPosition
       .copy(cameraRayDirection)
       .multiplyScalar(allowedDistance)
       .add(cameraTarget);
-    camera.position.lerp(desiredCameraPosition, 1 - Math.exp(-9 * delta));
+    if (cameraStyle === "combat") {
+      const arm = stepCameraArm(cameraArm.current, allowedDistance, delta);
+      camera.position.copy(cameraTarget).addScaledVector(cameraRayDirection, arm);
+    } else {
+      camera.position.lerp(desiredCameraPosition, 1 - Math.exp(-9 * delta));
+    }
     // Never let smoothing drag the lens behind geometry: pull in instantly,
     // ease back out.
     cameraOffset.copy(camera.position).sub(cameraTarget);
@@ -881,6 +982,7 @@ export function ThirdPersonPlayer({
   boundary = 24,
   bounds,
   cameraDistance = 6.5,
+  cameraStyle = "orbit",
   onNearPortal,
   onEnterPortal,
   onHangChange,
@@ -898,10 +1000,13 @@ export function ThirdPersonPlayer({
   const controlsRef = usePlayerControls(Boolean(combat || platformer));
   const { paused, settings } = useGame();
   const { camera, gl } = useThree();
-  const cameraYawRef = useRef(startYaw - Math.PI);
-  const cameraHeightRef = useRef(3.6);
-  const enteringRef = useRef(false);
-  const seatRef = useRef({
+  const cameraYawRef = useEcsRef("cameraYawRef", () => startYaw - Math.PI);
+  const cameraHeightRef = useEcsRef("cameraHeightRef", () =>
+    cameraStyle === "combat" ? COMBAT_CAMERA.pitch : 3.6,
+  );
+  const cameraZoomRef = useEcsRef("camera-zoom", () => cameraDistance);
+  const enteringRef = useEcsRef("enteringRef", () => false);
+  const seatRef = useEcsRef("seatRef", () => ({
     active: false,
     press: 0,
     standing: 0,
@@ -909,8 +1014,8 @@ export function ThirdPersonPlayer({
     position: new THREE.Vector3(),
     yaw: 0,
     want: 0,
-  });
-  const hangRef = useRef<HangState>({
+  }));
+  const hangRef = useEcsRef<HangState>("hangRef", () => ({
     active: false,
     climbTime: -1,
     climbStart: new THREE.Vector3(),
@@ -919,14 +1024,15 @@ export function ThirdPersonPlayer({
     point: new THREE.Vector3(),
     normal: new THREE.Vector3(0, 0, 1),
     forward: new THREE.Vector3(0, 0, -1),
-  });
-  const rollRef = useRef<RollState>({
+  }));
+  const rollRef = useEcsRef<RollState>("rollRef", () => ({
     active: false,
+    backstep: false,
     elapsed: 0,
     cooldown: 0,
     lastPress: 0,
     dir: new THREE.Vector3(0, 0, -1),
-  });
+  }));
   const [action, setAction] = useState<ActionName>("Idle");
   // Hang, seat and death pin the body themselves; the controller stands down.
   const suspended = useCallback(
@@ -949,14 +1055,17 @@ export function ThirdPersonPlayer({
 
   useLayoutEffect(() => {
     const [x, y, z] = initialPosition;
+    const combatCamera = cameraStyle === "combat";
+    const distance = cameraDistance * (combatCamera ? Math.cos(COMBAT_CAMERA.pitch) : 1);
+    const targetY = y + (combatCamera ? COMBAT_CAMERA.targetHeight : 1.25);
     camera.position.set(
-      x + Math.sin(startYaw - Math.PI) * cameraDistance,
-      y + 3.6,
-      z + Math.cos(startYaw - Math.PI) * cameraDistance,
+      x + Math.sin(startYaw - Math.PI) * distance,
+      combatCamera ? targetY + Math.sin(COMBAT_CAMERA.pitch) * cameraDistance : y + 3.6,
+      z + Math.cos(startYaw - Math.PI) * distance,
     );
-    cameraTarget.set(x, y + 1.25, z);
+    cameraTarget.set(x, targetY, z);
     camera.lookAt(cameraTarget);
-  }, [camera, cameraDistance, initialPosition, startYaw]);
+  }, [camera, cameraDistance, cameraStyle, initialPosition, startYaw]);
 
   useLayoutEffect(() => {
     onReady?.();
@@ -995,9 +1104,10 @@ export function ThirdPersonPlayer({
       cameraYawRef.current -= (deltaX * 0.004 * settings.sensitivity) / 100;
       cameraHeightRef.current = THREE.MathUtils.clamp(
         cameraHeightRef.current +
-          ((deltaY * 0.008 * settings.sensitivity) / 100) * (settings.invertY ? -1 : 1),
-        2.65,
-        4.8,
+          ((deltaY * (cameraStyle === "combat" ? 0.003 : 0.008) * settings.sensitivity) / 100) *
+            (settings.invertY ? -1 : 1),
+        cameraStyle === "combat" ? COMBAT_CAMERA.minPitch : 2.65,
+        cameraStyle === "combat" ? COMBAT_CAMERA.maxPitch : 4.8,
       );
     };
     const stopOrbit = (event: PointerEvent) => {
@@ -1032,11 +1142,26 @@ export function ThirdPersonPlayer({
       cameraYawRef.current -= (event.movementX * 0.004 * settings.sensitivity) / 100;
       cameraHeightRef.current = THREE.MathUtils.clamp(
         cameraHeightRef.current +
-          ((event.movementY * 0.008 * settings.sensitivity) / 100) * (settings.invertY ? -1 : 1),
-        2.65,
-        4.8,
+          ((event.movementY * (cameraStyle === "combat" ? 0.003 : 0.008) * settings.sensitivity) /
+            100) *
+            (settings.invertY ? -1 : 1),
+        cameraStyle === "combat" ? COMBAT_CAMERA.minPitch : 2.65,
+        cameraStyle === "combat" ? COMBAT_CAMERA.maxPitch : 4.8,
       );
     };
+    const zoom = (event: WheelEvent) => {
+      if (cameraStyle !== "combat") return;
+      event.preventDefault();
+      const pixels =
+        event.deltaY *
+        (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? canvas.clientHeight : 1);
+      cameraZoomRef.current = THREE.MathUtils.clamp(
+        cameraZoomRef.current + pixels * 0.005,
+        COMBAT_CAMERA.minZoom,
+        COMBAT_CAMERA.maxZoom,
+      );
+    };
+    canvas.addEventListener("wheel", zoom, { passive: false });
     canvas.addEventListener("click", engagePointerLock);
     document.addEventListener("mousemove", lookWithMouse);
     return () => {
@@ -1044,10 +1169,20 @@ export function ThirdPersonPlayer({
       canvas.removeEventListener("pointermove", orbit);
       canvas.removeEventListener("pointerup", stopOrbit);
       canvas.removeEventListener("pointercancel", stopOrbit);
+      canvas.removeEventListener("wheel", zoom);
       canvas.removeEventListener("click", engagePointerLock);
       document.removeEventListener("mousemove", lookWithMouse);
     };
-  }, [gl, paused, settings.sensitivity, settings.invertY]);
+  }, [
+    gl,
+    paused,
+    cameraStyle,
+    cameraYawRef,
+    cameraHeightRef,
+    cameraZoomRef,
+    settings.sensitivity,
+    settings.invertY,
+  ]);
 
   useFrame(() => {
     const player = controllerRef.current;
@@ -1056,10 +1191,11 @@ export function ThirdPersonPlayer({
     const roll = rollRef.current;
     if (
       paused ||
+      isResultScreenActive() ||
       platformer?.current.frozen ||
       (combat &&
         (combat.current.health <= 0 ||
-          combat.current.bossHealth <= 0 ||
+          (combat.current.bossHealth <= 0 && combat.current.freezeOnVictory) ||
           combat.current.hurtTime > 0))
     ) {
       roll.active = false;
@@ -1085,6 +1221,7 @@ export function ThirdPersonPlayer({
       const forwardDot = roll.dir.x * camForwardX + roll.dir.z * camForwardZ;
       const rightDot = roll.dir.x * camRightX + roll.dir.z * camRightZ;
       player.setMovement({
+        preserveFacing: roll.backstep,
         forward: forwardDot > 0.3,
         backward: forwardDot < -0.3,
         leftward: rightDot < -0.3,
@@ -1097,6 +1234,7 @@ export function ThirdPersonPlayer({
     // Hanging also disables input; the hang branch owns the body instead.
     const enabled = !enteringRef.current && !hangRef.current.active && !seatRef.current.active;
     player.setMovement({
+      preserveFacing: false,
       forward: enabled && input.forward,
       backward: enabled && input.backward,
       leftward: enabled && input.left,
@@ -1150,6 +1288,8 @@ export function ThirdPersonPlayer({
           boundary={boundary}
           bounds={bounds}
           cameraDistance={cameraDistance}
+          cameraStyle={cameraStyle}
+          cameraZoomRef={cameraZoomRef}
           cameraYawRef={cameraYawRef}
           cameraHeightRef={cameraHeightRef}
           enteringRef={enteringRef}

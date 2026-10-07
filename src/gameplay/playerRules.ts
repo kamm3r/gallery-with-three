@@ -115,6 +115,8 @@ export function canGrabLedge({
 export const ROLL_DURATION = 0.92;
 export const ROLL_COOLDOWN = 0.9;
 export const ROLL_SPEED = 9;
+export const BACKSTEP_DURATION = 0.4;
+export const BACKSTEP_SPEED = 4.5;
 
 export interface RollStartState {
   grounded: boolean;

@@ -1,3 +1,4 @@
+import { useEcsRef } from "../hooks/useEcsRef";
 import { createRef, useEffect, useLayoutEffect, useMemo, useRef, type RefObject } from "react";
 import {
   BallCollider,
@@ -172,7 +173,7 @@ function Terrain() {
 function OneWayBoard({ board }: { board: ParkBoard }) {
   const world = useWorld();
   const solid = useRef<RapierCollider>(null);
-  const previousFeet = useRef<number | null>(null);
+  const previousFeet = useEcsRef<number | null>("previousFeet", () => null);
   const topY = board.position[1] + board.size[1] / 2;
   useBeforePhysicsStep((physics) => {
     const collider = solid.current;
@@ -204,7 +205,7 @@ function OneWayBoard({ board }: { board: ParkBoard }) {
 }
 
 function JumpPad({ pad }: { pad: ParkJumpPad }) {
-  const lastFire = useRef(0);
+  const lastFire = useEcsRef("lastFire", () => 0);
   const boost = (payload: IntersectionEnterPayload) => {
     const now = performance.now();
     if (now - lastFire.current < 250) return;

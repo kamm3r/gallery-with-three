@@ -8,6 +8,7 @@ import { PortalFrameCollider } from "../components/PortalFrameCollider";
 import { ExperienceHud } from "../components/ExperienceHud";
 import { HollowLane, LANE_ATMOSPHERE, laneSignals } from "../components/HollowLane";
 import { nightFx } from "../components/halloweenProps";
+import { keyLabel } from "../gameplay/controlBindings";
 import { useGame } from "../gameSettings";
 import { useGameTimeout } from "../hooks/useGameTimeout";
 import { setResultScreenActive } from "../gameplay/resultScreen";
@@ -95,7 +96,7 @@ interface LaneHudState {
 }
 
 function LaneRun({ retry }: { retry: () => void }) {
-  const { paused } = useGame();
+  const { paused, settings } = useGame();
   const navigate = useNavigate();
   const { state } = useLocation();
   const [ready, setReady] = useState(false);
@@ -285,9 +286,10 @@ function LaneRun({ retry }: { retry: () => void }) {
               )}
             </ul>
             <small>
-              <kbd>E</kbd> to search, pick up, open doors and hide. Hold <kbd>E</kbd> on a door from
-              inside to lock it. <kbd>1</kbd> switches the flashlight. Shift sprints, but he hears
-              it.
+              <kbd>{keyLabel(settings.bindings.interact)}</kbd> to search, pick up, open doors and
+              hide. Hold <kbd>{keyLabel(settings.bindings.interact)}</kbd> on a door from inside to
+              lock it. <kbd>1</kbd> switches the flashlight. Hold{" "}
+              {keyLabel(settings.sprintKey ?? settings.bindings.dodge)} to sprint, but he hears it.
             </small>
           </div>
           <p className={`hollow-message${hud.message ? " is-visible" : ""}`} role="status">
@@ -323,6 +325,7 @@ const AWARENESS_LABEL = {
 
 /** Stamina, awareness, actions and fear overlays, driven from per-frame signals. */
 function LaneOverlay() {
+  const { settings } = useGame();
   const root = useRef<HTMLDivElement>(null);
   const awarenessText = useRef<HTMLSpanElement>(null);
   const promptText = useRef<HTMLSpanElement>(null);
@@ -369,7 +372,7 @@ function LaneOverlay() {
         <span ref={awarenessText} />
       </p>
       <div className="lane-prompt" role="status">
-        <kbd>E</kbd>
+        <kbd>{keyLabel(settings.bindings.interact)}</kbd>
         <small>Hold</small>
         <span ref={promptText} />
         <i />

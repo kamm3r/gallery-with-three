@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import { GameContext, readSettings, settingsKey, type GameSettings } from "./gameSettings";
 import { setControlsPaused } from "./hooks/usePlayerControls";
 import { configureSound, unlockSound } from "./gameplay/sound";
+import { patchGraphicsSettings } from "./gameplay/graphicsSettings";
 
 export function GameProvider({ children }: { children: ReactNode }) {
   const [paused, setPauseState] = useState(false);
@@ -24,7 +25,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     if (next && document.pointerLockElement) document.exitPointerLock();
   }, []);
   const updateSettings = useCallback((patch: Partial<GameSettings>) => {
-    setSettings((current) => ({ ...current, ...patch }));
+    setSettings((current) => patchGraphicsSettings(current, patch));
   }, []);
   useEffect(() => {
     try {

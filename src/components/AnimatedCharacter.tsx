@@ -3,7 +3,7 @@ import { useFrame, type ThreeElements } from "@react-three/fiber";
 import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { clone } from "three/addons/utils/SkeletonUtils.js";
-import { ROLL_DURATION } from "../gameplay/playerRules";
+import { BACKSTEP_DURATION, ROLL_DURATION } from "../gameplay/playerRules";
 import { CHARACTER_MODEL, CLIP_SECONDS } from "../gameplay/characterAnimations";
 import { heldItems } from "../gameplay/heldItems";
 
@@ -38,6 +38,7 @@ export type ActionName =
   | "Punch"
   | "RecieveHit"
   | "Roll"
+  | "Backstep"
   | "Run"
   | "Run_Carry"
   | "Shoot_OneHanded"
@@ -182,15 +183,23 @@ export function AnimatedCharacter({
     };
   }, [character, palette]);
 
-  useEffect(() => {
-    const action = actions[animation];
+  useLayoutEffect(() => {
+    const action = actions[animation === "Backstep" ? "Jump" : animation];
     if (!action) return;
 
     const playOnce =
       animation in CLIP_SECONDS ||
-      ["Jump", "Roll", "SitDown", "StandUp", "Punch", "Death", "RecieveHit", "Victory"].includes(
-        animation,
-      );
+      [
+        "Backstep",
+        "Jump",
+        "Roll",
+        "SitDown",
+        "StandUp",
+        "Punch",
+        "Death",
+        "RecieveHit",
+        "Victory",
+      ].includes(animation);
     const previous = currentAction.current;
     if (!previous) {
       for (const clip of Object.values(actions)) clip?.setEffectiveWeight(0);
@@ -212,7 +221,12 @@ export function AnimatedCharacter({
       playOnce ? THREE.LoopOnce : THREE.LoopRepeat,
       playOnce ? 1 : Number.POSITIVE_INFINITY,
     );
-    const duration = animation === "Roll" ? ROLL_DURATION : CLIP_SECONDS[animation];
+    const duration =
+      animation === "Backstep"
+        ? BACKSTEP_DURATION
+        : animation === "Roll"
+          ? ROLL_DURATION
+          : CLIP_SECONDS[animation];
     action.setEffectiveTimeScale(duration ? action.getClip().duration / duration : paceRef.current);
     action.setEffectiveWeight(previous ? existingWeight : 1).play();
     currentAction.current = action;
@@ -226,7 +240,14 @@ export function AnimatedCharacter({
     // stack competing fades or briefly reveal the unanimated bind pose.
     const blend =
       1 -
-      Math.exp(-Math.min(delta, 0.05) * (animation === "Jump" || animation === "Roll" ? 28 : 18));
+      Math.exp(
+        -Math.min(delta, 0.05) *
+          (["Roll", "Backstep", "SwordSlashQuick", "SwordSlashHeavy"].includes(animation)
+            ? 48
+            : animation === "Jump"
+              ? 28
+              : 18),
+      );
     let total = 0;
     for (const action of Object.values(actions)) {
       if (!action) continue;

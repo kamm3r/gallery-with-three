@@ -1,3 +1,4 @@
+import { useEcsRef } from "../hooks/useEcsRef";
 import { useTexture, Sparkles } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
 import { CuboidCollider, CylinderCollider, RigidBody } from "@react-three/rapier";
@@ -110,9 +111,9 @@ export function PressureButton({
 }) {
   const cap = useRef<THREE.Group>(null);
   const material = useRef<THREE.MeshStandardMaterial>(null);
-  const contacts = useRef(0);
-  const flash = useRef(0);
-  const flashColor = useRef(FEEDBACK_COLOR.neutral);
+  const contacts = useEcsRef("contacts", () => 0);
+  const flash = useEcsRef("flash", () => 0);
+  const flashColor = useEcsRef("flashColor", () => FEEDBACK_COLOR.neutral);
   const base = useMemo(() => new THREE.Color(color), [color]);
   const housingTop = subtle ? 0 : 0.16;
   const travel = subtle ? 0.05 : 0.11;

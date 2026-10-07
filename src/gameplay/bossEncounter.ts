@@ -147,18 +147,23 @@ export const ROAR_DURATION = 2;
 const ROAR_HIT: BossHit = { at: 0.6, damage: 10, range: 4.8, arc: -1, knockback: 12, shake: 1 };
 const MOVES: BossMove[] = ["sweep", "slam", "combo", "leap", "nova"];
 
-export function createEncounter() {
+export function createEncounter(groundY = 0) {
   return {
     health: combatTuning.playerMaxHealth,
     stamina: 100,
     bossHealth: combatTuning.bossMaxHealth,
     playerX: 0,
+    playerY: 0,
     playerZ: 8,
     playerYaw: Math.PI,
     bossX: 0,
-    bossY: 0,
+    bossY: groundY,
+    groundY,
     bossZ: -7,
     bossYaw: 0,
+    bossActive: true,
+    freezeOnVictory: true,
+    fatalFalls: false,
     phase: "approach" as BossPhase,
     move: "sweep" as BossMove,
     lastMove: null as BossMove | null,
@@ -279,7 +284,11 @@ export function stepEncounter(state: Encounter, delta: number) {
   if (state.health <= 0 || state.bossHealth <= 0) {
     if (state.bossHealth <= 0) {
       state.phase = "defeated";
-      state.bossY = 0;
+      state.bossY = state.groundY;
+      if (!state.freezeOnVictory) {
+        state.hurtTime = 0;
+        state.stamina = Math.min(100, state.stamina + combatTuning.staminaRegen * dt);
+      }
     }
     return;
   }
@@ -287,6 +296,7 @@ export function stepEncounter(state: Encounter, delta: number) {
   for (const move of MOVES) state.cooldowns[move] = Math.max(0, state.cooldowns[move] - dt);
   if (state.attackTime <= 0 && !state.invulnerable)
     state.stamina = Math.min(100, state.stamina + combatTuning.staminaRegen * dt);
+  if (!state.bossActive) return;
   let dx = state.playerX - state.bossX,
     dz = state.playerZ - state.bossZ;
   let distance = Math.hypot(dx, dz);
@@ -316,7 +326,7 @@ export function stepEncounter(state: Encounter, delta: number) {
   }
   if (state.bossHealth <= 0) {
     state.phase = "defeated";
-    state.bossY = 0;
+    state.bossY = state.groundY;
     return;
   }
   const enraged = state.enraged;
@@ -379,7 +389,7 @@ export function stepEncounter(state: Encounter, delta: number) {
       const ease = t * t * (3 - 2 * t);
       state.bossX = state.leapFromX + (state.leapToX - state.leapFromX) * ease;
       state.bossZ = state.leapFromZ + (state.leapToZ - state.leapFromZ) * ease;
-      state.bossY = leapHeight(state.timer);
+      state.bossY = state.groundY + leapHeight(state.timer);
       dx = state.playerX - state.bossX;
       dz = state.playerZ - state.bossZ;
       distance = Math.hypot(dx, dz);
@@ -402,7 +412,7 @@ export function stepEncounter(state: Encounter, delta: number) {
     if (state.timer > spec.strike) {
       state.phase = "recovery";
       state.timer = 0;
-      state.bossY = 0;
+      state.bossY = state.groundY;
     }
   } else if (
     state.phase === "recovery" &&

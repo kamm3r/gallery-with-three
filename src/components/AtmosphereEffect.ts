@@ -20,6 +20,7 @@ uniform float uScatter;
 uniform float uShafts;
 uniform float uShaftDensity;
 uniform float uShaftDistance;
+uniform float uShaftSteps;
 uniform float uHasShadow;
 uniform mat4 uShadowMatrix;
 uniform sampler2DShadow uShadowMap;
@@ -65,10 +66,11 @@ void mainImage(const in vec4 inputColor, const in vec2 uv, const in float depth,
   if (uShafts > 0.0 && uHasShadow > 0.5) {
     const int STEPS = 28;
     float span = min(dist, uShaftDistance);
-    float stepLength = span / float(STEPS);
+    float stepLength = span / uShaftSteps;
     float jitter = gradientNoise(gl_FragCoord.xy);
     float weight = 0.0;
     for (int i = 0; i < STEPS; i++) {
+      if (float(i) >= uShaftSteps) break;
       float t = (float(i) + jitter) * stepLength;
       float w = exp(-t * uShaftDensity) * uShaftDensity * stepLength;
       light += sunVisibility(uCameraPosition + dir * t) * w;
@@ -92,6 +94,7 @@ export interface AtmosphereSettings {
   shafts: number;
   shaftDensity: number;
   shaftDistance: number;
+  shaftSteps?: number;
 }
 
 export const FOREST_ATMOSPHERE: AtmosphereSettings = {
@@ -142,6 +145,7 @@ export class AtmosphereEffect extends Effect {
         ["uShafts", new THREE.Uniform(0)],
         ["uShaftDensity", new THREE.Uniform(0)],
         ["uShaftDistance", new THREE.Uniform(0)],
+        ["uShaftSteps", new THREE.Uniform(28)],
         ["uHasShadow", new THREE.Uniform(0)],
         ["uShadowMatrix", new THREE.Uniform(new THREE.Matrix4())],
         ["uShadowMap", new THREE.Uniform<THREE.Texture | null>(null)],
@@ -164,6 +168,7 @@ export class AtmosphereEffect extends Effect {
     u.get("uShafts")!.value = settings.shafts;
     u.get("uShaftDensity")!.value = settings.shaftDensity;
     u.get("uShaftDistance")!.value = settings.shaftDistance;
+    u.get("uShaftSteps")!.value = Math.max(8, Math.min(28, Math.round(settings.shaftSteps ?? 28)));
   }
 
   private findLight() {

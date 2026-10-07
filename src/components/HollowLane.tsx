@@ -1,3 +1,4 @@
+import { useEcsRef } from "../hooks/useEcsRef";
 import {
   lazy,
   useEffect,
@@ -23,7 +24,6 @@ import {
   houseToWorld,
   insideHouse,
   LAMP_GLOW,
-  LANE_START,
   MONSTER_HOUSE,
   PARK,
   PAYPHONE,
@@ -1058,8 +1058,7 @@ export function HollowLane({
   const world = useWorld();
   const scene = useThree((state) => state.scene);
   const reducedMotion = useReducedMotion();
-  const night = useRef<Night>(null as unknown as Night);
-  night.current ??= createNight();
+  const night = useEcsRef("hollow-night", createNight);
   useEffect(() => {
     if (nightRef) nightRef.current = night.current;
   }, [nightRef]);
@@ -1067,15 +1066,14 @@ export function HollowLane({
   const skyLight = useRef<THREE.HemisphereLight>(null);
   const sky = useMemo(createSkyMaterial, []);
   useEffect(() => () => sky.dispose(), [sky]);
-  const motion = useRef({ x: LANE_START[0], z: LANE_START[2], speed: 0 });
-  const timers = useRef({
+  const timers = useEcsRef("hollow-runtime", () => ({
     strike: -10,
     next: 20,
     thunder: -1,
     heartbeat: 0,
     rummage: 0,
     interactPress: heldControls().interactPress,
-  });
+  }));
 
   // Med kits and energy drinks from the inventory act on tonight's rules.
   useEffect(
@@ -1136,15 +1134,12 @@ export function HollowLane({
 
     const player = world.get(PlayerPosition);
     if (!player?.valid) return;
-    const m = motion.current;
-    const speed = Math.hypot(player.x - m.x, player.z - m.z) / Math.max(dt, 1e-3);
-    m.speed = THREE.MathUtils.damp(m.speed, speed, 12, dt);
-    m.x = player.x;
-    m.z = player.z;
-    const moving = m.speed > 0.6;
     // Inside a house, the camera tucks in over the shoulder.
     cameraRig.indoor = insideHouse(player) >= 0;
     const controls = heldControls();
+    // Leaving cover is intentional. Smoothed speed lingers after stopping
+    // and would cancel a fresh hide on the following frame.
+    const moving = controls.forward || controls.backward || controls.left || controls.right;
     const press = controls.interactPress !== w.interactPress;
     w.interactPress = controls.interactPress;
     const events = stepNight(n, dt, {

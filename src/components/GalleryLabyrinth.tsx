@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEcsState } from "../hooks/useEcsState";
+import { useEcsRef } from "../hooks/useEcsRef";
+import { useCallback, useEffect, useRef } from "react";
 import { Stars } from "@react-three/drei";
 import { useFrame, useThree } from "@react-three/fiber";
 import { CuboidCollider, CylinderCollider, RigidBody } from "@react-three/rapier";
@@ -108,8 +110,8 @@ const ROOM_ZONES: Partial<Record<RoomId, SoundZone>> = {
 function GalleryAudio() {
   const camera = useThree((state) => state.camera);
   const zone = useRef<SoundZone | null>(null);
-  const elapsed = useRef(0);
-  const falling = useRef(false);
+  const elapsed = useEcsRef("elapsed", () => 0);
+  const falling = useEcsRef("falling", () => false);
   useEffect(() => {
     setFootstepSurface("stone");
     return () => {
@@ -224,13 +226,13 @@ function SigilPlate({
 
 export function GalleryLabyrinth(props: Props) {
   const { onPuzzleProgress, onNotice } = props;
-  const [found, setFound] = useState<GallerySigil[]>([]);
-  const [progress, setProgress] = useState(0);
-  const [openKeys, setOpenKeys] = useState<DoorKey[]>([]);
-  const [respawn, setRespawn] = useState<Vec3>(START);
+  const [found, setFound] = useEcsState<GallerySigil[]>("gallery-found", []);
+  const [progress, setProgress] = useEcsState("gallery-progress", 0);
+  const [openKeys, setOpenKeys] = useEcsState<DoorKey[]>("gallery-openKeys", []);
+  const [respawn, setRespawn] = useEcsState<Vec3>("gallery-respawn", START);
   const solved = progress === GALLERY_SEQUENCE.length;
-  const progressRef = useRef(0);
-  const foundRef = useRef<GallerySigil[]>([]);
+  const progressRef = useEcsRef("progressRef", () => 0);
+  const foundRef = useEcsRef<GallerySigil[]>("foundRef", () => []);
 
   const find = useCallback(
     (sigil: GallerySigil) => {
@@ -283,7 +285,7 @@ export function GalleryLabyrinth(props: Props) {
     [onNotice, onPuzzleProgress],
   );
 
-  const conservatoryOpen = useRef(false);
+  const conservatoryOpen = useEcsRef("conservatoryOpen", () => false);
   const openConservatory = useCallback(() => {
     if (conservatoryOpen.current) return;
     conservatoryOpen.current = true;

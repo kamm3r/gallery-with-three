@@ -1,3 +1,4 @@
+import { useEcsRef } from "../hooks/useEcsRef";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { Physics } from "@react-three/rapier";
 import { Navigate, useNavigate } from "react-router-dom";
@@ -24,8 +25,8 @@ function BossRun({ retry }: { retry: () => void }) {
   const navigate = useNavigate();
   const { paused } = useGame();
   const { schedule, cancel } = useGameTimeout();
-  const fight = useRef(createBoss());
-  const link = useRef(createPlatformerLink());
+  const fight = useEcsRef("tusk-combat", createBoss);
+  const link = useEcsRef("platformer-player", createPlatformerLink);
   const [ready, setReady] = useState(false);
   const [health, setHealth] = useState(BOSS.maxHealth);
   const [masks, setMasks] = useState(BOSS.startMasks);

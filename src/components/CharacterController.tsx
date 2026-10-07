@@ -1,3 +1,4 @@
+import { useEcsRef } from "../hooks/useEcsRef";
 import { useThree } from "@react-three/fiber";
 import {
   CapsuleCollider,
@@ -28,6 +29,8 @@ import { canCoyoteJump, getGravityScale } from "../gameplay/playerRules";
 // the numbers in controllerTuning.ts are exactly what you feel.
 
 export interface MovementInput {
+  /** Backsteps translate while retaining the current facing. */
+  preserveFacing?: boolean;
   forward: boolean;
   backward: boolean;
   leftward: boolean;
@@ -96,7 +99,11 @@ const groundRayOrigin = { x: 0, y: 0, z: 0 };
 const surfaceOrigin = { x: 0, y: 0, z: 0 };
 let ridingHandle = Number.NaN;
 const ridden = (other: RapierCollider) => other.parent()?.handle === ridingHandle;
-const notRidden = (other: RapierCollider) => !ridden(other);
+// Corpse tags are JS data: querying WASM body flags inside a sweep predicate
+// would borrow the physics world recursively. Also reject the platform we ride.
+const notRidden = (other: RapierCollider) =>
+  !(other.parent()?.userData as { nonBlocking?: boolean } | undefined)?.nonBlocking &&
+  !ridden(other);
 const groundRayDirection = { x: 0, y: -1, z: 0 };
 
 interface PlatformTrack {
@@ -169,23 +176,23 @@ export const CharacterController = forwardRef<CharacterHandle, CharacterControll
     const bodyRef = useRef<RapierRigidBody>(null);
     const colliderRef = useRef<RapierCollider>(null);
     const kccRef = useRef<KinematicCharacterController | null>(null);
-    const movement = useRef<MovementInput>({
+    const movement = useEcsRef<MovementInput>("controller-input", () => ({
       forward: false,
       backward: false,
       leftward: false,
       rightward: false,
       run: false,
       jump: false,
-    });
-    const jumpWasHeld = useRef(false);
-    const jumpBuffer = useRef(0);
-    const airTime = useRef(0);
-    const launched = useRef(false);
-    const platform = useRef<PlatformTrack>({
+    }));
+    const jumpWasHeld = useEcsRef("controller-jumpWasHeld", () => false);
+    const jumpBuffer = useEcsRef("controller-jumpBuffer", () => 0);
+    const airTime = useEcsRef("controller-airTime", () => 0);
+    const launched = useEcsRef("controller-launched", () => false);
+    const platform = useEcsRef<PlatformTrack>("platform", () => ({
       body: null,
       position: new THREE.Vector3(),
       rotation: new THREE.Quaternion(),
-    });
+    }));
     const enableRef = useRef(enable);
     const suspendedRef = useRef(suspended);
     const tuningRef = useRef(tuning);
@@ -196,33 +203,30 @@ export const CharacterController = forwardRef<CharacterHandle, CharacterControll
     });
     const { skinWidth, slopeMaxAngle, stepHeight, snapDistance } = tuning;
 
-    const handle = useMemo<CharacterHandle>(
-      () => ({
-        body: null,
-        velocity: new THREE.Vector3(),
-        isOnGround: false,
-        isOnPlatform: false,
-        skidding: false,
-        jumping: false,
-        relativeVelOnPlane: new THREE.Vector3(),
-        bodyZAxis: new THREE.Vector3(0, 0, 1),
-        groundNormal: new THREE.Vector3(0, 1, 0),
-        setMovement(next) {
-          Object.assign(movement.current, next);
-        },
-        launch(verticalSpeed, planarScale = 1) {
-          handle.velocity.set(
-            handle.velocity.x * planarScale,
-            verticalSpeed,
-            handle.velocity.z * planarScale,
-          );
-          handle.jumping = false;
-          handle.isOnGround = false;
-          launched.current = true;
-        },
-      }),
-      [],
-    );
+    const handle = useEcsRef<CharacterHandle>("character-body", () => ({
+      body: null,
+      velocity: new THREE.Vector3(),
+      isOnGround: false,
+      isOnPlatform: false,
+      skidding: false,
+      jumping: false,
+      relativeVelOnPlane: new THREE.Vector3(),
+      bodyZAxis: new THREE.Vector3(0, 0, 1),
+      groundNormal: new THREE.Vector3(0, 1, 0),
+      setMovement(next) {
+        Object.assign(movement.current, next);
+      },
+      launch(verticalSpeed, planarScale = 1) {
+        handle.velocity.set(
+          handle.velocity.x * planarScale,
+          verticalSpeed,
+          handle.velocity.z * planarScale,
+        );
+        handle.jumping = false;
+        handle.isOnGround = false;
+        launched.current = true;
+      },
+    })).current;
     // Sensors (pads, checkpoints) find the player through this tag.
     const bodyTag = useMemo<PlayerBodyData>(
       () => ({ player: true, launch: handle.launch }),
@@ -279,7 +283,10 @@ export const CharacterController = forwardRef<CharacterHandle, CharacterControll
       carry.set(0, 0, 0);
       world.contactPairsWith(collider, (other) => {
         const otherBody = other.parent();
-        if (!otherBody?.isKinematic() || other.isSensor()) return;
+        // Rapier may retain a contact manifold after an enemy is disabled.
+        // Its corpse must not push the player back into that old contact.
+        if (!other.isEnabled() || !otherBody?.isEnabled()) return;
+        if (!otherBody.isKinematic() || other.isSensor()) return;
         if (riding && otherBody.handle === riding.handle) return;
         world.contactPair(collider, other, (manifold, flipped) => {
           let depth = 0;
@@ -372,7 +379,7 @@ export const CharacterController = forwardRef<CharacterHandle, CharacterControll
         desired,
         rapier.QueryFilterFlags.EXCLUDE_SENSORS,
         undefined,
-        riding ? notRidden : undefined,
+        notRidden,
       );
       const moved = kcc.computedMovement();
       let grounded = kcc.computedGrounded() && velocity.y <= 0;
@@ -530,7 +537,7 @@ export const CharacterController = forwardRef<CharacterHandle, CharacterControll
       }
 
       // --- Facing: turn toward input, slower in the air.
-      if (wishLength > 0) {
+      if (wishLength > 0 && !input.preserveFacing) {
         bodyYaw = dampYaw(
           bodyYaw,
           Math.atan2(wish.x, wish.z),

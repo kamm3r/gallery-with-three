@@ -1,3 +1,4 @@
+import { useEcsRef } from "../hooks/useEcsRef";
 import { useFrame } from "@react-three/fiber";
 import { CylinderCollider, RigidBody } from "@react-three/rapier";
 import { useMemo, useRef, type MutableRefObject } from "react";
@@ -137,7 +138,7 @@ export function TinyTusk({ fight, link, onEvents }: TinyTuskProps) {
   const warning = useRef<THREE.Mesh>(null);
   const stars = useRef<THREE.Group>(null);
   const rings = useRef<THREE.InstancedMesh>(null);
-  const flash = useRef(0);
+  const flash = useEcsRef("flash", () => 0);
 
   useFrame((state, rawDelta) => {
     const dt = Math.min(rawDelta, 0.05);
