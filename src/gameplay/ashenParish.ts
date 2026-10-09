@@ -16,7 +16,10 @@ export type ParishArea =
   | "arena"
   | "graveyard"
   | "cloister"
-  | "foundry";
+  | "foundry"
+  | "tunnel"
+  | "toproad";
+// Capital-only regions retain the legacy realm IDs for saved checkpoint bindings.
 export const PARISH_TILE_SIZE = 8;
 export const PARISH_ARENA_Y = 12;
 export const PARISH_EXIT: ParishPoint = [0, 0, 151];
@@ -460,12 +463,24 @@ export type ParishProgress = {
   court: boolean;
   checkpoint: "refuge" | "kiln";
   caches: string[];
+  cathedralFelled: boolean;
+  fogCleared: boolean;
+  beaconLift: boolean;
+  arenaLift: boolean;
+  townLift: boolean;
+  finalFelled: boolean;
 };
 export const newParishProgress = (): ParishProgress => ({
   refuge: false,
   court: false,
   checkpoint: "refuge",
   caches: [],
+  cathedralFelled: false,
+  fogCleared: false,
+  beaconLift: false,
+  arenaLift: false,
+  townLift: false,
+  finalFelled: false,
 });
 
 // Background is outside the entire replacement precinct.

@@ -17,7 +17,7 @@ function ParishEnemyModel({
   index: number;
   state: MutableRefObject<ParishEncounter>;
 }) {
-  const spawn = parishEnemySpawns[index];
+  const spawn = (state.current.world?.spawns ?? parishEnemySpawns)[index];
   const rig = useMemo(() => createParishRig(spawn.kind), [spawn.kind]);
   useEffect(() => () => rig.dispose(), [rig]);
   const materials = useMemo(() => {
@@ -189,7 +189,7 @@ export function ParishEnemies({ state }: { state: MutableRefObject<ParishEncount
   });
   return (
     <>
-      {parishEnemySpawns.map((spawn, index) => (
+      {(state.current.world?.spawns ?? parishEnemySpawns).map((spawn, index) => (
         <ParishEnemyModel key={spawn.id} index={index} state={state} />
       ))}
       <group ref={bolts}>

@@ -99,6 +99,7 @@ interface PlayerRuntimeProps {
     yaw: number;
   }>;
   respawn: Position;
+  respawnYaw: number;
   controllerRef: RefObject<CharacterHandle | null>;
   jumpSpeed: number;
   headingRef: RefObject<THREE.Group | null>;
@@ -186,6 +187,7 @@ function PlayerRuntime({
   platformer: platformerRef,
   seatRef,
   respawn,
+  respawnYaw,
   controllerRef,
   jumpSpeed,
   headingRef,
@@ -284,13 +286,16 @@ function PlayerRuntime({
     }
     if (position.y < -20 || teleport) {
       const target = teleport ?? respawn;
+      const atCheckpoint =
+        Math.hypot(target[0] - respawn[0], target[1] - respawn[1], target[2] - respawn[2]) < 0.01;
       if (teleportRef) teleportRef.current = null;
       body.setTranslation(
         { x: target[0], y: target[1] + PLAYER_CENTER_HEIGHT, z: target[2] },
         true,
       );
       velocity.set(0, 0, 0);
-      body.setRotation({ x: 0, y: 1, z: 0, w: 0 }, true);
+      const resetYaw = atCheckpoint ? respawnYaw : Math.PI;
+      body.setRotation({ x: 0, y: Math.sin(resetYaw / 2), z: 0, w: Math.cos(resetYaw / 2) }, true);
       enteringRef.current = false;
       hangRef.current.active = false;
       rollRef.current.active = false;
@@ -314,8 +319,12 @@ function PlayerRuntime({
       actionRef.current = "Idle";
       setAction("Idle");
       cameraArm.current = createCameraArm(cameraZoomRef.current);
-      cameraYawRef.current = 0;
-      camera.position.set(target[0], target[1] + 3.6, target[2] + cameraDistance);
+      cameraYawRef.current = atCheckpoint ? respawnYaw - Math.PI : 0;
+      camera.position.set(
+        target[0] + Math.sin(cameraYawRef.current) * cameraDistance,
+        target[1] + 3.6,
+        target[2] + Math.cos(cameraYawRef.current) * cameraDistance,
+      );
       onHangChange(false);
       onNearPortal(null);
       return;
@@ -1279,6 +1288,7 @@ export function ThirdPersonPlayer({
           platformer={platformer}
           seatRef={seatRef}
           respawn={respawn ?? initialPosition}
+          respawnYaw={startYaw}
           controllerRef={controllerRef}
           jumpSpeed={(tuning ?? controllerDefaults).jumpSpeed}
           headingRef={headingRef}

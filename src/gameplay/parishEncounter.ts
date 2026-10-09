@@ -60,6 +60,7 @@ export type ParishEnemy = {
   awareness: number;
   lastSeenX: number;
   lastSeenZ: number;
+  surfaceId: string | null;
 };
 export type EmberBolt = {
   id: number;
@@ -70,16 +71,36 @@ export type EmberBolt = {
   vz: number;
   life: number;
 };
-export function createParishEncounter(progress: ParishProgress) {
+export type ParishWorld = {
+  campaign: boolean;
+  spawns: typeof parishEnemySpawns;
+  shrines: typeof parishShrines;
+  floorHeight: typeof parishFloorHeight;
+  blocked: typeof parishBlocked;
+  surfaceId?: (x: number, z: number, y: number) => string | null;
+  connected?: (from: string, to: string) => boolean;
+  lineClear: (
+    ax: number,
+    az: number,
+    bx: number,
+    bz: number,
+    progress: ParishProgress,
+    nearY: number,
+  ) => boolean;
+};
+
+export function createParishEncounter(progress: ParishProgress, world: ParishWorld | null = null) {
   const combat = createEncounter(PARISH_ARENA_Y);
   combat.bossActive = false;
   combat.freezeOnVictory = false;
   combat.fatalFalls = true;
-  const spawn = parishShrines.find((s) => s.id === progress.checkpoint)!.spawn;
+  const spawn = (world?.shrines ?? parishShrines).find((s) => s.id === progress.checkpoint)!.spawn;
   [combat.playerX, combat.playerY, combat.playerZ] = spawn;
   return {
     combat,
-    enemies: createEnemies(),
+    world,
+    activeBoss: null as "cathedral" | "colosseum" | null,
+    enemies: createEnemies(world),
     bolts: [] as EmberBolt[],
     boltId: 0,
     enemyHitId: 0,
@@ -87,18 +108,20 @@ export function createParishEncounter(progress: ParishProgress) {
     embers: 0,
     flasks: 3,
     healTime: 0,
-    bossFelled: false,
+    dialogue: "",
+    dialogueTime: 0,
+    bossFelled: world?.campaign ? progress.finalFelled : false,
   };
 }
 export type ParishEncounter = ReturnType<typeof createParishEncounter>;
 export function resetParishEncounter(state: ParishEncounter, progress: ParishProgress) {
-  const fresh = createParishEncounter(progress);
+  const fresh = createParishEncounter(progress, state.world);
   const combat = state.combat;
   Object.assign(combat, fresh.combat);
   return Object.assign(state, fresh, { combat });
 }
-function createEnemies(): ParishEnemy[] {
-  return parishEnemySpawns.map(({ id, kind, position: [x, y, z] }, index) => ({
+function createEnemies(world: ParishWorld | null = null): ParishEnemy[] {
+  return (world?.spawns ?? parishEnemySpawns).map(({ id, kind, position: [x, y, z] }, index) => ({
     id,
     kind,
     x,
@@ -128,6 +151,7 @@ function createEnemies(): ParishEnemy[] {
     awareness: 0,
     lastSeenX: x,
     lastSeenZ: z,
+    surfaceId: world?.surfaceId?.(x, z, y) ?? null,
   }));
 }
 
@@ -139,7 +163,9 @@ export function parishLineClear(
   bz: number,
   progress: ParishProgress,
   nearY = 0,
+  world: ParishWorld | null = null,
 ) {
+  if (world) return world.lineClear(ax, az, bx, bz, progress, nearY);
   for (const gate of parishShortcuts) {
     if (progress[gate.id] || Math.abs(nearY - gate.position[1]) > 2 || ax === bx) continue;
     const t = (gate.position[0] - ax) / (bx - ax);
@@ -168,6 +194,7 @@ function move(
   dt: number,
   progress: ParishProgress,
   others: ParishEnemy[],
+  world: ParishWorld | null,
 ) {
   const distance = Math.hypot(x - enemy.x, z - enemy.z);
   if (distance < 0.1) return;
@@ -181,12 +208,17 @@ function move(
   ];
   let chosen: [number, number, number] | undefined;
   for (const [nx, nz] of candidates) {
-    const height = parishFloorHeight(nx, nz, enemy.y);
+    const height = (world?.floorHeight ?? parishFloorHeight)(nx, nz, enemy.y);
+    const surfaceId = height === null ? null : world?.surfaceId?.(nx, nz, height);
     if (
       height === null ||
-      parishBlocked(nx, height, nz, 0.4) ||
+      (world?.blocked ?? parishBlocked)(nx, height, nz, 0.4) ||
       Math.abs(height - enemy.y) > 0.6 ||
-      !parishLineClear(enemy.x, enemy.z, nx, nz, progress, enemy.y) ||
+      (enemy.surfaceId &&
+        surfaceId &&
+        world?.connected &&
+        !world.connected(enemy.surfaceId, surfaceId)) ||
+      !parishLineClear(enemy.x, enemy.z, nx, nz, progress, enemy.y, world) ||
       Math.hypot(nx - enemy.homeX, nz - enemy.homeZ) > 12 ||
       others.some(
         (other) =>
@@ -207,6 +239,7 @@ function move(
   enemy.x = nx;
   enemy.z = nz;
   enemy.y = height;
+  enemy.surfaceId = world?.surfaceId?.(nx, nz, height) ?? null;
   enemy.stride += step * 4.8 * (forward < 0 ? -1 : 1);
   enemy.moveAmount = Math.min(1, step / Math.max(0.001, dt * enemySpecs[enemy.kind].speed));
 }
@@ -304,7 +337,7 @@ export function restAtParishShrine(state: ParishEncounter) {
   state.combat.stamina = 100;
   state.combat.hurtTime = 0;
   state.combat.attackTime = 0;
-  if (!state.bossFelled) state.enemies = createEnemies();
+  if (!state.bossFelled) state.enemies = createEnemies(state.world);
   state.bolts = [];
   state.flasks = 3;
   state.healTime = 0;
@@ -351,8 +384,24 @@ export function stepParishEncounter(
     c = state.combat;
   stepCombat(c, dt);
   state.healTime = Math.max(0, state.healTime - dt);
+  state.dialogueTime = Math.max(0, state.dialogueTime - dt);
+  if (state.dialogueTime === 0) state.dialogue = "";
   if (c.health <= 0) return;
-  if (c.bossHealth <= 0) {
+  if (state.world?.campaign && c.bossActive && c.bossHealth <= 0) {
+    if (state.activeBoss === "cathedral") {
+      progress.cathedralFelled = true;
+    } else {
+      progress.finalFelled = true;
+      state.bossFelled = true;
+    }
+    c.bossActive = false;
+    // Inactive campaign encounters still use the normal player recovery rules.
+    // A zero boss health would enter the legacy victory branch every frame.
+    c.bossHealth = combatTuning.bossMaxHealth;
+    state.activeBoss = null;
+    state.bolts = [];
+  }
+  if (!state.world?.campaign && c.bossHealth <= 0) {
     if (!state.bossFelled) {
       for (const enemy of state.enemies) {
         enemy.health = 0;
@@ -385,7 +434,7 @@ export function stepParishEncounter(
           Math.abs(e.y - c.playerY) < 1.8 &&
           distance < combatTuning.hitDistance &&
           facing > combatTuning.hitFacingThreshold &&
-          parishLineClear(c.playerX, c.playerZ, e.x, e.z, progress, c.playerY)
+          parishLineClear(c.playerX, c.playerZ, e.x, e.z, progress, c.playerY, state.world)
         );
       })
       .sort(
@@ -427,7 +476,7 @@ export function stepParishEnemy(
     Math.abs(c.playerY - e.y) < 1.8 &&
     leash < 14 &&
     distance < 16 &&
-    parishLineClear(e.x, e.z, c.playerX, c.playerZ, progress, e.y);
+    parishLineClear(e.x, e.z, c.playerX, c.playerZ, progress, e.y, state.world);
   if (visible && distance < 16) {
     e.awareness = 2;
     e.lastSeenX = c.playerX;
@@ -457,6 +506,7 @@ export function stepParishEnemy(
             dt,
             progress,
             state.enemies,
+            state.world,
           );
         } else if (
           distance <= spec.range &&
@@ -467,11 +517,11 @@ export function stepParishEnemy(
         } else {
           e.phase = "pursue";
           if (distance > spec.range * 0.85)
-            move(e, c.playerX, c.playerZ, spec.speed, dt, progress, state.enemies);
+            move(e, c.playerX, c.playerZ, spec.speed, dt, progress, state.enemies, state.world);
         }
       } else if (distance > spec.range + 0.4) {
         e.phase = "pursue";
-        move(e, c.playerX, c.playerZ, spec.speed, dt, progress, state.enemies);
+        move(e, c.playerX, c.playerZ, spec.speed, dt, progress, state.enemies, state.world);
       } else {
         e.phase = e.kind === "hound" ? "circle" : "guard";
         if (
@@ -482,7 +532,16 @@ export function stepParishEnemy(
         ) {
           beginAttack(e);
         } else if (e.kind === "sentinel" && distance > spec.range) {
-          move(e, c.playerX, c.playerZ, spec.speed * 1.25, dt, progress, state.enemies);
+          move(
+            e,
+            c.playerX,
+            c.playerZ,
+            spec.speed * 1.25,
+            dt,
+            progress,
+            state.enemies,
+            state.world,
+          );
         } else {
           const angle = Math.atan2(e.x - c.playerX, e.z - c.playerZ) + e.orbit * 0.35;
           const spacing = e.kind === "hound" ? 2.7 : 2.4;
@@ -494,18 +553,19 @@ export function stepParishEnemy(
             dt,
             progress,
             state.enemies,
+            state.world,
           );
         }
       }
     } else if (engaged && e.awareness > 0 && !c.bossActive) {
       e.phase = "search";
       face(e, e.lastSeenX, e.lastSeenZ, dt);
-      move(e, e.lastSeenX, e.lastSeenZ, spec.speed * 0.7, dt, progress, state.enemies);
+      move(e, e.lastSeenX, e.lastSeenZ, spec.speed * 0.7, dt, progress, state.enemies, state.world);
     } else {
       e.phase = "idle";
       e.timer = 0;
       face(e, e.homeX, e.homeZ, dt);
-      move(e, e.homeX, e.homeZ, spec.speed * 0.7, dt, progress, state.enemies);
+      move(e, e.homeX, e.homeZ, spec.speed * 0.7, dt, progress, state.enemies, state.world);
     }
   } else if (e.phase === "windup") {
     // Stop tracking before impact: a committed, readable dodge window.
@@ -518,7 +578,7 @@ export function stepParishEnemy(
     }
   } else if (e.phase === "strike") {
     if (e.kind !== "acolyte" && (e.kind === "hound" || distance > 1.35))
-      move(e, e.targetX, e.targetZ, spec.strikeSpeed, dt, progress, state.enemies);
+      move(e, e.targetX, e.targetZ, spec.strikeSpeed, dt, progress, state.enemies, state.world);
     if (!e.hit && e.timer >= spec.contact) {
       e.hit = true;
       if (e.kind === "acolyte") {
@@ -540,7 +600,7 @@ export function stepParishEnemy(
           visible &&
           reach < spec.reach &&
           frontal > 0.25 &&
-          parishLineClear(e.x, e.z, c.playerX, c.playerZ, progress, e.y)
+          parishLineClear(e.x, e.z, c.playerX, c.playerZ, progress, e.y, state.world)
         )
           damagePlayer(c, spec.damage, e.x, e.z);
       }
@@ -577,7 +637,7 @@ export function stepEmberBolt(
   bolt.life -= dt;
   if (
     c.bossActive ||
-    !parishLineClear(oldX, oldZ, bolt.x, bolt.z, progress, bolt.y - 1.1) ||
+    !parishLineClear(oldX, oldZ, bolt.x, bolt.z, progress, bolt.y - 1.1, state.world) ||
     bolt.life <= 0
   )
     return false;

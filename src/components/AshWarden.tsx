@@ -469,10 +469,12 @@ export function AshWarden({
   report,
   simulate = true,
   resetVersion = 0,
+  appearance = "ember",
 }: {
   combat: MutableRefObject<Encounter>;
   report: (state: Encounter) => void;
   simulate?: boolean;
+  appearance?: "ember" | "asylum";
   resetVersion?: number;
 }) {
   const body = useRef<RapierRigidBody>(null);
@@ -494,7 +496,7 @@ export function AshWarden({
   const materials = useMemo(
     () => ({
       armor: new THREE.MeshStandardMaterial({
-        color: "#3b3532",
+        color: appearance === "asylum" ? "#657687" : "#3b3532",
         metalness: 0.55,
         roughness: 0.48,
         emissive: new THREE.Color("#ffcfa8"),
@@ -507,28 +509,28 @@ export function AshWarden({
         emissiveIntensity: 0,
       }),
       cloak: new THREE.MeshStandardMaterial({
-        color: "#1a1412",
+        color: appearance === "asylum" ? "#263c57" : "#1a1412",
         roughness: 1,
         side: THREE.DoubleSide,
       }),
       ember: new THREE.MeshStandardMaterial({
-        color: "#ffb070",
-        emissive: new THREE.Color("#ff5a1f"),
+        color: appearance === "asylum" ? "#aee8fa" : "#ffb070",
+        emissive: new THREE.Color(appearance === "asylum" ? "#47a4d8" : "#ff5a1f"),
         emissiveIntensity: 3,
       }),
       eyes: new THREE.MeshStandardMaterial({
-        color: "#ffba63",
-        emissive: new THREE.Color("#ff7430"),
+        color: appearance === "asylum" ? "#e3f9ff" : "#ffba63",
+        emissive: new THREE.Color(appearance === "asylum" ? "#6bd1ef" : "#ff7430"),
         emissiveIntensity: 5,
       }),
       steel: new THREE.MeshStandardMaterial({ color: "#5d5652", metalness: 0.85, roughness: 0.32 }),
       molten: new THREE.MeshStandardMaterial({
-        color: "#ff9a4a",
-        emissive: new THREE.Color("#ff5a1a"),
+        color: appearance === "asylum" ? "#a4dce8" : "#ff9a4a",
+        emissive: new THREE.Color(appearance === "asylum" ? "#47a4d8" : "#ff5a1a"),
         emissiveIntensity: 1.5,
       }),
     }),
-    [],
+    [appearance],
   );
   const telegraphMaterial = useMemo(() => createTelegraphMaterial(), []);
   const leapMaterial = useMemo(() => createTelegraphMaterial("#ff4d1f"), []);
@@ -968,7 +970,7 @@ export function AshWarden({
               <pointLight
                 ref={coreLight}
                 position={[0, 0.9, 1]}
-                color="#ff6a2a"
+                color={appearance === "asylum" ? "#61bce9" : "#ff6a2a"}
                 intensity={6}
                 distance={9}
                 decay={2}
@@ -1105,7 +1107,7 @@ export function AshWarden({
             height={4.6}
             speed={1.4}
             size={0.28}
-            color="#ff7a30"
+            color={appearance === "asylum" ? "#7ecbe8" : "#ff7a30"}
             opacity={0.25}
           />
           <mesh

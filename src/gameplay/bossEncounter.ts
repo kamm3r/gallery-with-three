@@ -159,6 +159,11 @@ export function createEncounter(groundY = 0) {
     bossX: 0,
     bossY: groundY,
     groundY,
+    arenaX: 0,
+    arenaZ: 0,
+    arenaRadius: ARENA_RADIUS,
+    constrainToArena: false,
+    verticalHitRange: Infinity,
     bossZ: -7,
     bossYaw: 0,
     bossActive: true,
@@ -260,7 +265,13 @@ function resolveHit(state: Encounter, hit: BossHit) {
   state.impactZ = state.bossZ + Math.cos(state.bossYaw) * (hit.arc > -1 ? hit.range * 0.55 : 0);
   state.impactRange = hit.range;
   state.impactForce = hit.shake;
-  if (distance >= hit.range || (hit.arc > -1 && frontal <= hit.arc) || state.invulnerable) return;
+  if (
+    distance >= hit.range ||
+    (hit.arc > -1 && frontal <= hit.arc) ||
+    state.invulnerable ||
+    Math.abs(state.playerY - state.groundY) > state.verticalHitRange
+  )
+    return;
   state.health = Math.max(0, state.health - hit.damage);
   if (hit.damage > 0) state.playerHitId++;
   state.hurtTime = PLAYER_HURT_TIME;
@@ -311,6 +322,7 @@ export function stepEncounter(state: Encounter, delta: number) {
       (-dx * Math.sin(state.playerYaw) - dz * Math.cos(state.playerYaw)) / Math.max(distance, 0.01);
     if (
       !airborne &&
+      Math.abs(state.playerY - state.bossY) <= state.verticalHitRange &&
       distance < combatTuning.hitDistance &&
       facing > combatTuning.hitFacingThreshold
     ) {
@@ -374,12 +386,14 @@ export function stepEncounter(state: Encounter, delta: number) {
       state.cooldowns[state.move] = spec.cooldown;
       if (state.move === "leap") {
         // Commit to where the player stands right now, kept inside the pillars.
-        const reach = Math.hypot(state.playerX, state.playerZ);
-        const clamp = reach > ARENA_RADIUS ? ARENA_RADIUS / reach : 1;
+        const localX = state.playerX - state.arenaX;
+        const localZ = state.playerZ - state.arenaZ;
+        const reach = Math.hypot(localX, localZ);
+        const clamp = reach > state.arenaRadius ? state.arenaRadius / reach : 1;
         state.leapFromX = state.bossX;
         state.leapFromZ = state.bossZ;
-        state.leapToX = state.playerX * clamp;
-        state.leapToZ = state.playerZ * clamp;
+        state.leapToX = state.arenaX + localX * clamp;
+        state.leapToZ = state.arenaZ + localZ * clamp;
         state.bossYaw = targetYaw;
       }
     }
@@ -420,5 +434,14 @@ export function stepEncounter(state: Encounter, delta: number) {
   ) {
     state.phase = "approach";
     state.timer = 0;
+  }
+  if (state.constrainToArena) {
+    const x = state.bossX - state.arenaX,
+      z = state.bossZ - state.arenaZ;
+    const distance = Math.hypot(x, z);
+    if (distance > state.arenaRadius) {
+      state.bossX = state.arenaX + (x * state.arenaRadius) / distance;
+      state.bossZ = state.arenaZ + (z * state.arenaRadius) / distance;
+    }
   }
 }
