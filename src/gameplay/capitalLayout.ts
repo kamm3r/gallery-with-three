@@ -163,7 +163,8 @@ function lane(
   points: ParishPoint[],
   width: number,
   layer: "upper" | "lower" = "upper",
-  levelPads = true,
+  // Flat runs at both ends of a sloped strip; a number sets their length.
+  levelPads: boolean | number = true,
 ) {
   for (let i = 1; i < points.length; i++) {
     const a = points[i - 1],
@@ -171,7 +172,12 @@ function lane(
       length = Math.hypot(b[0] - a[0], b[2] - a[2]);
     const dx = ((-(b[2] - a[2]) / length) * width) / 2,
       dz = (((b[0] - a[0]) / length) * width) / 2;
-    const pad = !levelPads || a[1] === b[1] ? 0 : Math.min(width / 2 + 1, length * 0.3);
+    const pad =
+      !levelPads || a[1] === b[1]
+        ? 0
+        : typeof levelPads === "number"
+          ? levelPads
+          : Math.min(width / 2 + 1, length * 0.3);
     const inset = (p: ParishPoint, toward: ParishPoint): ParishPoint => [
       p[0] + ((toward[0] - p[0]) / length) * pad,
       p[1],
@@ -232,7 +238,7 @@ function ring(
 }
 const pi = Math.PI;
 ring("outer-wall-left", "refuge", 0, 0, 70, 78, -1.42, -0.32, 0);
-ring("outer-wall-right", "refuge", 0, 0, 70, 78, 0.065, 1.16, 0);
+ring("outer-wall-right", "refuge", 0, 0, 70, 80, 0.065, 1.16, 0);
 capitalRect("entry", "refuge", 0, 0, 79, 12, 20);
 lane(
   "first-bridge",
@@ -545,7 +551,8 @@ lane(
   ],
   6,
   "upper",
-  false,
+  // Each flight starts at the edge of its square landing, not beneath it.
+  3,
 );
 lane(
   "eastern-clock-approach",
@@ -824,8 +831,8 @@ export const capitalLanterns = (
     [11.5, 24, -47],
     [11.5, 36, -81],
     [-43 + CAPITAL_TOWN_X, 8, -1 + CAPITAL_TOWN_Z],
-    [-84, 8, 35.5],
-    [-84, 20, 35.5],
+    [-80.6, 8, 30],
+    [-80.6, 20, 30],
     [-8, 24, -13],
     [8, 24, -13],
     [-8, 24, 4],
@@ -1098,6 +1105,35 @@ for (const z of [-20, 10]) {
   solid([0, 31, z], [9, 4, 1]);
 }
 for (const b of capitalBuildings) authorBuildingWalls(b, solid);
+// Stepped masonry fills the low space beneath interior flights, so no floor
+// runs under a stair with less than hallway headroom. Each step stays below
+// the continuous ramp the capsule climbs.
+for (const id of [
+  "town-hall-stair:1:2",
+  "town-top-return:1:2",
+  "town-cellar-stair:1:2",
+  "cathedral-rafter-stair:1:2",
+  "cathedral-nave-stair:1:2",
+]) {
+  const [p, q, r, t] = capitalRailSurfaces.find((s) => s.id === id)!.vertices;
+  // Start from the foot of the flight whichever way it was authored.
+  const [a, b, d] = q[1] > p[1] ? [p, q, t] : [q, p, r];
+  const run = Math.hypot(b[0] - a[0], b[2] - a[2]),
+    width = Math.hypot(d[0] - a[0], d[2] - a[2]),
+    yaw = Math.atan2(b[0] - a[0], b[2] - a[2]),
+    steps = 6;
+  for (let i = 1; i < steps; i++) {
+    const height = ((b[1] - a[1]) * i) / steps - 0.35;
+    // Preserve the side-chapel crossing beneath the taller part of this stair.
+    if (id === "cathedral-nave-stair:1:2" && height > 3) continue;
+    const f = (i + 0.5) / steps;
+    solid(
+      [(a[0] + d[0]) / 2 + (b[0] - a[0]) * f, a[1], (a[2] + d[2]) / 2 + (b[2] - a[2]) * f],
+      [width, height, run / steps],
+      yaw,
+    );
+  }
+}
 // Buried town perimeter keeps the lower streets beneath the inhabited floor.
 for (const x of [-61, -27]) solid([-x - CAPITAL_TOWN_X, 4, -18 + CAPITAL_TOWN_Z], [0.65, 4, 34]);
 for (const z of [-35, -1]) solid([44 - CAPITAL_TOWN_X, 4, z + CAPITAL_TOWN_Z], [34, 4, 0.65]);

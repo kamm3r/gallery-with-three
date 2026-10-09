@@ -24,6 +24,9 @@ export function CapitalSky() {
         cloud=smoothstep(.46,.7,cloud)*smoothstep(-.04,.12,d.y)*(1.-smoothstep(.5,.9,d.y));
         sky=mix(sky,mix(vec3(.52,.38,.32),vec3(.89,.65,.46),sun),cloud*.65);
         float haze=1.-smoothstep(-.15,.13,d.y);sky=mix(sky,vec3(.63,.46,.37),haze*.35);
+        // A hot disc behind the haze; bloom turns it into the footage's glare.
+        float disc=max(0.,dot(d,normalize(vec3(-.65,.18,.75))));
+        sky+=vec3(3.2,2.1,1.1)*pow(disc,900.)+vec3(.5,.28,.12)*pow(disc,60.);
         gl_FragColor=vec4(sky,1.);
         #include <colorspace_fragment>
       }`,

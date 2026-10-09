@@ -19,8 +19,11 @@ import {
   capitalFoundations,
   capitalShrines,
   capitalSurfaceHeight,
+  capitalRailSurfaces,
+  capitalBuildings,
 } from "../src/gameplay/capitalLayout.ts";
 import { buildCapitalEnvironment } from "../src/gameplay/capitalEnvironment.ts";
+import { buildCapitalCrag, capitalCeiling } from "../src/gameplay/capitalCrag.ts";
 import {
   beginCapitalBoss,
   activateCapitalBeacon,
@@ -510,7 +513,9 @@ void test("the royal backyard reconnects with the upper town through the vaulted
   walkRoute(
     [-70, 24, -48],
     [
-      [-70, 14, -28],
+      [-70, 14, -24],
+      [-26, 14, -24],
+      [-26, 14, -28],
       [88, 14, -28],
       [88, 14, 22],
       [75, 14, 22],
@@ -660,4 +665,130 @@ void test("the eastern retaining crown and clock bay are walkable above the town
       [18, 24, 10],
     ],
   );
+});
+
+void test("the decorative crag stays clear below and beside every walkway and lift shaft", () => {
+  const shafts = capitalLifts.map((lift) => {
+    const shaft = new THREE.Mesh(new THREE.BoxGeometry(6.8, lift.high - lift.low + 8, 6.8));
+    shaft.position.set(lift.center[0], (lift.high + lift.low) / 2, lift.center[2]);
+    return shaft;
+  });
+  const crag = buildCapitalCrag(capitalCeiling(shafts, capitalRailSurfaces));
+  const cell = 8;
+  const index = new Map<string, typeof capitalRailSurfaces>();
+  for (const s of capitalRailSurfaces) {
+    const xs = s.vertices.map((v) => v[0]),
+      zs = s.vertices.map((v) => v[2]);
+    for (let x = Math.floor(Math.min(...xs) / cell); x <= Math.floor(Math.max(...xs) / cell); x++)
+      for (let z = Math.floor(Math.min(...zs) / cell); z <= Math.floor(Math.max(...zs) / cell); z++)
+        index.set(`${x},${z}`, [...(index.get(`${x},${z}`) ?? []), s]);
+  }
+  const position = crag.getAttribute("position");
+  let highest = -Infinity;
+  for (let i = 0; i < position.count; i++) {
+    const x = position.getX(i),
+      y = position.getY(i),
+      z = position.getZ(i);
+    highest = Math.max(highest, y);
+    // Two metres of air beneath any walkway within four metres of the rock.
+    for (const [dx, dz] of [
+      [0, 0],
+      [4, 0],
+      [-4, 0],
+      [0, 4],
+      [0, -4],
+    ]) {
+      for (const s of index.get(`${Math.floor((x + dx) / cell)},${Math.floor((z + dz) / cell)}`) ??
+        []) {
+        const h = capitalSurfaceHeight(s, x + dx, z + dz);
+        if (h !== null) assert.ok(y <= h - 1.9, `crag at ${x},${y},${z} under ${s.id} (${h})`);
+      }
+    }
+    for (const lift of capitalLifts)
+      if (Math.abs(x - lift.center[0]) < 4 && Math.abs(z - lift.center[2]) < 4)
+        assert.ok(y < lift.low - 2, `crag inside the ${lift.id} lift shaft`);
+  }
+  // The mountain still rises well above the fog to carry the cathedral.
+  assert.ok(highest > 15, `crag peaks only reach ${highest}`);
+  crag.dispose();
+});
+
+void test("doorways, crossings and flights meet the reference blockout metrics", () => {
+  // Reference metrics, in metres for the 1.84 m capsule: doors 2 x 3.5,
+  // hallways 3 high, and 4 m of clear height over a flight.
+  for (const b of capitalBuildings)
+    for (const d of b.doors)
+      assert.ok(d.width >= 2 && d.height >= 3.5, `${b.id} ${d.side} door ${d.width}x${d.height}`);
+  const environment = buildCapitalEnvironment(false),
+    world = new RAPIER.World({ x: 0, y: 0, z: 0 });
+  environment.root.updateMatrixWorld(true);
+  const v = new THREE.Vector3();
+  environment.root.traverse((o) => {
+    if (!(o instanceof THREE.Mesh)) return;
+    const position = o.geometry.getAttribute("position");
+    const vertices = new Float32Array(position.count * 3);
+    for (let i = 0; i < position.count; i++)
+      vertices.set(v.fromBufferAttribute(position, i).applyMatrix4(o.matrixWorld).toArray(), i * 3);
+    const indices = o.geometry.index
+      ? new Uint32Array(o.geometry.index.array)
+      : Uint32Array.from({ length: position.count }, (_, i) => i);
+    world.createCollider(RAPIER.ColliderDesc.trimesh(vertices, indices));
+  });
+  world.step();
+  // Open sky counts as unlimited headroom. castRay can skip a thin tube's
+  // nearest face on these trimeshes; the normal query reports the first hit.
+  const clear = (x: number, y: number, z: number) =>
+    (world.castRayAndGetNormal(new RAPIER.Ray({ x, y: y + 0.4, z }, { x: 0, y: 1, z: 0 }), 30, true)
+      ?.timeOfImpact ?? Infinity) + 0.4;
+  const floorOf = (family: string, x: number, z: number) =>
+    Math.min(
+      ...capitalRailSurfaces
+        .filter((s) => s.id.startsWith(family))
+        .map((s) => capitalSurfaceHeight(s, x, z) ?? Infinity),
+    );
+  try {
+    for (const [name, x, y, z, minimum] of [
+      ["west exterior beneath the third ascent", -20, 36, -72, 3],
+      ["garden tunnel beneath the beacon walk", -52, 14, -24, 3],
+      ["beacon walk beneath the garden tunnel", -32, floorOf("beacon-spiral:", -32, -24), -24, 4],
+      ["third-floor crossing over the rear arch", 0, 44, -78, 3],
+      ["roof return below the flying buttress", 23.9, 44, -46.4, 3],
+      ["street return below the curtain ribs", -71.9, -8, 32.9, 3],
+      ["attic return left door shoulder", 37.6, 24, 3, 3.49],
+      ["attic return right door shoulder", 40.4, 24, 3, 3.49],
+      ["rafter walk beneath the tie beams", -7, 50, -65, 3],
+      [
+        "eastern crown flight below its landing",
+        29,
+        floorOf("eastern-wall-crown:2:", 29, -15.3),
+        -15.3,
+        4,
+      ],
+    ] as const) {
+      assert.ok(
+        Math.abs((capitalFloorHeight(x, z, y) ?? Infinity) - y) < 0.05,
+        `${name}: no floor`,
+      );
+      assert.ok(clear(x, y, z) >= minimum, `${name}: ${clear(x, y, z).toFixed(2)} m`);
+    }
+    // Low space beneath interior flights is filled rather than left as a crawlway.
+    for (const [x, z] of [
+      [52, 15],
+      [39, 9],
+      [45.5, 24],
+      [-12, -63],
+    ])
+      assert.ok(
+        environment.solids.some(
+          (s) =>
+            Math.abs(x - s.position[0]) < s.size[0] / 2 + 0.01 &&
+            Math.abs(z - s.position[2]) < s.size[2] / 2 + 0.01 &&
+            s.size[1] > 1,
+        ),
+        `open space beneath the flight at ${x},${z}`,
+      );
+  } finally {
+    world.free();
+    environment.dispose();
+  }
 });

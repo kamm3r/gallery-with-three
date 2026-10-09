@@ -74,7 +74,11 @@ const PARISH_ATMOSPHERE = {
   density: 0.0008,
   fogStart: 80,
   skyFog: 0.08,
-  shafts: 0,
+  // Low sunset shafts cross the walls and naves, as in the reference footage.
+  shafts: 0.3,
+  shaftDensity: 0.022,
+  shaftDistance: 40,
+  shaftSteps: 12,
 };
 const ParishWarden = memo(AshWarden);
 const ParishEnemyViews = memo(ParishEnemies);
@@ -87,14 +91,14 @@ const ignoreHangChange = () => {};
 const PARISH_POST = {
   name: "Parish",
   exposure: 1.1,
-  contrast: 0.28,
+  contrast: 0.34,
   lift: 0.01,
-  saturation: 1.0,
-  vibrance: 0.12,
+  saturation: 1.12,
+  vibrance: 0.2,
   split: 0.08,
-  shadowTint: "#3d647b",
-  highlightTint: "#dce9ee",
-  bloomIntensity: 0.23,
+  shadowTint: "#284d82",
+  highlightTint: "#ffe2c0",
+  bloomIntensity: 0.32,
   aoIntensity: 1.1,
   aoColor: "#27332f",
   grain: 0.015,

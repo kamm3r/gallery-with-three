@@ -126,7 +126,7 @@ const authoredBuildings: CapitalBuilding[] = [
     center: [-29, -10],
     size: [7, 12],
     base: 20,
-    roof: 27,
+    roof: 28,
     flat: false,
     doors: [door("south", 20), door("north", 20), door("west", 20)],
   },
@@ -136,9 +136,10 @@ const authoredBuildings: CapitalBuilding[] = [
     center: [-29, -27],
     size: [7, 12],
     base: 20,
-    roof: 27,
+    // The upper return leaves through a full 3.5 m doorway beneath the eaves.
+    roof: 28,
     flat: false,
-    doors: [door("south", 20, 0, 4, 5), door("north", 24, 0, 4, 3), door("west", 20, 4, 4, 5)],
+    doors: [door("south", 20, 0, 4, 5), door("north", 24, 0, 4, 3.5), door("west", 20, 4, 4, 5)],
   },
   {
     id: "cathedral-oratory",
@@ -153,12 +154,13 @@ const authoredBuildings: CapitalBuilding[] = [
   {
     id: "cathedral-side-chapel",
     area: "cloister",
-    center: [29, -72],
-    size: [20, 22],
+    // Its south eave stops short of the east exterior walk along the transept.
+    center: [29, -70.75],
+    size: [20, 19.5],
     base: 24,
     roof: 37,
     flat: false,
-    doors: [door("west", 24, 0, 7, 10), door("south", 24, 0, 6, 8)],
+    doors: [door("west", 24, -1.25, 7, 10), door("south", 24, 0, 6, 8)],
   },
   {
     id: "wall-watchhouse",
@@ -208,6 +210,7 @@ type Builders = {
     points: ParishPoint[],
     width: number,
     layer?: "upper" | "lower",
+    levelPads?: boolean | number,
   ) => void;
 };
 export function authorCapitalDistricts({ rect: rectSurface, lane: laneSurface }: Builders) {
@@ -222,7 +225,7 @@ export function authorCapitalDistricts({ rect: rectSurface, lane: laneSurface }:
       d,
       layer,
     );
-  const lane: Builders["lane"] = (id, area, points, width, layer) =>
+  const lane: Builders["lane"] = (id, area, points, width, layer, levelPads) =>
     laneSurface(
       id,
       area,
@@ -233,6 +236,7 @@ export function authorCapitalDistricts({ rect: rectSurface, lane: laneSurface }:
       ]),
       width,
       layer,
+      levelPads,
     );
 
   for (const b of capitalBuildings)
@@ -269,14 +273,15 @@ export function authorCapitalDistricts({ rect: rectSurface, lane: laneSurface }:
     2.5,
   );
   rect("town-lower", "foundry", -44, 4, -18, 34, 34);
+  // The flight clears the east wall and floor edge of the house above it.
   lane(
     "town-cellar-stair",
     "foundry",
     [
-      [-35, 8, -4],
-      [-35, 4, -18],
+      [-35.5, 8, -4],
+      [-35.5, 4, -18],
     ],
-    6,
+    4,
   );
   rect("town-hall-gallery", "foundry", -44, 14, -21, 12, 14);
   lane(
@@ -371,16 +376,22 @@ export function authorCapitalDistricts({ rect: rectSurface, lane: laneSurface }:
   );
   for (const x of [-12, 12]) rect(`cathedral-third:${x}`, "cloister", x, 44, -65, 7, 46);
   for (const z of [-55, -77]) rect(`cathedral-third-cross:${z}`, "cloister", 0, 44, z, 30, 3);
+  // The west exterior enters the gallery beneath this flight. A steep first
+  // run and a landing lift the stair clear of that crossing before it eases.
+  // Each flight starts and ends exactly at the edge of its square landing.
   lane(
     "cathedral-third-ascent",
     "aqueduct",
     [
       [-12, 36, -84],
       [-20, 36, -84],
+      [-20, 40.5, -75.5],
       [-20, 44, -54],
       [-12, 44, -54],
     ],
     3,
+    undefined,
+    1.5,
   );
   lane(
     "oratory-entry",
@@ -438,9 +449,14 @@ export function authorCapitalDistricts({ rect: rectSurface, lane: laneSurface }:
   lane(
     "garden-town-return",
     "graveyard",
+    // The passage crosses the beacon well on its centre line, where the
+    // descending walk is a full storey above and below it, then returns
+    // to the vault beneath the plaza.
     [
       [-70, 24, -48],
-      [-70, 14, -28],
+      [-70, 14, -24],
+      [-26, 14, -24],
+      [-26, 14, -28],
       [88, 14, -28],
       [88, 14, 22],
       [75, 14, 22],

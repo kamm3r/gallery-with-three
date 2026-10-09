@@ -1,5 +1,10 @@
 import * as THREE from "three";
-import { addCapitalReferenceDetails, isCapitalStair } from "./capitalReferenceDetails.ts";
+import { buildCapitalCrag, capitalCeiling } from "./capitalCrag.ts";
+import {
+  addCapitalReferenceDetails,
+  giantSwordParts,
+  isCapitalStair,
+} from "./capitalReferenceDetails.ts";
 import { batchStaticMeshes } from "./batchStaticMeshes.ts";
 import {
   capitalSurfaces,
@@ -19,8 +24,8 @@ import {
 import {
   CAPITAL_GARDEN_Z,
   CAPITAL_GARDEN_X,
-  CAPITAL_TOWN_Z,
   CAPITAL_TOWN_X,
+  type CapitalDoor,
 } from "./capitalDistricts.ts";
 import type { ParishPoint } from "./ashenParish.ts";
 
@@ -67,20 +72,18 @@ export function buildCapitalEnvironment(gridded = true) {
     position: ParishPoint;
     yaw: number;
   }> = [];
-  // Pale two-metre lines on dark blue-gray faces match the video blockout.
-  // Each four-metre repeat covers four cells, with subtle face variation.
+  // Crisp pale-cyan two-metre lines over saturated blue-steel faces match the
+  // video blockout; faint half-metre lines give floors the same scale read.
   const gridTexture = () => {
     const canvas = document.createElement("canvas");
     canvas.width = canvas.height = 256;
     const ctx = canvas.getContext("2d")!;
     for (let row = 0; row < 2; row++)
       for (let col = 0; col < 2; col++) {
-        ctx.fillStyle = (row + col) % 2 ? "#525e6c" : "#566271";
+        ctx.fillStyle = (row + col) % 2 ? "#3a4c66" : "#3f526d";
         ctx.fillRect(col * 128, row * 128, 128, 128);
       }
-    ctx.strokeStyle = "#aeb6bc";
-    ctx.lineWidth = 2;
-    for (const offset of [0, 128, 256]) {
+    const line = (offset: number) => {
       ctx.beginPath();
       ctx.moveTo(offset, 0);
       ctx.lineTo(offset, 256);
@@ -89,9 +92,15 @@ export function buildCapitalEnvironment(gridded = true) {
       ctx.moveTo(0, offset);
       ctx.lineTo(256, offset);
       ctx.stroke();
-    }
+    };
+    ctx.strokeStyle = "rgba(170, 214, 255, 0.22)";
+    ctx.lineWidth = 1;
+    for (let offset = 32; offset < 256; offset += 32) if (offset % 128) line(offset);
+    ctx.strokeStyle = "#cfe8ff";
+    ctx.lineWidth = 2.5;
+    for (const offset of [0, 128, 256]) line(offset);
     ctx.font = "11px sans-serif";
-    ctx.fillStyle = "#aeb6bc";
+    ctx.fillStyle = "#cfe8ff";
     for (let row = 0; row < 2; row++)
       for (let col = 0; col < 2; col++) ctx.fillText("02 m", col * 128 + 10, row * 128 + 21);
     const t = new THREE.CanvasTexture(canvas);
@@ -151,19 +160,20 @@ export function buildCapitalEnvironment(gridded = true) {
         float b=exp(clamp((-8.-vCapitalPosition.y)*.09,-40.,8.));
         float average=abs(dy)<.01?a:(a-b)/dy;
         float mist=1.-exp(-length(vCapitalPosition-cameraPosition)*max(average,0.)*mix(.012,.0008,capitalReveal));
-        gl_FragColor.rgb=mix(gl_FragColor.rgb,vec3(.48,.56,.65),clamp(mist,0.,.985));`,
+        gl_FragColor.rgb=mix(gl_FragColor.rgb,vec3(.15,.25,.45),clamp(mist,0.,.985));`,
         );
     };
-    mat.customProgramCacheKey = () => "capital-height-fog-v2";
+    mat.customProgramCacheKey = () => "capital-height-fog-v3";
     return mat;
   };
   const m = {
-    stone: material("#c5c8ca", true),
-    dark: material("#747b80", true),
-    paving: material("#9ca5ad", true),
-    trim: material("#b7b3aa", true),
-    roof: material("#818c97", true, { side: THREE.DoubleSide }),
-    rock: material("#7e8892", true),
+    stone: material("#d2dcea", true),
+    dark: material("#7c8aa0", true),
+    paving: material("#b4c2d4", true),
+    trim: material("#c3c9d2", true),
+    roof: material("#7a8aa2", true, { side: THREE.DoubleSide }),
+    // Natural crags carry no blockout grid, which sets them apart from masonry.
+    rock: material("#7c7a7a", false, { flatShading: true }),
     cavern: material("#3b4b58", true, { side: THREE.DoubleSide }),
     timber: material("#403b36"),
     iron: material("#333a40", false, { metalness: 0.6 }),
@@ -173,10 +183,10 @@ export function buildCapitalEnvironment(gridded = true) {
     clock: material("#d0b17c", false, { emissive: "#98754c", emissiveIntensity: 0.08 }),
     windowWarm: material("#805f44", false, { emissive: "#e99b52", emissiveIntensity: 0.25 }),
     windowBlue: material("#3e6477", false, { emissive: "#54a5c4", emissiveIntensity: 0.2 }),
-    soil: material("#8b969d", true),
+    soil: material("#97a2b0", true),
     green: material("#354c48"),
     statue: material("#b7bdc3"),
-    backdrop: material("#717d8c", false),
+    backdrop: material("#56688a", false),
     portal: material("#e4ba77", false, { map: portalMap, metalness: 0 }),
   };
   const add = (
@@ -507,7 +517,7 @@ export function buildCapitalEnvironment(gridded = true) {
       for (let tier = 0; tier < 3; tier++) {
         const r = radius + 1.2 - tier * 0.25;
         box(
-          [Math.sin(theta) * r, -11 + tier * 4, Math.cos(theta) * r],
+          [Math.sin(theta) * r, -10.75 + tier * 4, Math.cos(theta) * r],
           [2.3 - tier * 0.3, 4.2, 2.7 - tier * 0.35],
           m.dark,
           theta,
@@ -731,17 +741,24 @@ export function buildCapitalEnvironment(gridded = true) {
   for (const side of [-1, 1]) {
     for (const z of [-47, -58, -70, -82]) {
       const x = side * 19;
-      box([x, 34, z], [2.4, 20, 3.4], m.dark);
-      box([x, 43, z], [3.2, 1, 4.2], m.trim);
-      cylinder([x, 48, z], 0.65, 5, m.trim, 6, 0.15);
+      // The west doorways and the exterior stair along that wall keep their
+      // openings clear; only the northern bay carries a buttress there.
+      if (side === 1 || z === -47) {
+        box([x, 34, z], [2.4, 20, 3.4], m.dark);
+        box([x, 43, z], [3.2, 1, 4.2], m.trim);
+        cylinder([x, 48, z], 0.65, 5, m.trim, 6, 0.15);
+      }
       pointedArch([side * 16.4, 36, z], 7, 5, Math.PI / 2);
       window([side * 17.76, 39, z], 2.2, 8, (side * Math.PI) / 2, true);
     }
     for (const x of [6, 12]) window([side * x, 37, -41.2], 2, 8);
   }
   for (const z of [-52, -65, -78]) {
-    pointedArch([0, 36, z], 20, 11);
-    box([0, 53, z], [34, 0.65, 0.65], m.dark);
+    // The rear bay carries both crossings at -77: its gallery arch would cut
+    // through the y 44 bridge.
+    if (z !== -78) pointedArch([0, 36, z], 20, 11);
+    // Tie beams keep 3.5 m over the rafter walks and end within the roof.
+    box([0, 54.2, z], [28, 0.65, 0.65], m.dark);
   }
   for (const side of [-1, 1])
     for (const z of [-48, -61, -75, -84]) {
@@ -756,7 +773,8 @@ export function buildCapitalEnvironment(gridded = true) {
     window([x, 28, -87.55], 2.8, 9);
     pointedArch([x, 27.8, -87.3], 4, 11, 0, m.trim, 0.3);
   }
-  for (const z of [-52, -65, -78]) pointedArch([0, 24, z], 21, 23, 0, m.trim, 0.4);
+  // The rear transverse arch rises to the underside of the y 44 crossing it carries.
+  for (const z of [-52, -65, -78]) pointedArch([0, 24, z], 21, z === -78 ? 19 : 23, 0, m.trim, 0.4);
   box([0, 25.35, -85], [8.5, 0.25, 2.5], m.trim);
   for (const x of [-3, 3]) {
     cylinder([x, 26, -85], 0.16, 1.1, m.gold, 8);
@@ -795,8 +813,8 @@ export function buildCapitalEnvironment(gridded = true) {
       }
       const curve = new THREE.CatmullRomCurve3([
         new THREE.Vector3(side * 27, 40, z),
-        new THREE.Vector3(side * 25, 46, z),
-        new THREE.Vector3(side * 21, 49, z),
+        new THREE.Vector3(side * 25, 47, z),
+        new THREE.Vector3(side * 21, 50, z),
         new THREE.Vector3(side * 17.8, 53, z),
       ]);
       add(new THREE.TubeGeometry(curve, 16, 0.7, 6, false), m.trim);
@@ -905,17 +923,35 @@ export function buildCapitalEnvironment(gridded = true) {
       }
     }
     if (b.id.startsWith("town-") || b.id.startsWith("mid-town:")) {
+      // Horizontal timbers stop at door jambs instead of crossing an opening
+      // at head or ankle height.
+      const bandSpans = (face: CapitalDoor["side"], length: number, y: number) => {
+        let spans = [[-length / 2, length / 2]];
+        for (const v of b.doors) {
+          if (v.side !== face || y < v.y - 0.3 || y > v.y + v.height + 0.3) continue;
+          const [l, r] = [v.offset - v.width / 2 - 0.6, v.offset + v.width / 2 + 0.6];
+          spans = spans.flatMap(([a, c]) =>
+            [
+              [a, Math.min(c, l)],
+              [Math.max(a, r), c],
+            ].filter(([p, q]) => q - p > 0.05),
+          );
+        }
+        return spans;
+      };
       for (const side of [-1, 1]) {
         const zFace = z + side * (d / 2 + 0.42);
         for (const xx of [-w / 2, w / 2])
           box([x + xx, (b.base + b.roof) / 2, zFace], [0.26, b.roof - b.base, 0.22], m.timber);
         for (let y = b.base + 0.25; y <= b.roof; y += 6)
-          box([x, y, zFace], [w, 0.26, 0.24], m.timber);
+          for (const [a, c] of bandSpans(side === 1 ? "south" : "north", w, y))
+            box([x + (a + c) / 2, y, zFace], [c - a, 0.26, 0.24], m.timber);
         const xFace = x + side * (w / 2 + 0.42);
         for (const zz of [-d / 2, d / 2])
           box([xFace, (b.base + b.roof) / 2, z + zz], [0.22, b.roof - b.base, 0.26], m.timber);
         for (let y = b.base + 0.25; y <= b.roof; y += 6)
-          box([xFace, y, z], [0.24, 0.26, d], m.timber);
+          for (const [a, c] of bandSpans(side === 1 ? "east" : "west", d, y))
+            box([xFace, y, z + (a + c) / 2], [0.24, 0.26, c - a], m.timber);
         for (let zz = -d / 2 + 2; zz < d / 2 - 1; zz += 4)
           for (let y = b.base + 2.8; y < b.roof - 2; y += 6) {
             const doors = b.doors.filter((v) => v.side === (side === 1 ? "east" : "west"));
@@ -944,11 +980,13 @@ export function buildCapitalEnvironment(gridded = true) {
       const px = x + (across ? v.offset : v.side === "east" ? w / 2 : -w / 2);
       const pz = z + (across ? (v.side === "south" ? d / 2 : -d / 2) : v.offset);
       const yaw = across ? 0 : Math.PI / 2;
-      pointedArch([px, v.y, pz], v.width, v.height, yaw, m.portal, 0.3);
+      // The reference door metric describes a clear rectangle. Keep the amber
+      // surround outside it; an arch at this height pinched the upper corners.
+      box([px, v.y + v.height + 0.3, pz], [v.width + 1.2, 0.6, 0.7], m.portal, yaw);
       for (const side of [-1, 1]) {
         const jambX = px + Math.cos(yaw) * side * (v.width / 2 + 0.3);
         const jambZ = pz - Math.sin(yaw) * side * (v.width / 2 + 0.3);
-        box([jambX, v.y + v.height * 0.325, jambZ], [0.6, v.height * 0.65, 0.7], m.portal, yaw);
+        box([jambX, v.y + v.height / 2, jambZ], [0.6, v.height, 0.7], m.portal, yaw);
         box([jambX, v.y + 0.25, jambZ], [0.9, 0.5, 0.9], m.trim, yaw);
       }
     }
@@ -965,11 +1003,12 @@ export function buildCapitalEnvironment(gridded = true) {
       for (const z of [-48, -61, -75, -84])
         window([side * 17.4, y + 1, -65 + (z + 65)], 1.8, 4, (side * Math.PI) / 2);
     }
+  // Corner buttresses stop at the edge of the exterior stair beside the wall.
   for (const side of [-1, 1])
     for (const z of [-46, -83]) {
-      box([side * 18.7, 40, z], [2.2, 32, 2.7], m.dark);
-      cylinder([side * 18.7, 56.7, z], 1.4, 2, m.trim, 8);
-      cylinder([side * 18.7, 60, z], 1.5, 5, m.roof, 8, 0.1);
+      box([side * 18.05, 40, z], [0.9, 32, 2.7], m.dark);
+      cylinder([side * 18.05, 56.7, z], 0.9, 2, m.trim, 8);
+      cylinder([side * 18.05, 60, z], 1, 5, m.roof, 8, 0.1);
     }
   for (const side of [-1, 1])
     for (const z of [-49, -60, -73, -84]) {
@@ -1012,16 +1051,6 @@ export function buildCapitalEnvironment(gridded = true) {
   // Joined cliff shelves support the western roads instead of leaving every
   // district suspended on isolated poles.
   rockFoundation(44 - CAPITAL_TOWN_X, 18, 22, 22, 3.3, -20, 19);
-  // Mountain foundations enfold the upper town and leave the covered tunnel open.
-  for (let i = 0; i < 12; i++) {
-    const rock = add(new THREE.DodecahedronGeometry(7 + (i % 3), 0), m.rock, [
-      46 + (i % 3) * 8 - CAPITAL_TOWN_X,
-      -1 - Math.floor(i / 3) * 6,
-      -20 - Math.floor(i / 3) * 10 + CAPITAL_TOWN_Z,
-    ]);
-    rock.scale.set(1, 1.2, 1.3);
-    rock.rotation.set(i * 0.4, i * 0.8, i * 0.17);
-  }
   const gardenStart = root.children.length;
   const gardenColliderStart = colliders.length;
   // The whole precinct rests on one irregular rock island. The return route
@@ -1247,18 +1276,6 @@ export function buildCapitalEnvironment(gridded = true) {
   }
   for (const x of [-10, 10]) window([x, -8, -31.9], 3.4, 14, 0, true);
   pointedArch([0, -12, 26], 10, 15, 0, m.trim, 0.45);
-  // The broken swords outside the beacon retain the video's unmistakable silhouette.
-  for (const [x, y, z, yaw] of [
-    [61, 8, 4, 0.3],
-    [23, -3, 56, -0.2],
-    [-31, 5, 44, -0.6],
-  ]) {
-    const blade = box([x, y + 10, z], [1.5, 20, 0.35], m.trim, yaw);
-    blade.rotation.z = 0.15;
-    box([x, y + 21, z], [7, 0.7, 0.8], m.gold, yaw);
-    box([x, y + 24, z], [0.8, 6, 0.8], m.timber, yaw);
-    cylinder([x, y + 27.4, z], 0.7, 1, m.gold, 8);
-  }
   // Embers and small lanterns are emissive geometry; the view assigns a bounded nearby light set.
   for (const s of capitalShrines) {
     cylinder([s.position[0], s.position[1] + 0.2, s.position[2]], 1, 0.4, m.dark, 12);
@@ -1285,6 +1302,43 @@ export function buildCapitalEnvironment(gridded = true) {
       [Math.PI / 2, 0, 0],
     );
   }
+  // One craggy mountain carries the whole capital, as in the reference
+  // overview. It is decorative, so it stays beneath every reachable surface.
+  const ceiling = capitalCeiling(
+    root.children.filter((o) => !(o instanceof THREE.Mesh && o.material === m.rock)),
+    capitalRailSurfaces,
+  );
+  add(buildCapitalCrag(ceiling), m.rock).castShadow = false;
+  // Giant swords stand point-down in the fog around the city, as in the
+  // reference. They have no colliders, so each one needs open air from its
+  // buried point to its leaning pommel: nothing reachable can pass through it.
+  const sword = (x: number, y: number, z: number, yaw: number, lean: number, scale: number) => {
+    const rotation: ParishPoint = [lean * 0.4, yaw, lean];
+    const pommel = new THREE.Vector3(0, 27 * scale, 0)
+      .applyEuler(new THREE.Euler(...rotation))
+      .add(new THREE.Vector3(x, y, z));
+    const reach = 4 * scale;
+    if (ceiling(x, z, reach) !== Infinity || ceiling(pommel.x, pommel.z, reach) !== Infinity)
+      return;
+    const { blade, hilt } = giantSwordParts();
+    for (const g of [blade, hilt]) g.scale(scale, scale, scale);
+    add(blade, m.trim, [x, y, z], rotation);
+    add(hilt, m.gold, [x, y, z], rotation);
+  };
+  for (let i = 0; i < 28; i++) {
+    const a = i * 2.399963 + 0.4;
+    // An inner ring frames the routes; the outer ring rises from deep fog.
+    const inner = i < 12;
+    const radius = inner ? 64 + (i % 3) * 7 : 92 + (i % 4) * 14;
+    sword(
+      Math.cos(a) * radius,
+      inner ? -14 + (i % 3) * 5 : -30 + (i % 3) * 4,
+      10 + Math.sin(a) * radius * 0.9,
+      a * 1.7,
+      ((i % 5) - 2) * 0.11,
+      inner ? 1.1 + (i % 2) * 0.2 : 1.5 + (i % 3) * 0.25,
+    );
+  }
   addCapitalReferenceDetails(add, m, capitalRailSurfaces);
   const batching = batchStaticMeshes(root, 40);
   let disposed = false;
@@ -1293,6 +1347,8 @@ export function buildCapitalEnvironment(gridded = true) {
     colliders,
     solids: capitalSolids,
     fogReveal,
+    // Lift decks share the amber checker of the door surrounds, as in the video.
+    liftMaterial: m.portal,
     dispose() {
       if (disposed) return;
       disposed = true;

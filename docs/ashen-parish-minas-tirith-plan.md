@@ -60,3 +60,41 @@ A new Rapier capsule route checks the crown, clock platform and return. The rout
 This is an additional correction, not a claim of a one-to-one match. The current overview below uses a camera on the garden side so the western island and eastern tower can be compared with the article's overview. Remaining differences include some district proportions and the detailed cathedral façade.
 
 ![Current capital silhouette](previews/capital-reference-overview.jpg)
+
+## Video look pass
+
+The palette and lighting now follow the playthrough rather than a neutral grey blockout. Grid faces are blue-steel with crisp pale-cyan two-metre lines and faint half-metre subdivisions. The sunset key light is lower and warmer, and is aligned with the sky's sun glow, so walls cast long raking shadows. Skylight and graded shadows are blue, and the height fog is a mid-blue haze instead of a pale wash. Lift decks use the amber checker of the door surrounds. Layout, collision and navigation are unchanged.
+
+Left: before. Right: after.
+
+![Before and after the video look pass](previews/capital-video-look-before-after.jpg)
+
+## Mountain, swords and sunset
+
+The capital now stands on one craggy mountain, as in the article's map and overview. `capitalCrag.ts` rasterizes every existing mesh and walkable surface into a map of the lowest architecture in each two-metre column. Jagged prisms and boulders are clamped two metres below that height, with a five-metre side margin. Toward the rim, peaks fall into the fog. The crag has no collider; a capital test builds it against every walkway and lift shaft and checks the clearances. The rock material has no blockout grid, so natural stone stays distinct from masonry, as in the footage.
+
+Giant swords stand point-down in an inner and outer ring in the fog. Each needs open air from its buried point to its leaning pommel, so no reachable surface passes through a blade. This replaces three fixed swords; one stood inside the relocated town and pierced its floors.
+
+Low sunset light shafts are enabled. The sky has a hot sun disc that bloom turns into glare, and the key light sits at the same low angle. From the opening checkpoint, the player looks into the sun along the wall, as in the first frame of the footage.
+
+Left: reference (atmosphere shot, article overview and opening frame of the video). Right: current capital.
+
+![Reference comparison](previews/capital-reference-match.jpg)
+
+The district layout still follows the existing routes rather than the article overview exactly. In particular, the broad curved eastern retaining wall remains narrower than in the overview.
+
+## Reference clearance pass
+
+The supplied metrics chart has now been read at full size. For the 1.84 m player capsule, this pass uses 3 m hallway headroom, 4 m stair headroom, a minimum 1.5 m road or hallway width, and a clear 2 × 3.5 m doorway. Amber door surrounds now frame the full rectangular opening instead of placing an arch inside its upper corners.
+
+The exterior cathedral ascent and eastern crown use landings that meet the flights at their edges. The rear cathedral arch and rafter tie beams clear the crossings above them. Town timber bands stop at door jambs, the cellar stair fits between the neighboring floor edges, and the garden return passes through the beacon well with headroom above both routes. Masonry closes the low space beneath interior stairs; the taller part of the nave stair remains open for the side-chapel crossing.
+
+The roof return clears its flying buttress, the lower street return clears the curtain ribs, and the town lift lanterns sit against the shaft wall rather than in the landing passage. The eastern outer-wall arc is two metres wider to preserve walking space beside the town foundation.
+
+Run `node --experimental-strip-types scripts/auditCapitalMetrics.ts` for an advisory audit of rendered geometry. It excludes solid foundations and places the capsule cannot stand, uses normal ray queries to detect thin ornaments, and reports limiting triangles. The current sampling finds no headroom, minimum path-width or door-size violations. This is not certification of every chart metric: room sizes, four-metre street and stair widths, and movement speeds are not audited by this script.
+
+Validation: all 312 configured tests pass, including 36 capital tests. Door-shoulder regression checks fail when the old arches are restored. `vp check`, `vp run typecheck` and `vp run build` pass; lint still reports warnings. Built-in `vp test` cannot discover suites in the repository's `node:test` files, so `vp run test` remains the configured runner.
+
+Current overview, captured with an inspection camera in the native collaborative browser:
+
+![Capital after the clearance pass](previews/capital-clearance-overview.png)

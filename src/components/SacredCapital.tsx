@@ -33,10 +33,12 @@ function CapitalLift({
   id,
   states,
   resetVersion,
+  deck,
 }: {
   id: CapitalLiftId;
   states: MutableRefObject<CapitalLiftsState>;
   resetVersion: number;
+  deck: THREE.Material;
 }) {
   const spec = capitalLifts.find((l) => l.id === id)!;
   const body = useRef<RapierRigidBody>(null);
@@ -64,9 +66,8 @@ function CapitalLift({
       name={`capital-${id}-lift`}
     >
       <CuboidCollider args={[3, 0.3, 3]} />
-      <mesh castShadow receiveShadow>
+      <mesh castShadow receiveShadow material={deck}>
         <boxGeometry args={[6, 0.6, 6]} />
-        <meshStandardMaterial color="#625e56" roughness={0.85} />
       </mesh>
       {[-1, 1].map((side) => (
         <mesh key={side} position={[side * 2.85, 1.5, 0]} castShadow>
@@ -143,8 +144,8 @@ export const SacredCapital = memo(
             0.8,
             Math.min(delta, 0.05),
           );
-      sunlight.fogColor.value.set("#adb3bf");
-      sunlight.color.value.set("#cfdfeb");
+      sunlight.fogColor.value.set("#7f94b4");
+      sunlight.color.value.set("#ffd2a4");
       sunlight.direction.value.set(-0.6, 0.7, 0.4).normalize();
       if (scene.fog instanceof THREE.Fog) scene.fog.color.copy(sunlight.fogColor.value);
       const c = state.current.combat;
@@ -160,7 +161,7 @@ export const SacredCapital = memo(
         }
       });
       if (sun.current) {
-        sun.current.position.set(c.playerX - 30, c.playerY + 35, c.playerZ + 48);
+        sun.current.position.set(c.playerX - 42, c.playerY + 13, c.playerZ + 48);
         sun.current.target.position.set(c.playerX, c.playerY, c.playerZ);
         sun.current.target.updateMatrixWorld();
       }
@@ -169,13 +170,13 @@ export const SacredCapital = memo(
       <>
         <color attach="background" args={["#b58d70"]} />
         <CapitalSky />
-        <fog attach="fog" args={["#adb3bf", 160, 700]} />
-        <hemisphereLight args={["#a0b9d5", "#313541", 0.95]} />
+        <fog attach="fog" args={["#7f94b4", 160, 700]} />
+        <hemisphereLight args={["#86aee6", "#1f2a3e", 0.9]} />
         <directionalLight
           ref={sun}
           position={[-25, 65, 28]}
-          intensity={2.5}
-          color="#ffcf94"
+          intensity={3.4}
+          color="#ffb46c"
           castShadow
           shadow-mapSize={[1024, 1024]}
           shadow-camera-left={-32}
@@ -296,7 +297,13 @@ export const SacredCapital = memo(
           <CapitalSeal position={[26, 24, -29.33]} width={7} yaw={Math.atan2(24, 8)} />
         )}
         {capitalLifts.map((l) => (
-          <CapitalLift key={l.id} id={l.id} states={lifts} resetVersion={resetVersion} />
+          <CapitalLift
+            key={l.id}
+            id={l.id}
+            states={lifts}
+            resetVersion={resetVersion}
+            deck={environment.liftMaterial}
+          />
         ))}
         {capitalCaches
           .filter((c) => !progress.caches.includes(c.id))

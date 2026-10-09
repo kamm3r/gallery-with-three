@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import type { CapitalSurface } from "./capitalLayout.ts";
 import { capitalStatues } from "./capitalLayout.ts";
 import type { ParishPoint } from "./ashenParish.ts";
@@ -29,6 +30,30 @@ export function isCapitalStair(s: CapitalSurface) {
     stairFamilies.some((id) => s.id.startsWith(id + ":")) &&
     Math.abs(s.vertices[1][1] - s.vertices[0][1]) > 0.1
   );
+}
+
+/**
+ * A giant sword planted point-down, in local space with the buried tip at the
+ * origin. Blade and hilt share one frame so the whole sword tilts together.
+ */
+export function giantSwordParts(length = 20) {
+  const tip = new THREE.ConeGeometry(0.75, 3, 4);
+  tip.rotateX(Math.PI);
+  tip.rotateY(Math.PI / 4);
+  tip.scale(1, 1, 0.23);
+  tip.translate(0, 1.5, 0);
+  const steel = new THREE.BoxGeometry(1.5, length - 3, 0.35);
+  steel.translate(0, 3 + (length - 3) / 2, 0);
+  const blade = mergeGeometries([tip.toNonIndexed(), steel.toNonIndexed()]);
+  const guard = new THREE.BoxGeometry(7, 0.7, 0.8);
+  guard.translate(0, length + 0.35, 0);
+  const grip = new THREE.CylinderGeometry(0.4, 0.45, 5, 8);
+  grip.translate(0, length + 3.2, 0);
+  const pommel = new THREE.CylinderGeometry(0.7, 0.7, 1, 8);
+  pommel.translate(0, length + 6.1, 0);
+  const hilt = mergeGeometries([guard.toNonIndexed(), grip.toNonIndexed(), pommel.toNonIndexed()]);
+  for (const g of [tip, steel, guard, grip, pommel]) g.dispose();
+  return { blade, hilt };
 }
 
 /** Repeated architectural cues read at walking height in the reference demo. */
