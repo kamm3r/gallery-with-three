@@ -1,3 +1,4 @@
+import { characterSweepAllowed } from "../src/gameplay/characterCollision.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -61,9 +62,11 @@ const filterCode = ts.transpileModule(`const filter = ${filterExpression};`, {
   compilerOptions: { target: ts.ScriptTarget.ESNext },
 }).outputText;
 // oxlint-disable-next-line typescript/no-implied-eval
-const obstacleFilter = new Function("ridden", `${filterCode}; return filter;`)(() => false) as (
-  collider: RAPIER.Collider,
-) => boolean;
+const obstacleFilter = new Function(
+  "characterSweepAllowed",
+  "ridingHandle",
+  `${filterCode}; return filter;`,
+)(characterSweepAllowed, Number.NaN) as (collider: RAPIER.Collider) => boolean;
 function fixture() {
   const world = new RAPIER.World({ x: 0, y: -30, z: 0 });
   const enemy = world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased());

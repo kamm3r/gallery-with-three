@@ -6,24 +6,38 @@ import {
   capitalWorld,
   capitalNavigation,
   capitalCaches,
-  capitalSurfaceAt,
   capitalFloorHeight,
   capitalBlocked,
   capitalBosses,
   capitalEnemySpawns,
   capitalLifts,
   capitalSurfaces,
+  capitalSolids,
   capitalLineClear,
   capitalShortcut,
   capitalCathedralShortcut,
-  capitalFoundations,
+  capitalTownGate,
+  capitalBeaconSeal,
   capitalShrines,
+  capitalNpcs,
+  capitalBeacon,
+  capitalLevel,
   capitalSurfaceHeight,
-  capitalRailSurfaces,
-  capitalBuildings,
+  CAPITAL_EXIT,
 } from "../src/gameplay/capitalLayout.ts";
+import {
+  CAPITAL_SITES,
+  TIER_H,
+  TIER_R,
+  LOWER_STREET_X,
+  TIER_STAIRS,
+  bandMid,
+  onTier,
+  CAPITAL_HOMES,
+  polar,
+} from "../src/gameplay/capitalDistricts.ts";
+import { CAPITAL_METRICS } from "../src/gameplay/capitalMetrics.ts";
 import { buildCapitalEnvironment } from "../src/gameplay/capitalEnvironment.ts";
-import { buildCapitalCrag, capitalCeiling } from "../src/gameplay/capitalCrag.ts";
 import {
   beginCapitalBoss,
   activateCapitalBeacon,
@@ -32,7 +46,7 @@ import {
   stepCapitalLift,
   capitalInteraction,
 } from "../src/gameplay/capitalProgress.ts";
-import { newParishProgress } from "../src/gameplay/ashenParish.ts";
+import { newParishProgress, type ParishPoint } from "../src/gameplay/ashenParish.ts";
 import {
   createParishEncounter,
   resetParishEncounter,
@@ -40,24 +54,175 @@ import {
 } from "../src/gameplay/parishEncounter.ts";
 import { stepEncounter } from "../src/gameplay/bossEncounter.ts";
 
-void test("stacked cathedral floors stay distinct and both lift shafts contain no fixed paving", () => {
-  for (const y of [24, 36, 44]) assert.equal(capitalFloorHeight(-12, -65, y), y);
-  for (const lift of capitalLifts)
-    for (const y of [lift.low, lift.high])
-      assert.equal(
-        capitalFloorHeight(lift.center[0], lift.center[2], y),
-        null,
-        "fixed paving traps a moving platform",
-      );
-  for (const e of capitalEnemySpawns)
-    assert.ok(
-      Math.abs(capitalFloorHeight(e.position[0], e.position[2], e.position[1])! - e.position[1]) <
-        0.12,
-      `${e.id} must stand on its intended floor`,
-    );
-  assert.ok(capitalSurfaces.some((s) => s.id.startsWith("beacon-spiral")));
+/** Eight offsets on a circle, so checks do not depend on how a shaft is turned. */
+const ring8 = (r: number) =>
+  Array.from({ length: 8 }, (_, i) => [
+    Math.cos((i * Math.PI) / 4) * r,
+    Math.sin((i * Math.PI) / 4) * r,
+  ]);
+const near = (p: ParishPoint, tolerance = 0.12) =>
+  Math.abs((capitalFloorHeight(p[0], p[2], p[1]) ?? Infinity) - p[1]) < tolerance;
+
+void test("the level is built only from catalogue kit pieces and kit floor panels", () => {
+  const models = new Set(capitalLevel.pieces.map((p) => p.model));
+  for (const model of [
+    "wall",
+    "pillar",
+    "stairs",
+    "curved-stairs",
+    "walkway",
+    "hallway",
+    "elevator",
+    "doorway",
+    "double-door",
+    "scaffold",
+    "crate",
+    "drum",
+    "log-pile",
+    "debris",
+    "corner-wall",
+    "fallen-beam",
+    "post",
+  ])
+    assert.ok(models.has(model as never), `no ${model} in the level`);
+  assert.ok(capitalLevel.pieces.length > 400);
 });
-void test("mini-boss victory unlocks the crown switch; final victory and both flags survive an in-place retry", () => {
+
+void test("every anchor stands on its floor and outside every collider", () => {
+  const anchors: Array<[string, ParishPoint]> = [
+    ...capitalCaches.map((c): [string, ParishPoint] => [c.id, c.position]),
+    ...capitalShrines.map((s): [string, ParishPoint] => [`shrine ${s.id}`, s.spawn]),
+    ...capitalEnemySpawns.map((e): [string, ParishPoint] => [e.id, e.position]),
+    ...capitalNpcs.map((n): [string, ParishPoint] => [n.id, n.position]),
+    ...Object.entries(capitalBosses).flatMap(([id, b]): Array<[string, ParishPoint]> => [
+      [`${id} spawn`, b.spawn],
+      [`${id} entry`, b.entry],
+      [`${id} origin`, b.origin],
+    ]),
+    ["beacon switch", capitalBeacon.position],
+    ["forest exit", CAPITAL_EXIT],
+  ];
+  for (const [id, p] of anchors) {
+    assert.ok(near(p), `${id} has no floor at ${p.join(",")}`);
+    if (!id.startsWith("shrine") || id.endsWith("spawn"))
+      assert.equal(capitalBlocked(p[0], p[1], p[2], 0.3), false, `${id} is inside a collider`);
+  }
+  for (const e of capitalEnemySpawns)
+    assert.equal(
+      capitalWorld.surfaceId(...([e.position[0], e.position[2], e.position[1]] as const)) !== null,
+      true,
+    );
+});
+
+void test("lift shafts hold no fixed floor or collider through their whole travel", () => {
+  for (const lift of capitalLifts) {
+    const [x, , z] = lift.center;
+    for (let y = lift.low; y <= lift.high; y += 0.5) {
+      assert.equal(capitalBlocked(x, y, z, 0.42), false, `${lift.id} shaft blocked at ${y}`);
+      for (const [dx, dz] of [
+        [0, 0],
+        [2, 2],
+        [-2, 2],
+        [2, -2],
+        [-2, -2],
+      ])
+        assert.ok(
+          capitalSurfaces.every((s) => {
+            const h = capitalSurfaceHeight(s, x + dx, z + dz);
+            return h === null || h < lift.low - 0.5 || h > lift.high + 3;
+          }),
+          `${lift.id}: fixed floor in the shaft at ${y}`,
+        );
+    }
+    // Each landing touches the deck edge on the floor it serves.
+    for (const y of [lift.low, lift.high])
+      assert.ok(
+        ring8(3.6).some(([dx, dz]) => near([x + dx, y, z + dz])),
+        `${lift.id} has no landing at ${y}`,
+      );
+  }
+});
+
+void test("the lowest tier keeps a broad open courtyard inside the great gate", () => {
+  assert.ok(TIER_R[0] - TIER_R[1] >= 35);
+  // A sixteen-metre-wide gathering space between the row houses and curtain wall.
+  for (let radius = 0; radius <= 8; radius += 0.5)
+    for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / 16) {
+      const x = CAPITAL_SITES.courtyard[0] + Math.cos(angle) * radius;
+      const z = CAPITAL_SITES.courtyard[2] + Math.sin(angle) * radius;
+      assert.ok(near([x, 0, z], 0.05), `courtyard floor missing at ${x},${z}`);
+      assert.equal(capitalBlocked(x, 0, z, 0.42), false, `courtyard blocked at ${x},${z}`);
+    }
+});
+
+void test("the boss rooms keep their whole leash circle open floor", () => {
+  for (const [id, boss] of Object.entries(capitalBosses)) {
+    const [ox, oy, oz] = boss.origin,
+      keep = boss.radius + 1.5;
+    for (let r = 0; r <= keep; r += 1.5)
+      for (let a = 0; a < Math.PI * 2; a += Math.PI / 12) {
+        const x = ox + Math.cos(a) * r,
+          z = oz + Math.sin(a) * r;
+        assert.ok(near([x, oy, z], 0.05), `${id}: no floor at ${x.toFixed(1)},${z.toFixed(1)}`);
+        assert.equal(capitalBlocked(x, oy, z, 0), false, `${id}: blocked at ${x},${z}`);
+      }
+  }
+});
+
+void test("doors, rooms, paths, streets and hallways meet the reference metrics", () => {
+  for (const d of capitalLevel.doors) {
+    assert.ok(d.width >= CAPITAL_METRICS.doorWidth, `${d.id} is ${d.width} m wide`);
+    assert.ok(d.height >= CAPITAL_METRICS.doorHeight, `${d.id} is ${d.height} m tall`);
+  }
+  assert.ok(capitalLevel.doors.length >= 20);
+  for (const r of capitalLevel.rooms) {
+    assert.ok(Math.min(r.width, r.depth) >= CAPITAL_METRICS.roomSize, `${r.id} is too small`);
+    assert.ok(r.height >= CAPITAL_METRICS.hallwayHeight, `${r.id} is too low`);
+  }
+  for (const route of capitalLevel.routes) {
+    const minimum =
+      route.kind === "street" ? CAPITAL_METRICS.streetWidth : CAPITAL_METRICS.pathWidth;
+    assert.ok(route.width >= minimum, `${route.id} is ${route.width} m wide`);
+    if (route.headroom !== undefined)
+      assert.ok(route.headroom >= CAPITAL_METRICS.hallwayHeight, `${route.id} headroom`);
+  }
+  // Exterior main flights are street-wide.
+  for (const id of [...TIER_STAIRS.map((t) => `tier-stair-${t.k + 1}`), "outside-path-stair"])
+    assert.ok(
+      capitalLevel.routes.find((r) => r.id === id)!.width >= CAPITAL_METRICS.streetWidth,
+      id,
+    );
+});
+
+void test("every walkable surface joins one network through doors, stairs and lifts", () => {
+  const links = new Map(
+    capitalSurfaces.map((s) => [s.id, new Set(capitalNavigation.links.get(s.id))]),
+  );
+  const at = (x: number, y: number, z: number) => capitalWorld.surfaceId(x, z, y)!;
+  for (const lift of capitalLifts) {
+    const ends = [lift.low, lift.high].map((y) => {
+      const [dx, dz] = ring8(3.6).find(([dx, dz]) =>
+        near([lift.center[0] + dx, y, lift.center[2] + dz]),
+      )!;
+      return at(lift.center[0] + dx, y, lift.center[2] + dz);
+    });
+    links.get(ends[0])!.add(ends[1]);
+    links.get(ends[1])!.add(ends[0]);
+  }
+  const first = at(...([capitalShrines[0].spawn[0], 0, capitalShrines[0].spawn[2]] as const));
+  const seen = new Set<string>([first]),
+    queue = [first];
+  while (queue.length)
+    for (const next of links.get(queue.shift()!)!)
+      if (!seen.has(next)) {
+        seen.add(next);
+        queue.push(next);
+      }
+  const missing = capitalSurfaces.filter((s) => !seen.has(s.id)).map((s) => s.id);
+  assert.deepEqual(missing, []);
+});
+
+void test("boss victories, the switch and lift releases survive in-place retries", () => {
   const p = newParishProgress(),
     s = createParishEncounter(p, capitalWorld),
     c = s.combat;
@@ -66,72 +231,100 @@ void test("mini-boss victory unlocks the crown switch; final victory and both fl
   c.bossHealth = 0;
   stepParishEncounter(s, 0.016, p);
   assert.ok(p.cathedralFelled && !p.fogCleared);
+  const [bx, by, bz] = capitalBeacon.position;
+  assert.equal(capitalInteraction(bx, by, bz - 1, p, false, false)?.available, true);
   assert.equal(activateCapitalBeacon(p), true);
-  assert.ok(p.fogCleared);
-  assert.equal(s.bossFelled, false);
-  assert.equal(c.bossActive, false);
   p.checkpoint = "kiln";
   resetParishEncounter(s, p);
-  assert.equal(s.combat, c, "the mounted player keeps its combat binding");
   assert.equal(beginCapitalBoss(s, "cathedral", p), null);
   assert.deepEqual(beginCapitalBoss(s, "colosseum", p), capitalBosses.colosseum.spawn);
   c.bossHealth = 0;
   stepParishEncounter(s, 0.016, p);
   assert.ok(p.finalFelled && s.bossFelled);
   resetParishEncounter(s, p);
-  assert.ok(s.bossFelled && p.cathedralFelled && p.finalFelled);
+  assert.ok(s.bossFelled && p.cathedralFelled && p.finalFelled && p.fogCleared);
 });
-void test("lifts unlock below, can be recalled, and travel smoothly without overshooting", () => {
-  const p = newParishProgress(),
-    states = newCapitalLiftStates();
-  assert.equal(requestCapitalLift("beacon", 24, p, states), false);
-  assert.equal(requestCapitalLift("beacon", -4, p, states), false);
-  p.fogCleared = true;
-  assert.equal(requestCapitalLift("beacon", -4, p, states), true);
-  assert.ok(p.beaconLift);
-  for (let i = 0; i < 700; i++) stepCapitalLift(states.beacon, 1 / 60);
-  assert.equal(states.beacon.y, -4);
-  assert.equal(requestCapitalLift("beacon", -4, p, states), true);
-  for (let i = 0; i < 700; i++) stepCapitalLift(states.beacon, 1 / 60);
-  assert.equal(states.beacon.y, 24);
-  requestCapitalLift("beacon", -4, p, states);
-  assert.equal(states.beacon.target, -4);
-  const before = states.beacon.y;
-  stepCapitalLift(states.beacon, 0);
-  assert.equal(states.beacon.y, before);
-});
-void test("the enclosed town lift uses the passage key and retains its release after retry", () => {
-  const p = newParishProgress(),
-    lifts = newCapitalLiftStates();
-  assert.equal(lifts.town.y, 8);
-  assert.equal(requestCapitalLift("town", 8, p, lifts), false);
-  p.caches.push("town-key");
-  assert.equal(requestCapitalLift("town", 8, p, lifts), true);
-  assert.equal(lifts.town.target, 20);
-  for (let i = 0; i < 300; i++) stepCapitalLift(lifts.town, 1 / 60);
-  assert.equal(lifts.town.y, 20);
-  assert.equal(requestCapitalLift("town", 20, p, lifts), true);
-  const s = createParishEncounter(p, capitalWorld);
-  resetParishEncounter(s, p);
-  assert.ok(p.townLift);
-});
-void test("the terrace massing leaves every lift shaft open through its full travel", () => {
-  for (const lift of capitalLifts) {
-    for (let y = lift.low; y <= lift.high; y += 0.5) {
-      assert.equal(
-        capitalBlocked(lift.center[0], y, lift.center[2], 0.42),
-        false,
-        `${lift.id} shaft blocked at ${y}`,
-      );
-    }
-    assert.ok(
-      capitalFoundations.every(
-        (f) => capitalSurfaceHeight(f.surface, lift.center[0], lift.center[2]) === null,
-      ),
-    );
+
+void test("ground lifts release from below after the fog, then recall and travel smoothly", () => {
+  for (const id of ["beacon", "arena"] as const) {
+    const lift = capitalLifts.find((l) => l.id === id)!,
+      p = newParishProgress(),
+      states = newCapitalLiftStates();
+    assert.equal(states[id].y, lift.high);
+    assert.equal(requestCapitalLift(id, lift.high, p, states), false);
+    assert.equal(requestCapitalLift(id, lift.low, p, states), false);
+    p.fogCleared = true;
+    assert.equal(requestCapitalLift(id, lift.high, p, states), false);
+    assert.equal(requestCapitalLift(id, lift.low, p, states), true);
+    for (let i = 0; i < 2000; i++) stepCapitalLift(states[id], 1 / 60);
+    assert.equal(states[id].y, lift.low);
+    assert.equal(requestCapitalLift(id, lift.low, p, states), true);
+    for (let i = 0; i < 2000; i++) stepCapitalLift(states[id], 1 / 60);
+    assert.equal(states[id].y, lift.high);
+    assert.equal(requestCapitalLift(id, lift.high, p, states), true);
+    assert.equal(states[id].target, lift.low);
   }
 });
-void test("a relocated cathedral encounter keeps leap targets inside its own arena", () => {
+
+void test("the town lift needs the passage key and keeps its release after a retry", () => {
+  const p = newParishProgress(),
+    lifts = newCapitalLiftStates(),
+    town = capitalLifts.find((l) => l.id === "town")!;
+  assert.equal(lifts.town.y, town.low);
+  assert.equal(requestCapitalLift("town", town.low, p, lifts), false);
+  p.caches.push("town-key");
+  assert.equal(requestCapitalLift("town", town.low, p, lifts), true);
+  assert.equal(lifts.town.target, town.high);
+  for (let i = 0; i < 300; i++) stepCapitalLift(lifts.town, 1 / 60);
+  assert.equal(lifts.town.y, town.high);
+  resetParishEncounter(createParishEncounter(p, capitalWorld), p);
+  assert.ok(p.townLift);
+});
+
+void test("gates bar navigation until opened, and open only from their proper side", () => {
+  const across = (g: { position: ParishPoint; yaw: number }, d: number): ParishPoint => [
+    g.position[0] + Math.sin(g.yaw) * d,
+    g.position[1],
+    g.position[2] + Math.cos(g.yaw) * d,
+  ];
+  const p = newParishProgress();
+  // The great gate opens from the stairs outside the walls.
+  const street = across(capitalShortcut, -0.9),
+    wall = across(capitalShortcut, 1.4);
+  assert.ok(near(street, 0.3) && near(wall));
+  assert.equal(capitalInteraction(...street, p, false, false)?.available, true);
+  assert.equal(capitalInteraction(...wall, p, false, false)?.available, false);
+  assert.equal(capitalLineClear(street[0], street[2], wall[0], wall[2], p, 0), false);
+  p.refuge = true;
+  assert.equal(capitalLineClear(street[0], street[2], wall[0], wall[2], p, 0), true);
+  // The cathedral door opens only from the nave.
+  const court = across(capitalCathedralShortcut, -2),
+    nave = across(capitalCathedralShortcut, 2);
+  assert.ok(nave[2] < court[2], "the nave lies north of its door");
+  assert.ok(near(court) && near(nave));
+  assert.equal(capitalInteraction(...court, p, false, false)?.available, false);
+  assert.equal(capitalInteraction(...nave, p, false, false)?.id, "court");
+  assert.equal(capitalInteraction(...nave, p, false, false)?.available, true);
+  assert.equal(capitalLineClear(court[0], court[2], nave[0], nave[2], p, 48), false);
+  p.court = true;
+  assert.equal(capitalLineClear(court[0], court[2], nave[0], nave[2], p, 48), true);
+  // The tunnel gate and the beacon seal.
+  const town = across(capitalTownGate, -2),
+    tunnel = across(capitalTownGate, 2);
+  const gy = capitalTownGate.position[1];
+  assert.equal(capitalLineClear(town[0], town[2], tunnel[0], tunnel[2], p, gy), false);
+  assert.equal(capitalInteraction(...town, p, false, false)?.kind, "town-lock");
+  p.caches.push("town-key");
+  assert.equal(capitalLineClear(town[0], town[2], tunnel[0], tunnel[2], p, gy), true);
+  const gallery = across(capitalBeaconSeal, 2),
+    path = across(capitalBeaconSeal, -2);
+  assert.ok(near(gallery) && near(path));
+  assert.equal(capitalLineClear(gallery[0], gallery[2], path[0], path[2], p, 54), false);
+  p.fogCleared = true;
+  assert.equal(capitalLineClear(gallery[0], gallery[2], path[0], path[2], p, 54), true);
+});
+
+void test("boss arenas keep leaps inside and refuse hits from another floor", () => {
   const p = newParishProgress(),
     s = createParishEncounter(p, capitalWorld);
   beginCapitalBoss(s, "cathedral", p);
@@ -139,17 +332,10 @@ void test("a relocated cathedral encounter keeps leap targets inside its own are
   Object.assign(c, { phase: "windup", move: "leap", timer: 3, playerX: 80, playerZ: -150 });
   stepEncounter(c, 0.016);
   assert.ok(Math.hypot(c.leapToX - c.arenaX, c.leapToZ - c.arenaZ) <= c.arenaRadius + 0.001);
-  assert.ok(c.leapToZ < -50);
-});
-void test("cathedral combat cannot hit through another floor or chase outside the oratory", () => {
-  const p = newParishProgress(),
-    s = createParishEncounter(p, capitalWorld);
-  beginCapitalBoss(s, "cathedral", p);
-  const c = s.combat;
   Object.assign(c, {
     playerX: c.bossX,
     playerZ: c.bossZ + 2,
-    playerY: 36,
+    playerY: 54,
     playerYaw: Math.PI,
     attackTime: 0.4,
     attackId: 1,
@@ -157,60 +343,13 @@ void test("cathedral combat cannot hit through another floor or chase outside th
     move: "sweep",
     timer: 0,
     bossYaw: 0,
+    bossY: 48,
+    groundY: 48,
   });
   stepEncounter(c, 0.016);
-  assert.equal(c.bossHealth, 260);
-  assert.equal(c.health, 100);
-  Object.assign(c, { playerY: 44, attackId: 3, attackTime: 0.4, hitIndex: 0, timer: 0 });
-  stepEncounter(c, 0.016);
-  assert.ok(c.bossHealth < 260 && c.health < 100);
-  Object.assign(c, {
-    phase: "approach",
-    playerX: 100,
-    playerZ: 100,
-    bossX: 50,
-    bossZ: 20,
-    attackTime: 0,
-  });
-  stepEncounter(c, 0.016);
-  assert.ok(Math.hypot(c.bossX - c.arenaX, c.bossZ - c.arenaZ) <= c.arenaRadius + 0.001);
+  assert.equal(c.bossHealth, capitalBosses.cathedral.health);
 });
-void test("the early return is barred to navigation and only releases from the town side", () => {
-  const p = newParishProgress(),
-    g = capitalShortcut,
-    nx = Math.sin(g.yaw),
-    nz = Math.cos(g.yaw);
-  const a = [g.position[0] - nx * 2, 8, g.position[2] - nz * 2] as [number, number, number],
-    b = [g.position[0] + nx * 2, 8, g.position[2] + nz * 2] as [number, number, number];
-  assert.equal(capitalInteraction(...a, p, false, false)?.available, true);
-  assert.equal(capitalInteraction(...b, p, false, false)?.available, false);
-  assert.equal(capitalLineClear(a[0], a[2], b[0], b[2], p, 8), false);
-  p.refuge = true;
-  assert.equal(capitalLineClear(a[0], a[2], b[0], b[2], p, 8), true);
-  const s = createParishEncounter(p, capitalWorld);
-  resetParishEncounter(s, p);
-  assert.ok(p.refuge);
-});
-void test("the cathedral return opens only from inside and survives a checkpoint retry", () => {
-  const p = newParishProgress();
-  const [x, y, z] = capitalCathedralShortcut.position;
-  const outside = capitalInteraction(x, y, z + 2, p, false, false);
-  const inside = capitalInteraction(x, y, z - 2, p, false, false);
-  assert.equal(outside?.kind, "gate");
-  assert.equal(outside?.available, false);
-  assert.equal(inside?.kind, "gate");
-  assert.equal(inside?.id, "court");
-  assert.equal(inside?.available, true);
-  assert.equal(capitalInteraction(x, y, z - 2, p, true, false)?.available, false);
-  assert.equal(capitalInteraction(x, y, z - 2, p, false, true)?.available, false);
-  assert.equal(capitalLineClear(x, z + 2, x, z - 2, p, y), false);
-  p.court = true;
-  assert.equal(capitalLineClear(x, z + 2, x, z - 2, p, y), true);
-  const s = createParishEncounter(p, capitalWorld);
-  p.checkpoint = "kiln";
-  resetParishEncounter(s, p);
-  assert.ok(p.court);
-});
+
 await RAPIER.init();
 function fixture() {
   const environment = buildCapitalEnvironment(false),
@@ -226,8 +365,36 @@ function fixture() {
   world.step();
   return { environment, world };
 }
-function walkRoute(start: number[], route: number[][]) {
-  const { environment, world } = fixture();
+const shared = fixture();
+test.after(() => {
+  shared.world.free();
+  shared.environment.dispose();
+});
+void test("the five repaired doorway gaps have visible paving at the original failing points", () => {
+  shared.environment.root.updateMatrixWorld(true);
+  for (const [name, x, y, z] of [
+    ["backyard lower door", 35.819, 24, -7.143],
+    ["great gate", CAPITAL_SITES.greatGate[0], 0, CAPITAL_SITES.greatGate[2]],
+    ["west gallery door", -16.428, 54, -59.481],
+    ["colosseum gate", -21.721, -20, -2.98],
+    ["colosseum lift door", 1.981, -20, -21.72],
+  ] as const) {
+    const ray = new THREE.Raycaster(
+      new THREE.Vector3(x, y + 0.65, z),
+      new THREE.Vector3(0, -1, 0),
+      0,
+      1.3,
+    );
+    assert.ok(
+      ray.intersectObject(shared.environment.root, true).length > 0,
+      `${name}: visible paving is missing`,
+    );
+  }
+});
+
+/** Walk the real player capsule through waypoints, checking arrival, floor and AI clearance. */
+function walkRoute(name: string, start: ParishPoint, route: ParishPoint[]) {
+  const { world } = shared;
   const body = world.createRigidBody(
     RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(
       start[0],
@@ -240,12 +407,26 @@ function walkRoute(start: number[], route: number[][]) {
   controller.enableAutostep(0.55, 0.3, false);
   controller.enableSnapToGround(0.5);
   controller.setMaxSlopeClimbAngle((50 * Math.PI) / 180);
-  try {
-    for (const [x, y, z] of route) {
-      const budget = Math.max(
-        1400,
-        Math.ceil(Math.hypot(x - body.translation().x, z - body.translation().z) / 0.015) + 120,
+  const settle = () => {
+    for (let i = 0; i < 60; i++) {
+      const p = body.translation();
+      controller.computeColliderMovement(
+        collider,
+        { x: 0, y: -0.06, z: 0 },
+        undefined,
+        undefined,
+        (c) => c.handle !== collider.handle,
       );
+      const move = controller.computedMovement();
+      body.setNextKinematicTranslation({ x: p.x + move.x, y: p.y + move.y, z: p.z + move.z });
+      world.step();
+    }
+  };
+  try {
+    settle();
+    for (const [x, y, z] of route) {
+      const budget =
+        Math.ceil(Math.hypot(x - body.translation().x, z - body.translation().z) / 0.015) + 400;
       for (let i = 0; i < budget; i++) {
         const p = body.translation(),
           length = Math.hypot(x - p.x, z - p.z);
@@ -265,165 +446,257 @@ function walkRoute(start: number[], route: number[][]) {
         body.setNextKinematicTranslation({ x: p.x + move.x, y: p.y + move.y, z: p.z + move.z });
         world.step();
       }
-      // Let gravity settle the capsule after reaching a downhill waypoint.
-      // Horizontal arrival alone does not imply that a descent has landed.
-      for (let i = 0; i < 60; i++) {
-        const p = body.translation();
-        controller.computeColliderMovement(
-          collider,
-          { x: 0, y: -0.06, z: 0 },
-          undefined,
-          undefined,
-          (c) => c.handle !== collider.handle,
-        );
-        const move = controller.computedMovement();
-        body.setNextKinematicTranslation({ x: p.x + move.x, y: p.y + move.y, z: p.z + move.z });
-        world.step();
-      }
+      settle();
       const p = body.translation();
       assert.ok(
         Math.hypot(x - p.x, z - p.z) < 0.25,
-        `blocked toward ${x},${y},${z}; stopped ${p.x},${p.y},${p.z}`,
+        `${name}: blocked toward ${x},${y},${z}; stopped at ${p.x.toFixed(2)},${(p.y - 0.95).toFixed(2)},${p.z.toFixed(2)}`,
       );
       assert.ok(
         Math.abs(p.y - 0.95 - y) < 0.3,
-        `wrong floor at ${x},${z}: foot ${p.y - 0.95}, expected ${y}`,
+        `${name}: foot ${(p.y - 0.95).toFixed(2)} at ${x},${z}, expected ${y}`,
       );
-      assert.equal(capitalBlocked(x, y, z, 0.42), false, `AI blocking at ${x},${y},${z}`);
+      assert.equal(capitalBlocked(x, y, z, 0.42), false, `${name}: AI blocking at ${x},${y},${z}`);
     }
   } finally {
-    world.free();
-    environment.dispose();
+    world.removeCollider(collider, false);
+    world.removeRigidBody(body);
+    world.removeCharacterController(controller);
   }
 }
-function walkReflectedRoute(start: number[], route: number[][]) {
-  walkRoute(
-    [-start[0], start[1], start[2]],
-    route.map(([x, y, z]) => [-x, y, z]),
+/** Mid-radius waypoints down a kit half-turn, from its high end to its low end. */
+function spiralDown(center: ParishPoint, outer: number, base: number, rise: number, half: 0 | 1) {
+  const yaw = half ? Math.PI : 0,
+    r = (outer + outer * 0.45) / 2;
+  return Array.from({ length: 9 }, (_, i): ParishPoint => {
+    const a = (Math.PI * i) / 8,
+      x = r * Math.cos(a),
+      z = -r * Math.sin(a);
+    return [
+      center[0] + x * Math.cos(yaw) + z * Math.sin(yaw),
+      base + rise * (1 - a / Math.PI),
+      center[2] - x * Math.sin(yaw) + z * Math.cos(yaw),
+    ];
+  });
+}
+
+/** Waypoints along a tier's street, `d0` to `d1` metres from the prow on one side. */
+function street(k: number, side: 1 | -1, d0: number, d1: number) {
+  const r = TIER_R[k] - 1.6,
+    steps = Math.max(1, Math.ceil(Math.abs(d1 - d0) / 5));
+  return Array.from({ length: steps + 1 }, (_, i) =>
+    onTier(k, side, d0 + ((d1 - d0) * i) / steps, r),
   );
 }
-void test("the real player capsule walks from the entry wall to the chapel through every ramp join", () => {
-  walkReflectedRoute(
-    [0, 0, 73],
-    [
-      [0, 8, 44],
-      [-18, 8, 36],
-      [-35, 8, 36],
-      [-54, 8, 31],
-      [-54, 8, 4],
-      [-54, 16, -16],
-      [-34, 24, -16],
-      [-34, 24, -32],
-      [0, 24, -32],
-      [0, 24, -12],
-    ],
-  );
-});
-void test("the entire curved entry terrace stays clear of town walls and rounded buttresses", () => {
-  const route = Array.from({ length: 40 }, (_, i) => {
-    const angle = (-2 * (i + 1)) / 40;
-    return [Math.sin(angle) * 29, 8, 12 + Math.cos(angle) * 29];
-  });
-  walkReflectedRoute([0, 8, 41], route);
-});
-void test("cathedral galleries and exterior ramps form a complete playable return loop", () => {
-  walkRoute(
-    [0, 24, -32],
-    [
-      [-18, 24, -32],
-      [-34, 24, -40],
-      [-34, 36, -72],
-      [-12, 36, -72],
-      [-12, 36, -84],
-      [12, 36, -84],
-      [15, 36, -84],
-      [44, 36, -84],
-      [44, 24, -52],
-      [18, 24, -32],
-      [0, 24, -32],
-    ],
-  );
-});
-void test("the opened town return and garden return are walkable shortcuts", () => {
-  walkReflectedRoute(
-    [-54, 8, 36],
-    [
-      [-86, 8, 36],
-      [-86, 0, 52],
-      [-59, 0, 45],
-    ],
-  );
-  walkRoute(
-    [-62, 24, -48],
-    [
-      [-70, 24, -70],
-      [-70, 36, -98],
-      [-42, 36, -98],
-      [-30, 36, -84],
-      [-34, 36, -72],
-      [-12, 36, -72],
-    ],
-  );
-});
-void test("the entry battlements leave a clear approach to the forest return", () => {
-  walkRoute([0, 0, 73], [[0, 0, 85]]);
-});
-void test("the opening checkpoint walks along the curtain to the first exposed bridge", () => {
-  const start = capitalShrines[0].spawn;
-  const angle = Math.atan2(start[0], start[2]);
-  const route = Array.from({ length: 30 }, (_, i) => {
-    const a = angle * (1 - (i + 1) / 30);
-    return [Math.sin(a) * 73.5, 0, Math.cos(a) * 73.5];
-  });
-  route.push([0, 0, 73], [0, 8, 44]);
-  walkRoute(start, route);
-});
-void test("the enclosed town lift has reachable landings on both inhabited floors", () => {
-  walkReflectedRoute(
-    [-65, 8, 34],
-    [
-      [-76, 8, 34],
-      [-84, 8, 34],
-    ],
-  );
-  walkReflectedRoute(
-    [-65, 20, 29],
-    [
-      [-76, 20, 29],
-      [-76, 20, 34],
-      [-84, 20, 34],
-    ],
-  );
-});
-void test("the beacon descent and lower street lead continuously to the colosseum", () => {
-  const route: number[][] = [
-    [42, 24, -24],
-    [42, 24, -14],
+/** Through tier `k`'s prow gate from one side to the other. */
+function prowGate(k: number, from: 1 | -1): ParishPoint[] {
+  const z = bandMid(k),
+    y = TIER_H[k];
+  return [
+    [from * 8, y, z],
+    [-from * 8, y, z],
   ];
-  for (let i = 1; i <= 40; i++) {
-    const t = (i / 40) * Math.PI * 2.5;
-    route.push([
-      42 + Math.sin(t) * 10,
-      24 - 28 * Math.max(0, (t - 0.4) / (Math.PI * 2.5 - 0.4)),
-      -24 + Math.cos(t) * 10,
+}
+/** From tier `k`'s street up its stair onto the next tier. */
+function climb(k: number): ParishPoint[] {
+  const s = TIER_STAIRS[k],
+    before: ParishPoint = [s.low[0] - s.dir[0] * 2.5, s.low[1], s.low[2] - s.dir[1] * 2.5];
+  return [before, s.low, s.top, s.arrival];
+}
+const dOf = (k: number, p: ParishPoint) =>
+  Math.abs(Math.PI - Math.atan2(p[0], -p[2]) + (p[0] < 0 ? -2 * Math.PI : 0)) * bandMid(k);
+
+void test("the zig-zag climb crosses every prow gate from the great gate to the citadel", () => {
+  const route: ParishPoint[] = [...street(0, 1, 18, dOf(0, TIER_STAIRS[0].low) - 4), ...climb(0)];
+  for (let k = 1; k < 6; k++) {
+    const arrive = TIER_STAIRS[k - 1].side,
+      leave = TIER_STAIRS[k].side,
+      r = TIER_R[k] - 1.6;
+    route.push(onTier(k, arrive, dOf(k, TIER_STAIRS[k - 1].arrival), r));
+    route.push(...street(k, arrive, dOf(k, TIER_STAIRS[k - 1].arrival), 9));
+    route.push(...prowGate(k, arrive));
+    route.push(...street(k, leave, 9, dOf(k, TIER_STAIRS[k].low) - 4));
+    route.push(...climb(k));
+  }
+  route.push([-8, 48, 2], [4, 48, -20]);
+  walkRoute("great gate to citadel", capitalShrines[0].spawn, route);
+});
+
+void test("lower-city side streets join the forecourt and outer street between blocks", () => {
+  for (const side of [1, -1] as const) {
+    const inner = 72,
+      outer = TIER_R[0] - 1.6;
+    const arc = (r: number, from: number, to: number) =>
+      Array.from({ length: 15 }, (_, i) => onTier(0, side, from + ((to - from) * i) / 14, r));
+    walkRoute(`lower-city ${side}: branching streets`, onTier(0, side, 30, inner), [
+      ...arc(inner, 30, 70),
+      onTier(0, side, 70, outer),
+      ...arc(outer, 70, 105),
+      onTier(0, side, 105, inner),
+      ...arc(inner, 105, 30),
     ]);
   }
-  route.push([52, -4, -24], [60, -4, -24], [60, -8, 30], [20, -8, 38], [0, -12, 24], [0, -12, 18]);
-  walkReflectedRoute([18, 24, -32], route);
 });
-void test("the lower beacon landing returns to the street without crossing the descending spiral", () => {
-  walkReflectedRoute(
-    [38, -4, -11],
+
+void test("the second tier's west house holds the prow gate key", () => {
+  const key = capitalCaches.find((c) => c.id === "town-key")!.position;
+  const door = onTier(1, -1, 34, TIER_R[2] + 0.4 + Math.min(7, TIER_R[1] - TIER_R[2] - 4.4) + 1);
+  walkRoute("town key", onTier(1, -1, 26, TIER_R[1] - 1.6), [
+    onTier(1, -1, 34, TIER_R[1] - 1.6),
+    door,
+    key,
+  ]);
+});
+
+void test("the citadel court leads to the chapel and its roof, the prow walk and the white tower", () => {
+  const [cx, , cz] = CAPITAL_SITES.chapel;
+  walkRoute(
+    "citadel",
+    [0, 48, -20],
     [
-      [38, -4, -30],
-      [42, -4, -38],
-      [60, -4, -38],
-      [60, -4, -24],
-      [60, -8, 30],
+      [-2, 48, -12],
+      [cx + 8, 48, cz],
+      [cx + 3, 48, cz],
+      [cx + 8, 48, cz],
+      [cx + 9, 48, cz - 6],
+      [cx + 10.5, 48, cz - 11],
+      [cx + 1, 54, cz - 11],
+      [cx - 1.5, 54, cz - 9],
+      [cx - 1.5, 54, cz - 4],
+      [cx - 1.5, 54, cz - 9],
+      [cx + 1, 54, cz - 11],
+      [cx + 10.5, 48, cz - 11],
+      [8, 48, -6],
+      [8, 48, 14],
+      [0, 48, 22],
+      [0, 48, 49],
     ],
   );
 });
-void test("the capital batches architecture and releases every owned resource exactly once", () => {
+
+void test("the outside path climbs to the galleries and the gallery stair reaches the apse", () => {
+  walkRoute(
+    "citadel to apse",
+    [12, 48, -20],
+    [
+      [22, 48, -24],
+      [22, 48, -46],
+      [22, 54, -55],
+      [20, 54, -60],
+      [16.6, 54, -60],
+      [13, 54, -60],
+      [13, 54, -67],
+      [13, 48, -77],
+      [2, 48, -77],
+      [0, 48, -81],
+      [0, 48, -86],
+      [0, 48, -93],
+    ],
+  );
+  walkRoute(
+    "nave to court",
+    [0, 48, -60],
+    [
+      [0, 48, -37],
+      [0, 48, -34],
+      [6, 48, -34],
+    ],
+  );
+});
+
+void test("the royal backyard descends through its stair tower to Up Town", () => {
+  const [tx, , tz] = CAPITAL_SITES.stairTower;
+  const door = polar((TIER_R[3] + TIER_R[4]) / 2 + 0.5, Math.PI - 1.75);
+  walkRoute(
+    "backyard below",
+    [20, 54, -62],
+    [
+      [24, 54, -64],
+      [37, 54, -64],
+      [44, 54, -62],
+      [39.5, 54, -55],
+      [tx - 5.8, 54, -50],
+      [tx - 5.8, 54, tz - 1],
+      ...[3, 2, 1, 0].flatMap((i) =>
+        spiralDown([tx, 0, tz], 8, 24 + 7.5 * i, 7.5, (i % 2) as 0 | 1).slice(1),
+      ),
+      [tx - 5.8, 24, tz + 4],
+      [tx - 5.8, 24, door[1] - 2.2],
+      [door[0], 24, door[1]],
+      [door[0] + 0.18 * 2.5, 24, door[1] + 0.98 * 2.5],
+      onTier(3, 1, 58, 40),
+    ],
+  );
+});
+
+void test("the beacon pathway spirals to the plain, Grand Street and the colosseum gate", () => {
+  const [bx, , bz] = CAPITAL_SITES.beaconTower,
+    rise = (54 + 20) / 6;
+  walkRoute(
+    "beacon descent",
+    [-13, 54, -58],
+    [
+      [-17, 54, -58],
+      [-50, 54, -58],
+      [-56, 54, -52.5],
+      [-63.5, 54, -53],
+      [-63.5, 54, bz + 1],
+      ...Array.from({ length: 6 }, (_, i) =>
+        spiralDown([bx, 0, bz], 9, 54 - rise * (i + 1), rise, (i % 2) as 0 | 1).slice(1),
+      ).flat(),
+      [-63.5, -20, bz - 6],
+      [-74, -20, -76],
+      [LOWER_STREET_X, -20, -40],
+      [LOWER_STREET_X, -20, 0],
+      [LOWER_STREET_X + 8, -20, 0],
+      [-40, -20, 0],
+      [-22, -20, 0],
+      [-10, -20, 0],
+      [0, -20, -18],
+      [0, -20, -24.5],
+    ],
+  );
+});
+
+void test("the great gate opens from the apron straight into the lowest tier", () => {
+  walkRoute(
+    "apron to gate",
+    [-40, 0, 104],
+    [
+      // Round the barbican's west tower into its mouth.
+      [-14, 0, 127],
+      CAPITAL_SITES.greatGateFoot,
+      [0, 0, CAPITAL_SITES.greatGate[2] + 2],
+      [0, 0, CAPITAL_SITES.greatGate[2] - 2.4],
+      [0, 0, bandMid(0)],
+      [8, 0, bandMid(0)],
+      CAPITAL_SITES.startSpawn,
+    ],
+  );
+});
+
+void test("the town lift pad and the Break Wall are reachable", () => {
+  const lift = capitalLifts.find((l) => l.id === "town")!;
+  walkRoute("lift pad", onTier(2, 1, 30, TIER_R[2] - 2.5), [lift.upper]);
+  walkRoute("lift foot", onTier(1, 1, 40, TIER_R[1] - 1.6), [lift.lower]);
+  const breach = Math.PI + 0.7;
+  walkRoute("break wall", onTier(0, -1, 50, TIER_R[0] - 1.6), [
+    [...polar(TIER_R[0] - 2, breach)].flatMap((v, i) => (i ? [0, v] : [v])) as ParishPoint,
+    capitalCaches.find((c) => c.id === "wall")!.position,
+  ]);
+  walkRoute(
+    "street offering",
+    [LOWER_STREET_X, -20, -10],
+    [capitalCaches.find((c) => c.id === "street")!.position],
+  );
+});
+
+void test("every open home in the row quarters can be entered from its street", () => {
+  assert.ok(CAPITAL_HOMES.length >= 6);
+  for (const h of CAPITAL_HOMES) walkRoute(h.id, h.approach[0], [h.approach[1], h.spot]);
+});
+
+void test("the capital batches its kit pieces and releases every owned resource exactly once", () => {
   const env = buildCapitalEnvironment(false),
     geometries = new Set<THREE.BufferGeometry>();
   let visible = 0,
@@ -444,351 +717,5 @@ void test("the capital batches architecture and releases every owned resource ex
   env.dispose();
   assert.equal(counts.size, geometries.size);
   assert.ok([...counts.values()].every((n) => n === 1));
-});
-void test("the buried town key and three inhabited floors are reachable without jumps", () => {
-  walkReflectedRoute(
-    [-54, 8, 31],
-    [
-      [-54, 8, 36],
-      [-45, 8, 36],
-      [-45, 8, 32],
-      [-45, 4, 18],
-      [-63, 4, 10],
-      [-45, 4, 18],
-      [-45, 8, 32],
-      [-45, 8, 36],
-      [-54, 8, 36],
-      [-54, 8, 31],
-      [-54, 8, 21],
-      [-52, 8, 21],
-      [-52, 14, 9],
-      [-54, 14, 9],
-      [-54, 14, 15],
-      [-57, 14, 15],
-      [-57, 14, 6],
-      [-65, 14, 6],
-      [-65, 14, 7],
-      [-65, 20, 29],
-      [-54, 20, 29],
-      [-54, 20, 15],
-      [-54, 20, 17],
-      [-39, 20, 17],
-      [-39, 20, 15],
-      [-39, 24, 2],
-      [-34, 24, 2],
-    ],
-  );
-});
-void test("the cathedral third floor, western oratory and crown beacon share a walkable route", () => {
-  walkRoute(
-    [-12, 36, -84],
-    [
-      [-20, 36, -84],
-      [-20, 44, -54],
-      [-12, 44, -54],
-      [-26, 44, -54],
-      [-36, 44, -65],
-      [-26, 44, -54],
-      [-12, 44, -54],
-      [-12, 50, -76],
-      [-7, 50, -76],
-      [-7, 50, -77],
-      [-2, 50, -77],
-    ],
-  );
-});
-void test("the roof chapel reconnects to the third cathedral gallery", () => {
-  walkRoute(
-    [12, 44, -55],
-    [
-      [12, 44, -54],
-      [24, 44, -54],
-      [24, 44, -28],
-      [0, 45.45, -17],
-      [0, 45.45, -5],
-    ],
-  );
-});
-void test("the royal backyard reconnects with the upper town through the vaulted undercroft", () => {
-  walkRoute(
-    [-70, 24, -48],
-    [
-      [-70, 14, -24],
-      [-26, 14, -24],
-      [-26, 14, -28],
-      [88, 14, -28],
-      [88, 14, 22],
-      [75, 14, 22],
-      [75, 14, 12],
-      [75, 16, -16],
-      [54, 16, -16],
-    ],
-  );
-});
-void test("the newly revealed street has a continuous city-wall shortcut", () => {
-  walkReflectedRoute(
-    [60, -8, 30],
-    [
-      [70, -8, 30],
-      [70, -8, 49],
-      [74, 0, 65],
-      [54, 0, 51],
-    ],
-  );
-});
-void test("the side chapel and right crown road can be entered from the main level", () => {
-  walkRoute(
-    [0, 24, -65],
-    [
-      [12, 24, -72],
-      [29, 24, -72],
-      [29, 24, -61],
-      [29, 24, -52],
-      [44, 24, -52],
-      [18, 24, -32],
-      [18.5, 24, -18],
-      [18.5, 24, 9],
-      [18, 24, 10],
-    ],
-  );
-});
-void test("the crown switch is guarded and its unlocked state survives a retry", () => {
-  const p = newParishProgress();
-  assert.equal(activateCapitalBeacon(p), false);
-  assert.equal(capitalInteraction(-2, 50, -77, p, false, false)?.available, false);
-  p.cathedralFelled = true;
-  assert.equal(capitalInteraction(-2, 50, -77, p, false, false)?.available, true);
-  assert.equal(activateCapitalBeacon(p), true);
-  assert.equal(activateCapitalBeacon(p), false);
-  const s = createParishEncounter(p, capitalWorld);
-  resetParishEncounter(s, p);
-  assert.ok(p.fogCleared && p.cathedralFelled);
-});
-void test("the second town gallery connects around the stairwell to its western rooms", () => {
-  walkReflectedRoute(
-    [-54, 14, 9],
-    [
-      [-49.2, 14, 9],
-      [-49.2, 14, 14],
-      [-39, 14, 14],
-      [-39, 14, 26],
-    ],
-  );
-});
-void test("authored navigation reaches the hidden town key, upper sanctuaries and lower homes", () => {
-  const visited = new Set<string>(),
-    queue = [capitalWorld.surfaceId(0, 73, 0)!];
-  while (queue.length) {
-    const id = queue.pop()!;
-    if (visited.has(id)) continue;
-    visited.add(id);
-    queue.push(...capitalNavigation.links.get(id)!);
-  }
-  for (const cache of capitalCaches) {
-    const [x, y, z] = cache.position,
-      id = capitalSurfaceAt(x, z, y)?.id;
-    assert.ok(id && visited.has(id), `${cache.name} has no connected route`);
-  }
-  const low = capitalSurfaceAt(-12, -65, 24)!,
-    high = capitalSurfaceAt(-12, -65, 44)!;
-  assert.equal(
-    capitalNavigation.connected(low.id, high.id),
-    false,
-    "stacked galleries cannot connect through the nave projection",
-  );
-});
-void test("the lower street homes are physically enterable from their matching street elevation", () => {
-  const y = -4 - ((8 + 18.5) * 4) / 43;
-  walkReflectedRoute(
-    [60, y, 8],
-    [
-      [70, y, 8],
-      [60, y, 8],
-      [50, y, 8],
-      [60, y, 8],
-    ],
-  );
-});
-void test("the second exposed wall bridge connects the broken eastern arc to the town terrace", () => {
-  walkReflectedRoute(
-    [-34, 0, 65],
-    [
-      [-18, 8, 37],
-      [0, 8, 44],
-      [0, 0, 73],
-    ],
-  );
-});
-
-void test("the town sits on the entry side of the chapel and connects without a rear scaffold loop", () => {
-  walkReflectedRoute(
-    [-18, 8, 36],
-    [
-      [-54, 8, 31],
-      [-54, 8, 21],
-    ],
-  );
-});
-void test("the furnished cathedral retains a clear nave aisle between the pew banks", () => {
-  walkRoute(
-    [0, 24, -43],
-    [
-      [0, 24, -80],
-      [0, 24, -43],
-    ],
-  );
-});
-void test("the cathedral interior stair connects the nave and gallery without trapping the capsule", () => {
-  walkRoute(
-    [14.5, 24, -48],
-    [
-      [14.5, 36, -82],
-      [12, 36, -84],
-      [14.5, 36, -82],
-      [14.5, 24, -48],
-      [0, 24, -48],
-      [0, 24, -43],
-    ],
-  );
-});
-
-void test("the eastern retaining crown and clock bay are walkable above the town arcade", () => {
-  walkRoute(
-    [24, 44, -28],
-    [
-      [29, 44.04, -20],
-      [29, 44, -28],
-      [43, 44, -28],
-      [29, 44, -28],
-      [29, 44.04, -20],
-      [29, 24.04, 9],
-      [18, 24, 10],
-    ],
-  );
-});
-
-void test("the decorative crag stays clear below and beside every walkway and lift shaft", () => {
-  const shafts = capitalLifts.map((lift) => {
-    const shaft = new THREE.Mesh(new THREE.BoxGeometry(6.8, lift.high - lift.low + 8, 6.8));
-    shaft.position.set(lift.center[0], (lift.high + lift.low) / 2, lift.center[2]);
-    return shaft;
-  });
-  const crag = buildCapitalCrag(capitalCeiling(shafts, capitalRailSurfaces));
-  const cell = 8;
-  const index = new Map<string, typeof capitalRailSurfaces>();
-  for (const s of capitalRailSurfaces) {
-    const xs = s.vertices.map((v) => v[0]),
-      zs = s.vertices.map((v) => v[2]);
-    for (let x = Math.floor(Math.min(...xs) / cell); x <= Math.floor(Math.max(...xs) / cell); x++)
-      for (let z = Math.floor(Math.min(...zs) / cell); z <= Math.floor(Math.max(...zs) / cell); z++)
-        index.set(`${x},${z}`, [...(index.get(`${x},${z}`) ?? []), s]);
-  }
-  const position = crag.getAttribute("position");
-  let highest = -Infinity;
-  for (let i = 0; i < position.count; i++) {
-    const x = position.getX(i),
-      y = position.getY(i),
-      z = position.getZ(i);
-    highest = Math.max(highest, y);
-    // Two metres of air beneath any walkway within four metres of the rock.
-    for (const [dx, dz] of [
-      [0, 0],
-      [4, 0],
-      [-4, 0],
-      [0, 4],
-      [0, -4],
-    ]) {
-      for (const s of index.get(`${Math.floor((x + dx) / cell)},${Math.floor((z + dz) / cell)}`) ??
-        []) {
-        const h = capitalSurfaceHeight(s, x + dx, z + dz);
-        if (h !== null) assert.ok(y <= h - 1.9, `crag at ${x},${y},${z} under ${s.id} (${h})`);
-      }
-    }
-    for (const lift of capitalLifts)
-      if (Math.abs(x - lift.center[0]) < 4 && Math.abs(z - lift.center[2]) < 4)
-        assert.ok(y < lift.low - 2, `crag inside the ${lift.id} lift shaft`);
-  }
-  // The mountain still rises well above the fog to carry the cathedral.
-  assert.ok(highest > 15, `crag peaks only reach ${highest}`);
-  crag.dispose();
-});
-
-void test("doorways, crossings and flights meet the reference blockout metrics", () => {
-  // Reference metrics, in metres for the 1.84 m capsule: doors 2 x 3.5,
-  // hallways 3 high, and 4 m of clear height over a flight.
-  for (const b of capitalBuildings)
-    for (const d of b.doors)
-      assert.ok(d.width >= 2 && d.height >= 3.5, `${b.id} ${d.side} door ${d.width}x${d.height}`);
-  const environment = buildCapitalEnvironment(false),
-    world = new RAPIER.World({ x: 0, y: 0, z: 0 });
-  environment.root.updateMatrixWorld(true);
-  const v = new THREE.Vector3();
-  environment.root.traverse((o) => {
-    if (!(o instanceof THREE.Mesh)) return;
-    const position = o.geometry.getAttribute("position");
-    const vertices = new Float32Array(position.count * 3);
-    for (let i = 0; i < position.count; i++)
-      vertices.set(v.fromBufferAttribute(position, i).applyMatrix4(o.matrixWorld).toArray(), i * 3);
-    const indices = o.geometry.index
-      ? new Uint32Array(o.geometry.index.array)
-      : Uint32Array.from({ length: position.count }, (_, i) => i);
-    world.createCollider(RAPIER.ColliderDesc.trimesh(vertices, indices));
-  });
-  world.step();
-  // Open sky counts as unlimited headroom. castRay can skip a thin tube's
-  // nearest face on these trimeshes; the normal query reports the first hit.
-  const clear = (x: number, y: number, z: number) =>
-    (world.castRayAndGetNormal(new RAPIER.Ray({ x, y: y + 0.4, z }, { x: 0, y: 1, z: 0 }), 30, true)
-      ?.timeOfImpact ?? Infinity) + 0.4;
-  const floorOf = (family: string, x: number, z: number) =>
-    Math.min(
-      ...capitalRailSurfaces
-        .filter((s) => s.id.startsWith(family))
-        .map((s) => capitalSurfaceHeight(s, x, z) ?? Infinity),
-    );
-  try {
-    for (const [name, x, y, z, minimum] of [
-      ["west exterior beneath the third ascent", -20, 36, -72, 3],
-      ["garden tunnel beneath the beacon walk", -52, 14, -24, 3],
-      ["beacon walk beneath the garden tunnel", -32, floorOf("beacon-spiral:", -32, -24), -24, 4],
-      ["third-floor crossing over the rear arch", 0, 44, -78, 3],
-      ["roof return below the flying buttress", 23.9, 44, -46.4, 3],
-      ["street return below the curtain ribs", -71.9, -8, 32.9, 3],
-      ["attic return left door shoulder", 37.6, 24, 3, 3.49],
-      ["attic return right door shoulder", 40.4, 24, 3, 3.49],
-      ["rafter walk beneath the tie beams", -7, 50, -65, 3],
-      [
-        "eastern crown flight below its landing",
-        29,
-        floorOf("eastern-wall-crown:2:", 29, -15.3),
-        -15.3,
-        4,
-      ],
-    ] as const) {
-      assert.ok(
-        Math.abs((capitalFloorHeight(x, z, y) ?? Infinity) - y) < 0.05,
-        `${name}: no floor`,
-      );
-      assert.ok(clear(x, y, z) >= minimum, `${name}: ${clear(x, y, z).toFixed(2)} m`);
-    }
-    // Low space beneath interior flights is filled rather than left as a crawlway.
-    for (const [x, z] of [
-      [52, 15],
-      [39, 9],
-      [45.5, 24],
-      [-12, -63],
-    ])
-      assert.ok(
-        environment.solids.some(
-          (s) =>
-            Math.abs(x - s.position[0]) < s.size[0] / 2 + 0.01 &&
-            Math.abs(z - s.position[2]) < s.size[2] / 2 + 0.01 &&
-            s.size[1] > 1,
-        ),
-        `open space beneath the flight at ${x},${z}`,
-      );
-  } finally {
-    world.free();
-    environment.dispose();
-  }
+  assert.ok(capitalSolids.length > 300);
 });

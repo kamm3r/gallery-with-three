@@ -1,3 +1,4 @@
+import { SWORD_CHAIN, SWORD_MOVES, swordStep } from "../src/gameplay/characterAnimations.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -27,6 +28,7 @@ function choose(patch: Record<string, unknown> = {}) {
       hurtTime: 0,
       attackTime: 0,
       attackId: 1,
+      attackStep: 0,
     },
     link: undefined,
     grounded: true,
@@ -38,9 +40,17 @@ function choose(patch: Record<string, unknown> = {}) {
     moving: false,
     planarSpeedForAnimation: 0,
     CLIP_SECONDS: {},
+    runAnimationSpeed: 5.4,
+    SWORD_MOVES,
+    SWORD_CHAIN,
+    swordStep,
     isResultScreenActive: () => false,
     ...patch,
   };
+  // Unlocked locomotion: the walk, or the run past the run speed.
+  Object.assign(args, {
+    locomotion: (args.planarSpeedForAnimation as number) > 5.4 ? "Run" : "Walk",
+  });
   assert.ok(expression);
   // oxlint-disable-next-line typescript/no-implied-eval
   return new Function(...Object.keys(args), `return (${expression});`)(...Object.values(args));
@@ -53,7 +63,14 @@ void test("parish victory releases the animation state to idle, locomotion, jump
   assert.equal(choose({ roll: { active: true, backstep: false } }), "Roll");
   assert.equal(
     choose({
-      fight: { health: 100, bossHealth: 0, freezeOnVictory: false, attackTime: 0.3, attackId: 1 },
+      fight: {
+        health: 100,
+        bossHealth: 0,
+        freezeOnVictory: false,
+        attackTime: 0.3,
+        attackId: 1,
+        attackStep: 0,
+      },
     }),
     "SwordSlashQuick",
   );

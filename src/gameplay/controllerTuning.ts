@@ -1,5 +1,5 @@
-import { MOVEMENT_DEFAULTS } from "./movement";
-import { JUMP_DEFAULTS } from "./playerRules";
+import { MOVEMENT_DEFAULTS, SOULS_MOVEMENT } from "./movement.ts";
+import { JUMP_DEFAULTS, SOULS_JUMP } from "./playerRules.ts";
 
 // Character controller settings shared by every world. The playground's Leva
 // panel starts from these values and passes overrides to its own player only.
@@ -21,3 +21,10 @@ export const controllerDefaults = {
 };
 
 export type ControllerTuning = typeof controllerDefaults;
+
+/** The combat realms move like Elden Ring and Sekiro: quick pivots, committed jumps. */
+export const soulsControllerTuning: ControllerTuning = {
+  ...controllerDefaults,
+  ...SOULS_MOVEMENT,
+  ...SOULS_JUMP,
+};

@@ -180,7 +180,9 @@ void test("a dedicated sprint key works independently, and dodge fires on press"
 });
 void test("dedicated sprint settings validate saved keys without shadowing actions", () => {
   assert.equal(readSprintKey("ShiftLeft", defaultBindings), "ShiftLeft");
-  assert.equal(readSprintKey("KeyC", defaultBindings), "KeyC");
+  assert.equal(readSprintKey("KeyX", defaultBindings), "KeyX");
+  // Crouch holds C now.
+  assert.equal(readSprintKey("KeyC", defaultBindings), null);
   for (const code of [null, "KeyF", "Space", "ArrowUp", "Escape", "KeyR", 123])
     assert.equal(readSprintKey(code, defaultBindings), null);
 });

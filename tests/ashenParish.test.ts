@@ -128,11 +128,12 @@ void test("a player sword connects once per swing and does not hit across elevat
     c.playerYaw = Math.PI;
     c.playerY = e.y + offset;
     c.attackId = 1;
+    c.attackStep = 1;
     c.attackTime = swordAttackDuration(1) * 0.65;
     const before = e.health;
     stepParishEncounter(state, 0.01, progress);
     stepParishEncounter(state, 0.01, progress);
-    assert.equal(e.health, before - (offset === 0 ? 25 : 0));
+    assert.equal(e.health, before - (offset === 0 ? Math.round(25 * 1.1) : 0));
   }
 });
 

@@ -8,6 +8,13 @@ import { CHARACTER_MODEL, CLIP_SECONDS } from "../gameplay/characterAnimations";
 import { heldItems } from "../gameplay/heldItems";
 
 const MODEL_PATH = CHARACTER_MODEL;
+const LOCOMOTION = new Set(["Walk", "Run", "StrafeLeft", "StrafeRight", "WalkBack"]);
+// glTF node names lose their dots on load ("UpperArm.L" becomes "UpperArmL").
+const UPPER_BONES = new Set(
+  ["Abdomen", "Torso", "Neck", "Head"].concat(
+    ...["L", "R"].map((s) => ["Shoulder", "UpperArm", "LowerArm", "Fist"].map((b) => b + s)),
+  ),
+);
 
 const MATERIAL_COLORS: Record<string, THREE.ColorRepresentation> = {
   Skin: "#ad785a",
@@ -47,7 +54,16 @@ export type ActionName =
   | "SwordSlash"
   | "Victory"
   | "Walk"
-  | "Walk_Carry";
+  | "Walk_Carry"
+  | "StrafeLeft"
+  | "StrafeRight"
+  | "WalkBack"
+  | "Guard"
+  | "GuardHit"
+  | "Parry"
+  | "JumpAttack"
+  | "PlungeFall"
+  | "PlungeLand";
 
 type AnimatedCharacterProps = ThreeElements["group"] & {
   animation?: ActionName;
@@ -60,6 +76,12 @@ type AnimatedCharacterProps = ThreeElements["group"] & {
   pace?: number;
   /** Something held in the right hand instead of the sword. */
   held?: "flashlight";
+  /** While this returns true the pose holds still (hit-stop). */
+  hold?: () => boolean;
+  /** An upper-body pose laid over the current action, e.g. the guard while walking. */
+  upper?: "Guard" | null;
+  /** Seconds the roll clip is stretched to (light, medium or heavy rolls). */
+  rollDuration?: number;
 };
 
 export function AnimatedCharacter({
@@ -69,12 +91,15 @@ export function AnimatedCharacter({
   weaponScale = 1,
   pace = 1,
   held,
+  hold,
+  upper = null,
+  rollDuration = ROLL_DURATION,
   ...props
 }: AnimatedCharacterProps) {
   const group = useRef<THREE.Group>(null);
   const { scene, animations } = useGLTF(MODEL_PATH);
   const character = useMemo(() => clone(scene), [scene]);
-  const { actions } = useAnimations(animations, group);
+  const { actions, mixer } = useAnimations(animations, group);
   const currentAction = useRef<THREE.AnimationAction | null>(null);
   const paceRef = useRef(pace);
   useEffect(() => {
@@ -205,9 +230,9 @@ export function AnimatedCharacter({
       for (const clip of Object.values(actions)) clip?.setEffectiveWeight(0);
     }
     const existingWeight = action.getEffectiveWeight();
-    const locomotion = animation === "Walk" || animation === "Run";
-    const previousLocomotion =
-      previous?.getClip().name === "Walk" || previous?.getClip().name === "Run";
+    // Locomotion clips share a stride phase, so switching between them keeps step.
+    const locomotion = LOCOMOTION.has(animation);
+    const previousLocomotion = LOCOMOTION.has(previous?.getClip().name ?? "");
     const phase =
       previousLocomotion && previous ? (previous.time / previous.getClip().duration) % 1 : 0;
     action.stopFading();
@@ -225,15 +250,53 @@ export function AnimatedCharacter({
       animation === "Backstep"
         ? BACKSTEP_DURATION
         : animation === "Roll"
-          ? ROLL_DURATION
+          ? rollDuration
           : CLIP_SECONDS[animation];
     action.setEffectiveTimeScale(duration ? action.getClip().duration / duration : paceRef.current);
     action.setEffectiveWeight(previous ? existingWeight : 1).play();
     currentAction.current = action;
     targetAction.current = action;
-  }, [actions, animation]);
+  }, [actions, animation, rollDuration]);
+
+  // The guard's arms and chest only, laid over whatever the legs are doing. It binds
+  // to the character's group, so it is made once the group has mounted.
+  const upperClip = useMemo(() => {
+    const clip = animations.find((c) => c.name === "Guard");
+    if (!clip) return null;
+    const layer = clip.clone();
+    layer.name = "GuardUpper";
+    layer.tracks = layer.tracks.filter((t) => UPPER_BONES.has(t.name.split(".")[0]));
+    return layer;
+  }, [animations]);
+  const upperActionRef = useRef<THREE.AnimationAction | null>(null);
+  useEffect(
+    () => () => {
+      upperActionRef.current?.stop();
+      upperActionRef.current = null;
+    },
+    [upperClip, mixer],
+  );
+  const upperWeight = useRef(0);
+  const upperRef = useRef(upper);
+  upperRef.current = upper;
 
   useFrame((_, delta) => {
+    mixer.timeScale = hold?.() ? 0 : 1;
+    if (!upperActionRef.current && upperClip && group.current) {
+      upperActionRef.current = mixer.clipAction(upperClip, group.current);
+      upperActionRef.current.setEffectiveWeight(0).play();
+    }
+    const upperAction = upperActionRef.current;
+    if (upperAction) {
+      // Weighted well above the base action, so the arms hold the guard while the legs move.
+      upperWeight.current = THREE.MathUtils.damp(
+        upperWeight.current,
+        upperRef.current === "Guard" ? 8 : 0,
+        14,
+        Math.min(delta, 0.05),
+      );
+      upperAction.setEffectiveWeight(upperWeight.current);
+    }
     const target = targetAction.current;
     if (!target) return;
     // Retarget from the weights already on screen. Rapid changes cannot
@@ -242,7 +305,17 @@ export function AnimatedCharacter({
       1 -
       Math.exp(
         -Math.min(delta, 0.05) *
-          (["Roll", "Backstep", "SwordSlashQuick", "SwordSlashHeavy"].includes(animation)
+          ([
+            "Roll",
+            "Backstep",
+            "SwordSlashQuick",
+            "SwordSlash",
+            "SwordSlashHeavy",
+            "Parry",
+            "GuardHit",
+            "JumpAttack",
+            "PlungeLand",
+          ].includes(animation)
             ? 48
             : animation === "Jump"
               ? 28

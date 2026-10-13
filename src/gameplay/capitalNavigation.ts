@@ -54,20 +54,37 @@ export function buildCapitalNavigation(
           yb = height(b, x, z);
         return ya !== null && yb !== null && Math.abs(ya - yb) < 0.3;
       });
-      // Sample the shared opening: endpoints often lie on the door jambs.
-      const clear: [number, number][] = [];
-      for (let p = 0; p < overlap.length; p++)
-        for (let q = p; q < overlap.length; q++) {
-          for (const t of [0.25, 0.5, 0.75]) {
-            const x = overlap[p][0] + (overlap[q][0] - overlap[p][0]) * t,
-              z = overlap[p][1] + (overlap[q][1] - overlap[p][1]) * t;
-            const y = height(a, x, z),
-              yb = height(b, x, z);
-            if (y !== null && yb !== null && Math.abs(y - yb) < 0.3 && !blocked(x, y, z, 0.42))
-              clear.push([x, z]);
-          }
+      // Sample the shared opening densely along its widest span: endpoints often lie
+      // on door jambs, and a narrow clear strip may pass beside a house or a stair.
+      let span: [[number, number], [number, number]] | null = null,
+        widest = -1;
+      for (const p of overlap)
+        for (const q of overlap) {
+          const d = Math.hypot(p[0] - q[0], p[1] - q[1]);
+          if (d > widest) [widest, span] = [d, [p, q]];
         }
-      if (clear.some((p) => clear.some((q) => Math.hypot(p[0] - q[0], p[1] - q[1]) >= 0.85))) {
+      const hasClearSpan = (p: [number, number], q: [number, number]) => {
+        const length = Math.hypot(p[0] - q[0], p[1] - q[1]);
+        if (length < 0.85) return false;
+        const steps = Math.max(4, Math.min(60, Math.ceil(length / 0.2)));
+        const clear: [number, number][] = [];
+        for (let k = 1; k < steps; k++) {
+          const t = k / steps,
+            x = p[0] + (q[0] - p[0]) * t,
+            z = p[1] + (q[1] - p[1]) * t;
+          const y = height(a, x, z),
+            yb = height(b, x, z);
+          if (y !== null && yb !== null && Math.abs(y - yb) < 0.3 && !blocked(x, y, z, 0.42))
+            clear.push([x, z]);
+        }
+        return clear.some((p) => clear.some((q) => Math.hypot(p[0] - q[0], p[1] - q[1]) >= 0.85));
+      };
+      // A doorway may straddle two terrace panels. Its longest diagonal can run
+      // into a jamb while a shorter shared span still contains the clear opening.
+      if (
+        (span && hasClearSpan(...span)) ||
+        overlap.some((p) => overlap.some((q) => hasClearSpan(p, q)))
+      ) {
         links.get(a.id)!.add(b.id);
         links.get(b.id)!.add(a.id);
       }

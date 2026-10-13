@@ -1,3 +1,5 @@
+import { capitalControllerTuning, capitalPlayerProfile } from "../gameplay/capitalMetrics.ts";
+import type { LockTarget } from "../gameplay/lockOn.ts";
 import { GameplayState } from "../gameplay/ecs/stateBinding";
 import { ParishEnemyState, EmberProjectile, IsDead } from "../gameplay/ecs/gameplayTraits";
 import { runtimeWorld } from "../gameplay/ecs/world";
@@ -25,6 +27,7 @@ import { PortalFrameCollider } from "../components/PortalFrameCollider";
 import { ExperienceHud } from "../components/ExperienceHud";
 import { ASH_ATMOSPHERE, FogGate } from "../components/AshArena";
 import { AshWarden } from "../components/AshWarden";
+import { CombatTuningPanel } from "../components/CombatTuningPanel";
 import { SacredCapital } from "../components/SacredCapital";
 import { ParishEnemies } from "../components/ParishEnemies";
 import { combatTuning } from "../gameplay/combatTuning";
@@ -41,6 +44,7 @@ import { newParishProgress, type ParishPoint, type ParishProgress } from "../gam
 import {
   capitalAreas as parishAreas,
   CAPITAL_EXIT as PARISH_EXIT,
+  CAPITAL_EXIT_YAW as PARISH_EXIT_YAW,
   capitalCaches as parishCaches,
   capitalShrines as parishShrines,
   capitalAreaAt as parishAreaAt,
@@ -84,7 +88,12 @@ const ParishWarden = memo(AshWarden);
 const ParishEnemyViews = memo(ParishEnemies);
 const ParishPlayer = memo(ThirdPersonPlayer);
 const PARISH_BOUNDS: [number, number] = [115, 180];
-const PARISH_PORTALS = [{ id: "forest", position: PARISH_EXIT, yaw: Math.PI, scale: 1.2 }];
+// The way home opens in the colosseum once its keeper falls.
+const PARISH_PORTALS = [{ id: "forest", position: PARISH_EXIT, yaw: PARISH_EXIT_YAW, scale: 1.2 }];
+const NO_PORTALS: typeof PARISH_PORTALS = [];
+/** Death: the words fade in, the screen fades out, and the run resumes at the last ember. */
+const DEATH_SHOW_MS = 900;
+const DEATH_RESPAWN_MS = 4600;
 const ignoreBossReport = () => {};
 const ignoreHangChange = () => {};
 
@@ -123,7 +132,9 @@ function snapshotOf(state: ParishEncounter, progress: ParishProgress) {
     felled: state.bossFelled,
     activeBoss: state.activeBoss,
     dialogue: state.dialogue,
-    bossMaxHealth: state.activeBoss === "cathedral" ? 260 : combatTuning.bossMaxHealth,
+    bossMaxHealth: state.activeBoss
+      ? capitalBosses[state.activeBoss].health
+      : combatTuning.bossMaxHealth,
     area: parishAreaAt(combat.playerX, combat.playerZ, combat.playerY),
     prompt: interaction?.kind === "boss" && state.bossFelled ? undefined : interaction?.prompt,
   };
@@ -230,6 +241,8 @@ function ParishRuntime({
     }
     // The sealed lower city consumes a premature drop through its fog.
     if (!p.fogCleared && c.playerY < -1) c.health = 0;
+    // Below the ground city there is only cloud.
+    if (c.playerY < -40) c.health = 0;
     stepParishSystems(runtimeWorld, s, delta, p);
     if (s.enemyHitId > r.lastEnemyHit) playSound("bossHit", { intensity: 0.6 });
     r.lastEnemyHit = s.enemyHitId;
@@ -244,22 +257,38 @@ function ParishRuntime({
   return null;
 }
 
-function ParishMap({ snapshot }: { snapshot: ParishSnapshot }) {
+function ParishMap({ snapshot, onClose }: { snapshot: ParishSnapshot; onClose: () => void }) {
   const layers = [
-    { id: "town", name: "Town & wall" },
-    { id: "plaza", name: "Plaza" },
-    { id: "gallery", name: "Galleries" },
-    { id: "roof", name: "Roofs" },
-    { id: "lower", name: "Below" },
+    { id: "lower-tiers", name: "Tiers 1–2" },
+    { id: "middle-tiers", name: "Tiers 3–4" },
+    { id: "upper-tiers", name: "Tiers 5–6" },
+    { id: "citadel", name: "Citadel" },
+    { id: "lower", name: "Plain" },
   ] as const;
   const layerAt = (y: number) =>
-    y < 0 ? "lower" : y < 22 ? "town" : y < 34 ? "plaza" : y < 43 ? "gallery" : "roof";
+    y < -1
+      ? "lower"
+      : y < 12
+        ? "lower-tiers"
+        : y < 28
+          ? "middle-tiers"
+          : y < 44
+            ? "upper-tiers"
+            : "citadel";
   const [layer, setLayer] = useState<string>(() => layerAt(snapshot.playerY));
   const inLayer = (y: number) => layerAt(y) === layer;
-  const mx = (x: number) => 120 + x;
-  const mz = (z: number) => 180 + z;
+  const mx = (x: number) => 120 + (x + 17) * 1.2;
+  const mz = (z: number) => 140 + z * 1.2;
   return (
     <div className="parish-map">
+      <button
+        type="button"
+        className="capital-map-close"
+        aria-label="Close capital map"
+        onClick={onClose}
+      >
+        ×
+      </button>
       <h2>The Fading Sacred Capital</h2>
       <div className="capital-map-layers">
         {layers.map((l) => (
@@ -299,7 +328,8 @@ function ParishMap({ snapshot }: { snapshot: ParishSnapshot }) {
               <circle cx={mx(a.center[0])} cy={mz(a.center[2])} r="3" fill="#d8c296" />
               <text x={mx(a.center[0])} y={mz(a.center[2]) + 9} textAnchor="middle">
                 {a.name
-                  .replace("Cathedral Exterior", "Exterior")
+                  .replace("Church Outside Path", "Outside path")
+                  .replace("Middle Level Town", "Mid Town")
                   .replace("Asylum Cathedral", "Cathedral")
                   .replace("Ultimate Plaza", "Plaza")
                   .replace("Oblivion Chapel", "Chapel")}
@@ -322,7 +352,11 @@ function ParishMap({ snapshot }: { snapshot: ParishSnapshot }) {
               r="3"
               fill="#92dbed"
             />
-            <text x={mx(0)} y={mz(-77) - 6} textAnchor="middle">
+            <text
+              x={mx(capitalBeacon.position[0])}
+              y={mz(capitalBeacon.position[2]) - 6}
+              textAnchor="middle"
+            >
               Crown beacon
             </text>
           </g>
@@ -333,16 +367,16 @@ function ParishMap({ snapshot }: { snapshot: ParishSnapshot }) {
       </svg>
       <p>
         {snapshot.progress.fogCleared
-          ? "The fog has lifted. The lower city is open."
+          ? "The fog has lifted. Take the beacon pathway down to the plain and the colosseum gate."
           : snapshot.progress.cathedralFelled
-            ? "Climb the cathedral rafters and light the crown beacon."
+            ? "Throw the switch behind the keeper's apse to lift the fog."
             : !snapshot.progress.caches.includes("town-key")
-              ? "Cross the wall bridges into town. Search beneath its streets for the mountain passage key."
+              ? "Climb the tiers through the prow gates. The third gate is barred; its key lies in a house on the second tier."
               : snapshot.progress.checkpoint === "refuge"
-                ? "Climb the mountain passage to the plaza. Rest at the Oblivion Chapel to shorten your return."
-                : "Follow the western cathedral exterior to the galleries. The eastern nave stair returns to the barred front door."}
+                ? "Climb the remaining tiers to the citadel and rest at the Oblivion Chapel."
+                : "Take the outside path along the cathedral's east side to its galleries."}
         <br />
-        Town return: {snapshot.progress.refuge ? "open" : "barred"} · Cathedral return:{" "}
+        Great gate: {snapshot.progress.refuge ? "open" : "barred"} · Cathedral return:{" "}
         {snapshot.progress.court ? "open" : "barred within"} · Beacon lift:{" "}
         {snapshot.progress.beaconLift ? "released" : "locked below"} · Arena lift:{" "}
         {snapshot.progress.arenaLift ? "released" : "locked below"}
@@ -352,7 +386,7 @@ function ParishMap({ snapshot }: { snapshot: ParishSnapshot }) {
 }
 
 function RealmRun({ progress }: { progress: MutableRefObject<ParishProgress> }) {
-  const { paused, settings } = useGame();
+  const { paused, freeCamera, settings } = useGame();
   const navigate = useNavigate();
   const { state: locationState } = useLocation();
   const state = useEcsRef("parish", () => createParishEncounter(progress.current, capitalWorld));
@@ -379,7 +413,7 @@ function RealmRun({ progress }: { progress: MutableRefObject<ParishProgress> }) 
     const spawn = parishShrines.find((s) => s.id === progress.current.checkpoint)!.spawn;
     teleport.current = [...spawn];
     healRequested.current = false;
-    setControlsPaused(paused);
+    setControlsPaused(paused || freeCamera);
     setResultScreenActive(false);
     setResultOpen(false);
     setMapOpen(false);
@@ -387,16 +421,25 @@ function RealmRun({ progress }: { progress: MutableRefObject<ParishProgress> }) 
     setSnapshot(snapshotOf(state.current, progress.current));
     document.querySelector<HTMLElement>(".game-viewport")?.focus();
   };
+  const retryLater = useRef(retry);
+  retryLater.current = retry;
   useEffect(() => {
     if (!over) return;
-    const id = schedule(() => setResultOpen(true), died ? 1600 : 3400);
-    return () => cancel(id);
+    const id = schedule(() => setResultOpen(true), died ? DEATH_SHOW_MS : 3400);
+    // No choices on death: respawn at the last ember rested at.
+    const respawn = died ? schedule(() => retryLater.current(), DEATH_RESPAWN_MS) : null;
+    return () => {
+      cancel(id);
+      if (respawn !== null) cancel(respawn);
+    };
   }, [over, died, schedule, cancel]);
   useEffect(() => {
-    setResultScreenActive(resultOpen);
-    if (resultOpen) retryButton.current?.focus();
+    // Only the victory screen takes the pointer for its buttons.
+    const choosing = resultOpen && !died;
+    setResultScreenActive(choosing);
+    if (choosing) retryButton.current?.focus();
     return () => setResultScreenActive(false);
-  }, [resultOpen]);
+  }, [resultOpen, died]);
   useEffect(() => {
     setMood("ash");
   }, []);
@@ -419,10 +462,28 @@ function RealmRun({ progress }: { progress: MutableRefObject<ParishProgress> }) 
         setMapOpen((open) => !open);
       }
     };
+    const openMap = () => {
+      if (!resultOpen) setMapOpen(true);
+    };
+    window.addEventListener("capital-map-open", openMap);
     window.addEventListener("keydown", key);
-    return () => window.removeEventListener("keydown", key);
+    return () => {
+      window.removeEventListener("capital-map-open", openMap);
+      window.removeEventListener("keydown", key);
+    };
   }, [paused, resultOpen]);
   const markReady = useCallback(() => setReady(true), []);
+  // Live enemies on the player's floor and the boss in its arena can be locked on to.
+  const lockTargets = useCallback(() => {
+    const run = state.current,
+      c = run.combat;
+    const targets: LockTarget[] = run.enemies
+      .filter((e) => e.health > 0)
+      .map((e) => ({ id: e.id, x: e.x, y: e.y, z: e.z, height: 1.5 }));
+    if (c.bossActive && c.bossHealth > 0)
+      targets.push({ id: "boss", x: c.bossX, y: c.bossY, z: c.bossZ, height: 2.6 });
+    return targets;
+  }, [state]);
   const markNearPortal = useCallback((id: string | null) => setNear(Boolean(id)), []);
   const exit = useCallback(
     () => navigate("/", { state: { returnPortal: locationState?.fromPortal } }),
@@ -437,6 +498,7 @@ function RealmRun({ progress }: { progress: MutableRefObject<ParishProgress> }) 
       : snapshot.prompt?.replace(/^E ·/, `${keyLabel(settings.bindings.interact)} ·`);
   return (
     <main className="experience parish-experience">
+      {import.meta.env.DEV && <CombatTuningPanel />}
       {snapshot.dialogue && (
         <aside className="capital-dialogue" role="status">
           {snapshot.dialogue}
@@ -492,19 +554,26 @@ function RealmRun({ progress }: { progress: MutableRefObject<ParishProgress> }) 
                 resetVersion={resetVersion.current}
               />
             )}
-            <FogGate
-              position={[PARISH_EXIT[0], PARISH_EXIT[1] + 2.6, PARISH_EXIT[2]]}
-              rotation={[0, Math.PI, 0]}
-              scale={1.2}
-              active={near}
-            />
-            <PortalFrameCollider
-              position={[PARISH_EXIT[0], PARISH_EXIT[1] + 2.6, PARISH_EXIT[2]]}
-              rotation={[0, Math.PI, 0]}
-              scale={1.2}
-            />
+            {snapshot.progress.finalFelled && (
+              <>
+                <FogGate
+                  position={[PARISH_EXIT[0], PARISH_EXIT[1] + 2.6, PARISH_EXIT[2]]}
+                  rotation={[0, PARISH_EXIT_YAW, 0]}
+                  scale={1.2}
+                  active={near}
+                />
+                <PortalFrameCollider
+                  position={[PARISH_EXIT[0], PARISH_EXIT[1] + 2.6, PARISH_EXIT[2]]}
+                  rotation={[0, PARISH_EXIT_YAW, 0]}
+                  scale={1.2}
+                />
+              </>
+            )}
             <ParishPlayer
+              tuning={capitalControllerTuning}
+              movementProfile={capitalPlayerProfile}
               combat={combat}
+              lockTargets={lockTargets}
               cameraStyle="combat"
               cameraDistance={7.5}
               start={shrine.spawn}
@@ -512,7 +581,7 @@ function RealmRun({ progress }: { progress: MutableRefObject<ParishProgress> }) 
               respawn={shrine.spawn}
               teleportRef={teleport}
               bounds={PARISH_BOUNDS}
-              portals={PARISH_PORTALS}
+              portals={snapshot.progress.finalFelled ? PARISH_PORTALS : NO_PORTALS}
               onNearPortal={markNearPortal}
               onEnterPortal={exit}
               onHangChange={ignoreHangChange}
@@ -560,6 +629,9 @@ function RealmRun({ progress }: { progress: MutableRefObject<ParishProgress> }) 
               <div className="parish-supplies">
                 <button
                   type="button"
+                  className="parish-flask"
+                  aria-label={`Use Ember flask, ${snapshot.flasks} of 3 remaining (R)`}
+                  title="Ember flask (R)"
                   disabled={
                     snapshot.flasks === 0 ||
                     snapshot.health <= 0 ||
@@ -569,40 +641,37 @@ function RealmRun({ progress }: { progress: MutableRefObject<ParishProgress> }) 
                     healRequested.current = true;
                   }}
                 >
-                  Ember flask <strong>{snapshot.flasks} / 3</strong>
-                  <kbd>R</kbd>
-                </button>
-                <span>{snapshot.embers} embers</span>
-                <button
-                  type="button"
-                  aria-expanded={mapOpen}
-                  onClick={() => setMapOpen((open) => !open)}
-                >
-                  Capital map <kbd>M</kbd>
+                  <svg viewBox="0 0 40 52" fill="none" aria-hidden="true">
+                    <path
+                      d="M15 5h10v5H15zM16 10v10C8 24 6 30 8 39c2 8 22 8 24 0 2-9 0-15-8-19V10"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    />
+                    <path
+                      d="M11 31c5-3 13 3 18 0l-1 8c-1 5-15 5-16 0z"
+                      fill="currentColor"
+                      opacity=".65"
+                    />
+                    <path d="M17 24c-4 3-5 6-4 9" stroke="currentColor" strokeLinecap="round" />
+                  </svg>
+                  <strong aria-hidden="true">{snapshot.flasks}</strong>
+                  <kbd aria-hidden="true">R</kbd>
                 </button>
               </div>
-              <p className="parish-controls">
-                {keyLabel(settings.bindings.jump)} · Jump &nbsp;{" "}
-                {keyLabel(settings.bindings.attack)} / Click · Sword &nbsp;{" "}
-                {keyLabel(settings.bindings.dodge)} · Dodge &nbsp;{" "}
-                {keyLabel(settings.sprintKey ?? settings.bindings.dodge)} ·{" "}
-                {settings.sprintKey ? "Sprint" : "Hold to sprint"} &nbsp;{" "}
-                {keyLabel(settings.bindings.interact)} · Use
-              </p>
-              {mapOpen && <ParishMap snapshot={snapshot} />}
+              <div className="parish-embers" aria-label={`${snapshot.embers} embers`}>
+                <svg viewBox="0 0 20 24" aria-hidden="true" fill="none">
+                  <path d="M10 2 15 10 10 21 5 10Z" stroke="currentColor" />
+                  <path d="m10 7 2 5-2 5-2-5Z" fill="currentColor" />
+                </svg>
+                <span>{snapshot.embers}</span>
+              </div>
+              {mapOpen && <ParishMap snapshot={snapshot} onClose={() => setMapOpen(false)} />}
             </>
           )}
           {snapshot.bossActive && !snapshot.felled && !resultOpen && (
             <div className="warden-vitals">
               <h2>
                 {snapshot.activeBoss ? capitalBosses[snapshot.activeBoss].name : "The Ash Warden"}
-                <small>
-                  {snapshot.enraged
-                    ? "The bell tolls for the living"
-                    : snapshot.activeBoss === "cathedral"
-                      ? "Guardian of the hidden city"
-                      : "Keeper of the capital flame"}
-                </small>
               </h2>
               <VitalBar
                 label={`${snapshot.activeBoss ? capitalBosses[snapshot.activeBoss].name : "The Ash Warden"} health`}
@@ -612,30 +681,24 @@ function RealmRun({ progress }: { progress: MutableRefObject<ParishProgress> }) 
               />
             </div>
           )}
-          {resultOpen && (
+          {resultOpen && died && (
+            <div className="death-screen" role="alert" aria-live="assertive">
+              <h2>You died</h2>
+            </div>
+          )}
+          {resultOpen && !died && (
             <div
-              className={`combat-result ${died ? "is-death" : "is-victory"}`}
+              className="combat-result is-victory"
               role="dialog"
               aria-modal="true"
               aria-label="Encounter result"
             >
-              <h2>{died ? "You died" : "Warden felled"}</h2>
-              <p>
-                {died
-                  ? `Return to ${shrine.name}. Your opened shortcuts remain.`
-                  : "The capital is free of its last keeper. Its roads remain open."}
-              </p>
+              <h2>Warden felled</h2>
+              <p>The capital is free of its last keeper. A way home opens in the colosseum.</p>
               <div className="combat-result-actions">
-                {died ? (
-                  <button ref={retryButton} onClick={retry}>
-                    Return to the ember
-                  </button>
-                ) : (
-                  <button ref={retryButton} onClick={() => setResultOpen(false)}>
-                    Explore the capital
-                  </button>
-                )}
-                <button onClick={exit}>Return to the forest</button>
+                <button ref={retryButton} onClick={() => setResultOpen(false)}>
+                  Explore the capital
+                </button>
               </div>
             </div>
           )}

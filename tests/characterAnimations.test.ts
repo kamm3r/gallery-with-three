@@ -111,6 +111,15 @@ test("exported player contains original and new skeletal actions", () => {
     "SitExit",
     "SwordSlashQuick",
     "SwordSlashHeavy",
+    "StrafeLeft",
+    "StrafeRight",
+    "WalkBack",
+    "Guard",
+    "GuardHit",
+    "Parry",
+    "JumpAttack",
+    "PlungeFall",
+    "PlungeLand",
   ]) {
     assert.ok(names.includes(name), `Missing ${name}`);
   }

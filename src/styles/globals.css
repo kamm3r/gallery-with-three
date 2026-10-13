@@ -485,6 +485,48 @@ body:has(.playground-experience) .pause-trigger {
   color: #e58348;
   letter-spacing: 0.04em;
 }
+/* Death: no choices. The words rise, then the screen falls to black before the respawn. */
+.death-screen {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  background: linear-gradient(transparent 38%, #000a 50%, transparent 62%);
+  animation: death-fade 3700ms linear both;
+}
+.death-screen h2 {
+  margin: 0;
+  color: #a3201a;
+  font:
+    400 clamp(2.8rem, 8vw, 6rem) Georgia,
+    serif;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  text-shadow: 0 0 28px #5a0a0699;
+  animation: death-words 1600ms var(--ease-out) both;
+}
+@keyframes death-words {
+  from {
+    opacity: 0;
+    scale: 1.08;
+  }
+}
+@keyframes death-fade {
+  0%,
+  75% {
+    box-shadow: inset 0 0 0 100vmax #0000;
+  }
+  100% {
+    box-shadow: inset 0 0 0 100vmax #000;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .death-screen,
+  .death-screen h2 {
+    animation: none;
+  }
+}
 .combat-result {
   position: absolute;
   top: 50%;
@@ -1494,45 +1536,103 @@ body:has(.playground-experience) .pause-trigger {
   }
 }
 
-/* Ashen Parish: field supplies and a quiet, optional route map. */
+/* Compact field HUD: supplies at left, currency at right, prompts on demand. */
+.parish-hud .player-vitals {
+  top: 1.5rem;
+  left: 1.5rem;
+  gap: 0.65rem;
+}
+.parish-hud .player-vitals > div {
+  width: min(32vw, 17rem);
+}
+.parish-hud .vital-crest {
+  width: 2rem;
+  height: 2rem;
+  font-size: 1.4rem;
+}
+.parish-hud .vital-bar {
+  height: 0.55rem;
+}
+.parish-hud .vital-bar.is-stamina {
+  height: 0.4rem;
+  margin-top: 0.35rem;
+}
+body:has(.parish-experience) .pause-trigger {
+  top: 1.5rem;
+  right: 1.5rem;
+  width: 2.5rem;
+  height: 2.5rem;
+  justify-content: center;
+  padding: 0;
+  border-color: transparent;
+  background: #161a1866;
+}
 .parish-supplies {
   position: absolute;
-  left: 2rem;
-  bottom: 3.4rem;
-  display: flex;
-  align-items: center;
-  gap: 0.8rem;
-  font-size: 0.8rem;
+  left: 1.5rem;
+  bottom: 1.5rem;
 }
-.parish-supplies button {
+.parish-flask {
   pointer-events: auto;
-  display: flex;
-  align-items: center;
-  gap: 0.65rem;
-  padding: 0.7rem 0.9rem;
-  border: 1px solid #887756;
-  background: #161a18e6;
-  color: #e0d2b7;
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 3.5rem;
+  height: 4.5rem;
+  padding: 0.2rem;
+  border: 1px solid #ac956755;
+  background: linear-gradient(0deg, #161a18bb, #161a181a);
+  color: #d9b66e;
   cursor: pointer;
 }
-.parish-supplies button:disabled {
-  opacity: 0.5;
+.parish-flask svg {
+  width: 2.5rem;
+  height: 3.2rem;
+}
+.parish-flask strong {
+  position: absolute;
+  right: 0.3rem;
+  bottom: 0.1rem;
+  color: #eee7d4;
+  font:
+    1rem Georgia,
+    serif;
+}
+.parish-flask kbd {
+  position: absolute;
+  left: 0.25rem;
+  bottom: 0.2rem;
+  color: #c0b9a8;
+  font: 0.6rem inherit;
+}
+.parish-flask:disabled {
+  color: #897b60;
   cursor: default;
 }
-.parish-supplies kbd {
-  font: 0.65rem inherit;
-  border: 1px solid #7b796a;
-  padding: 0.15rem 0.3rem;
+.parish-flask:focus-visible {
+  outline: 2px solid #d9b66e;
+  outline-offset: 3px;
 }
-.parish-supplies strong {
-  color: #efbd74;
-}
-.parish-controls {
+.parish-embers {
   position: absolute;
-  bottom: 1rem;
-  left: 2rem;
-  font-size: 0.72rem;
-  color: #c0b9a8;
+  right: 1.5rem;
+  bottom: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.6rem;
+  min-width: 4rem;
+  padding: 0.3rem 0.6rem;
+  background: linear-gradient(90deg, transparent, #161a1888);
+  font:
+    1rem Georgia,
+    serif;
+  font-variant-numeric: tabular-nums;
+}
+.parish-embers svg {
+  width: 1rem;
+  height: 1.3rem;
+  color: #d9b66e;
 }
 .parish-map {
   position: absolute;
@@ -1543,8 +1643,22 @@ body:has(.playground-experience) .pause-trigger {
   background: #141a18ed;
   padding: 1rem;
 }
+.capital-map-close {
+  position: absolute;
+  top: 0.25rem;
+  right: 0.35rem;
+  pointer-events: auto;
+  border: 0;
+  background: transparent;
+  color: #d8c19b;
+  cursor: pointer;
+  font-size: 1.2rem;
+  width: 2rem;
+  height: 2rem;
+}
 .parish-map h2 {
   margin: 0;
+  padding-right: 1.1rem;
   color: #d8c19b;
   font:
     400 1.2rem Georgia,
@@ -1608,18 +1722,11 @@ body:has(.playground-experience) .pause-trigger {
 @media (max-width: 600px) {
   .parish-supplies {
     left: 1rem;
-    bottom: 8rem;
-    gap: 0.4rem;
-    font-size: 0.65rem;
+    bottom: 1rem;
   }
-  .parish-supplies button {
-    padding: 0.5rem;
-    gap: 0.35rem;
-  }
-  .parish-controls {
-    left: 1rem;
-    bottom: 6.5rem;
-    font-size: 0.6rem;
+  .parish-embers {
+    right: 1rem;
+    bottom: 1rem;
   }
   .parish-map {
     width: 10rem;
@@ -1652,7 +1759,7 @@ body:has(.playground-experience) .pause-trigger {
   }
 }
 .parish-hud .warden-vitals {
-  bottom: 7rem;
+  bottom: 4.5rem;
 }
 @media (max-width: 600px) {
   .parish-hud .warden-vitals {
@@ -1688,4 +1795,59 @@ body:has(.playground-experience) .pause-trigger {
   font-size: 14px;
   line-height: 1.65;
   pointer-events: none;
+}
+
+.free-camera-tools {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 35;
+  color: #f3ede1;
+  font:
+    13px/1.5 system-ui,
+    sans-serif;
+}
+.free-camera-tools[hidden] {
+  display: none;
+}
+.free-camera-tools button {
+  padding: 9px 12px;
+  border: 1px solid #ffffff40;
+  border-radius: 6px;
+  background: #182027ed;
+  color: inherit;
+  cursor: pointer;
+}
+.free-camera-tools button:hover {
+  background: #303d47;
+}
+.free-camera-tools button:focus-visible {
+  outline: 2px solid #cbe7ef;
+  outline-offset: 3px;
+}
+.free-camera-tools button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.free-camera-tools kbd {
+  margin-left: 12px;
+  opacity: 0.65;
+}
+.free-camera-details {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 14px;
+  border: 1px solid #ffffff25;
+  border-radius: 6px;
+  background: #182027ed;
+  max-width: calc(100vw - 40px);
+}
+.free-camera-details output {
+  font-family: ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
+.free-camera-details button {
+  align-self: flex-start;
 }

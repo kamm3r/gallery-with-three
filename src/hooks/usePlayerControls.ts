@@ -12,13 +12,17 @@ export type ControlName =
   | "jump"
   | "run"
   | "roll"
-  | "interact";
+  | "interact"
+  | "guard"
+  | "crouch";
 
 export type PlayerControls = Record<ControlName, boolean> & {
   jumpPress: number;
   rollPress: number;
   interactPress: number;
   attackPress: number;
+  lockPress: number;
+  parryPress: number;
 };
 
 const controlNames: ControlName[] = [
@@ -30,6 +34,8 @@ const controlNames: ControlName[] = [
   "run",
   "roll",
   "interact",
+  "guard",
+  "crouch",
 ];
 
 const state: PlayerControls = runtimeWorld.get(PlayerInput)!;
@@ -44,6 +50,19 @@ export const heldControls = (): Readonly<PlayerControls> => state;
 export function pressPlayerAttack() {
   if (controlStatus.paused) return;
   state.attackPress++;
+  listeners.forEach((listener) => listener(state));
+}
+
+export function pressParry() {
+  if (controlStatus.paused) return;
+  state.parryPress++;
+  listeners.forEach((listener) => listener(state));
+}
+
+/** Toggles lock-on: the player component picks or releases the target. */
+export function pressLockOn() {
+  if (controlStatus.paused) return;
+  state.lockPress++;
   listeners.forEach((listener) => listener(state));
 }
 
@@ -140,6 +159,10 @@ export function usePlayerControls(mouseAttack = false) {
         }
       } else if (action === "attack") {
         if (active) pressPlayerAttack();
+      } else if (action === "lockOn") {
+        if (active) pressLockOn();
+      } else if (action === "parry") {
+        if (active) pressParry();
       } else {
         // Releasing one alias must not release another still-held movement key.
         setPlayerControl(action, active || [...pressed].some((code) => actionFor(code) === action));
@@ -150,13 +173,24 @@ export function usePlayerControls(mouseAttack = false) {
     const keyUp = handleKey(false);
     const pointerDown = (event: MouseEvent) => {
       // A click to capture the pointer or operate a menu must not swing a sword.
-      if (
-        !mouseAttack ||
-        controlStatus.paused ||
-        event.button !== 0 ||
-        !document.pointerLockElement
-      )
+      if (!mouseAttack || controlStatus.paused || !document.pointerLockElement) return;
+      // The middle button locks on, like a stick click; the right button guards and
+      // the back side button parries.
+      if (event.button === 1) {
+        event.preventDefault();
+        pressLockOn();
         return;
+      }
+      if (event.button === 2) {
+        setPlayerControl("guard", true);
+        return;
+      }
+      if (event.button === 3) {
+        event.preventDefault();
+        pressParry();
+        return;
+      }
+      if (event.button !== 0) return;
       if (
         event.target instanceof HTMLElement &&
         event.target.closest('button, input, select, textarea, [role="dialog"]')
@@ -164,7 +198,16 @@ export function usePlayerControls(mouseAttack = false) {
         return;
       pressPlayerAttack();
     };
+    const pointerUp = (event: MouseEvent) => {
+      if (event.button === 2) setPlayerControl("guard", false);
+    };
+    // With the pointer captured, the right button guards instead of opening a menu.
+    const contextMenu = (event: MouseEvent) => {
+      if (mouseAttack && document.pointerLockElement) event.preventDefault();
+    };
     listeners.add(sync);
+    window.addEventListener("mouseup", pointerUp);
+    window.addEventListener("contextmenu", contextMenu);
     window.addEventListener("keydown", keyDown);
     window.addEventListener("keyup", keyUp);
     window.addEventListener("mousedown", pointerDown);
@@ -175,6 +218,8 @@ export function usePlayerControls(mouseAttack = false) {
       window.removeEventListener("keydown", keyDown);
       window.removeEventListener("keyup", keyUp);
       window.removeEventListener("mousedown", pointerDown);
+      window.removeEventListener("mouseup", pointerUp);
+      window.removeEventListener("contextmenu", contextMenu);
       window.removeEventListener("blur", resetControls);
       resetControls();
       if (cancelKeyboardDodge === cancelDodge) cancelKeyboardDodge = () => {};

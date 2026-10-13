@@ -6,10 +6,11 @@ import { patchGraphicsSettings } from "./gameplay/graphicsSettings";
 
 export function GameProvider({ children }: { children: ReactNode }) {
   const [paused, setPauseState] = useState(false);
+  const [freeCamera, setFreeCameraState] = useState(false);
   const [settings, setSettings] = useState(readSettings);
   useEffect(() => {
-    configureSound(settings.soundVolume, paused);
-  }, [settings.soundVolume, paused]);
+    configureSound(settings.soundVolume, paused || freeCamera);
+  }, [settings.soundVolume, paused, freeCamera]);
   useEffect(() => {
     window.addEventListener("pointerdown", unlockSound);
     window.addEventListener("keydown", unlockSound);
@@ -19,11 +20,21 @@ export function GameProvider({ children }: { children: ReactNode }) {
       configureSound(0, true);
     };
   }, []);
-  const setPaused = useCallback((next: boolean) => {
-    setControlsPaused(next);
-    setPauseState(next);
-    if (next && document.pointerLockElement) document.exitPointerLock();
-  }, []);
+  const setPaused = useCallback(
+    (next: boolean) => {
+      setControlsPaused(next || freeCamera);
+      setPauseState(next);
+      if (next && document.pointerLockElement) document.exitPointerLock();
+    },
+    [freeCamera],
+  );
+  const setFreeCamera = useCallback(
+    (next: boolean) => {
+      setControlsPaused(next || paused);
+      setFreeCameraState(next);
+    },
+    [paused],
+  );
   const updateSettings = useCallback((patch: Partial<GameSettings>) => {
     setSettings((current) => patchGraphicsSettings(current, patch));
   }, []);
@@ -42,12 +53,11 @@ export function GameProvider({ children }: { children: ReactNode }) {
     document.addEventListener("visibilitychange", onVisibility);
     return () => {
       document.removeEventListener("visibilitychange", onVisibility);
-      setControlsPaused(false);
     };
   }, [setPaused]);
   const value = useMemo(
-    () => ({ paused, setPaused, settings, updateSettings }),
-    [paused, setPaused, settings, updateSettings],
+    () => ({ paused, setPaused, freeCamera, setFreeCamera, settings, updateSettings }),
+    [paused, setPaused, freeCamera, setFreeCamera, settings, updateSettings],
   );
   return <GameContext.Provider value={value}>{children}</GameContext.Provider>;
 }

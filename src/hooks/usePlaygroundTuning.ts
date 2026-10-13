@@ -27,6 +27,7 @@ export function useControllerTuning(): ControllerTuning {
       groundDecel: slider(d.groundDecel, 5, 120, 1, "Decel"),
       groundTurnRate: slider(d.groundTurnRate, 1, 30, 0.5, "Turn rate"),
       facingDampGround: slider(d.facingDampGround, 1, 40, 0.5, "Face turn"),
+      turnBrake: slider(d.turnBrake, 0, 150, 1, "Pivot brake"),
     }),
     Skid: folder({
       skidAngle: slider(d.skidAngle, 90, 180, 1, "Reverse angle"),

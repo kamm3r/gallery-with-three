@@ -1,3 +1,5 @@
+import { characterSweepAllowed } from "../gameplay/characterCollision";
+import { setCapsuleStance } from "../gameplay/capsuleStance.ts";
 import { useEcsRef } from "../hooks/useEcsRef";
 import { useThree } from "@react-three/fiber";
 import {
@@ -31,6 +33,12 @@ import { canCoyoteJump, getGravityScale } from "../gameplay/playerRules";
 export interface MovementInput {
   /** Backsteps translate while retaining the current facing. */
   preserveFacing?: boolean;
+  /** Committed motion such as a dodge bypasses ordinary acceleration. */
+  planarOverride?: { x: number; z: number } | null;
+  /** Locked on: hold this facing and strafe, instead of turning toward input. */
+  faceYaw?: number | null;
+  /** Scales the walk or run speed, e.g. walking slowly behind a raised guard. */
+  speedScale?: number;
   forward: boolean;
   backward: boolean;
   leftward: boolean;
@@ -55,6 +63,9 @@ export interface CharacterHandle {
   /** Horizontal facing (body +Z). */
   bodyZAxis: THREE.Vector3;
   groundNormal: THREE.Vector3;
+  setHeight: (height: number) => boolean;
+  /** Snaps the facing on the next step, e.g. a swing turning to a locked target. */
+  turnTo: (yaw: number) => void;
   setMovement: (movement: Partial<MovementInput>) => void;
   /** Sets vertical speed and leaves the ground (jump pads, springs). */
   launch: (verticalSpeed: number, planarScale?: number) => void;
@@ -100,10 +111,8 @@ const surfaceOrigin = { x: 0, y: 0, z: 0 };
 let ridingHandle = Number.NaN;
 const ridden = (other: RapierCollider) => other.parent()?.handle === ridingHandle;
 // Corpse tags are JS data: querying WASM body flags inside a sweep predicate
-// would borrow the physics world recursively. Also reject the platform we ride.
-const notRidden = (other: RapierCollider) =>
-  !(other.parent()?.userData as { nonBlocking?: boolean } | undefined)?.nonBlocking &&
-  !ridden(other);
+// would borrow the physics world recursively. Exclude the ridden deck while keeping its wall colliders.
+const notRidden = (other: RapierCollider) => characterSweepAllowed(other, ridingHandle);
 const groundRayDirection = { x: 0, y: -1, z: 0 };
 
 interface PlatformTrack {
@@ -184,6 +193,7 @@ export const CharacterController = forwardRef<CharacterHandle, CharacterControll
       run: false,
       jump: false,
     }));
+    const pendingYaw = useRef<number | null>(null);
     const jumpWasHeld = useEcsRef("controller-jumpWasHeld", () => false);
     const jumpBuffer = useEcsRef("controller-jumpBuffer", () => 0);
     const airTime = useEcsRef("controller-airTime", () => 0);
@@ -213,8 +223,46 @@ export const CharacterController = forwardRef<CharacterHandle, CharacterControll
       relativeVelOnPlane: new THREE.Vector3(),
       bodyZAxis: new THREE.Vector3(0, 0, 1),
       groundNormal: new THREE.Vector3(0, 1, 0),
+      setHeight(height) {
+        const body = bodyRef.current,
+          collider = colliderRef.current;
+        if (!body || !collider) return false;
+        return setCapsuleStance(
+          2 * (capsuleHalfHeight + capsuleRadius),
+          height,
+          capsuleRadius,
+          collider.shape as InstanceType<typeof rapier.Capsule>,
+          {
+            capsule: (half, radius) => new rapier.Capsule(half, radius),
+            blocked: (shape, offset) => {
+              const p = body.translation();
+              return Boolean(
+                world.intersectionWithShape(
+                  { x: p.x, y: p.y + offset, z: p.z },
+                  body.rotation(),
+                  shape,
+                  rapier.QueryFilterFlags.EXCLUDE_SENSORS,
+                  undefined,
+                  collider,
+                  body,
+                  (other) =>
+                    !(other.parent()?.userData as { nonBlocking?: boolean } | undefined)
+                      ?.nonBlocking,
+                ),
+              );
+            },
+            apply: (shape, offset) => {
+              collider.setShape(shape);
+              collider.setTranslationWrtParent({ x: 0, y: offset, z: 0 });
+            },
+          },
+        );
+      },
       setMovement(next) {
         Object.assign(movement.current, next);
+      },
+      turnTo(yaw) {
+        pendingYaw.current = yaw;
       },
       launch(verticalSpeed, planarScale = 1) {
         handle.velocity.set(
@@ -272,6 +320,10 @@ export const CharacterController = forwardRef<CharacterHandle, CharacterControll
       const position = body.translation();
       const rotation = body.rotation();
       let bodyYaw = 2 * Math.atan2(rotation.y, rotation.w);
+      if (pendingYaw.current !== null) {
+        bodyYaw = pendingYaw.current;
+        pendingYaw.current = null;
+      }
 
       // Moving ground we stand on. Its motion is applied after the sweep.
       const track = platform.current;
@@ -323,15 +375,15 @@ export const CharacterController = forwardRef<CharacterHandle, CharacterControll
         planar,
         {
           wish,
-          maxSpeed: input.run ? settings.runSpeed : settings.walkSpeed,
+          maxSpeed: (input.run ? settings.runSpeed : settings.walkSpeed) * (input.speedScale ?? 1),
           grounded: handle.isOnGround,
           skidding: handle.skidding,
           dt,
         },
         settings,
       );
-      velocity.x = planar.x;
-      velocity.z = planar.z;
+      velocity.x = input.planarOverride?.x ?? planar.x;
+      velocity.z = input.planarOverride?.z ?? planar.z;
 
       // --- Jump: buffered presses, coyote time, variable height.
       const jumpHeld = enabled && input.jump;
@@ -536,8 +588,10 @@ export const CharacterController = forwardRef<CharacterHandle, CharacterControll
         track.rotation.set(turn.x, turn.y, turn.z, turn.w);
       }
 
-      // --- Facing: turn toward input, slower in the air.
-      if (wishLength > 0 && !input.preserveFacing) {
+      // --- Facing: hold a locked target, or turn toward input, slower in the air.
+      if (input.faceYaw !== null && input.faceYaw !== undefined) {
+        bodyYaw = dampYaw(bodyYaw, input.faceYaw, settings.facingDampGround, dt);
+      } else if (wishLength > 0 && !input.preserveFacing) {
         bodyYaw = dampYaw(
           bodyYaw,
           Math.atan2(wish.x, wish.z),

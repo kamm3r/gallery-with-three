@@ -46,6 +46,22 @@ export const JUMP_DEFAULTS: JumpTuning = {
 };
 
 /**
+ * Elden Ring / Sekiro jump: one committed arc of about 1.2m whatever the hold, no
+ * apex float, airborne about half a second. Distance comes from the run-up.
+ */
+export const SOULS_JUMP: JumpTuning = {
+  jumpSpeed: 8.5,
+  riseGravity: 1,
+  cutGravity: 1,
+  apexGravity: 1,
+  apexSpeed: 0,
+  fallGravity: 1.3,
+  fallMaxSpeed: 24,
+  coyoteTime: 0.08,
+  jumpBuffer: 0.1,
+};
+
+/**
  * @param jumping true only during a player jump's rise. Launches (jump
  * pads, platforms) never get the release cut, so they keep full height.
  */
@@ -114,9 +130,51 @@ export function canGrabLedge({
 // or the animation gets cut off mid-roll.
 export const ROLL_DURATION = 0.92;
 export const ROLL_COOLDOWN = 0.9;
-export const ROLL_SPEED = 9;
+/**
+ * Rolls burst out fast through their invincible part and slow into a short slide:
+ * speed falls linearly by this share of its peak over the move.
+ */
+export const ROLL_FALLOFF = 0.8;
+export function rollSpeedAt(peak: number, elapsed: number, duration: number) {
+  return peak * (1 - ROLL_FALLOFF * Math.min(1, Math.max(0, elapsed / duration)));
+}
+/** The peak speed that carries a dodge `distance` metres over `duration`. */
+export function rollPeakFor(distance: number, duration: number) {
+  return distance / (duration * (1 - ROLL_FALLOFF / 2));
+}
+/** A full roll covers about four and a half metres, like the genre's medium roll. */
+export const ROLL_DISTANCE = 4.5;
+export const ROLL_SPEED = rollPeakFor(ROLL_DISTANCE, ROLL_DURATION);
 export const BACKSTEP_DURATION = 0.4;
-export const BACKSTEP_SPEED = 4.5;
+/** A backstep hops about a metre and a half. */
+export const BACKSTEP_SPEED = rollPeakFor(1.6, BACKSTEP_DURATION);
+/**
+ * Roll weight, as equipment load sets it in the genre: a light roll is quick and
+ * far, a heavy "fat" roll slow, short and with a thinner invincibility window.
+ * Distances scale the level's medium roll.
+ */
+export type RollWeight = "light" | "medium" | "heavy";
+export const ROLL_WEIGHTS: Record<
+  RollWeight,
+  { duration: number; distance: number; iframes: readonly [number, number]; cooldown: number }
+> = {
+  light: { duration: 0.74, distance: 1.15, iframes: [0.05, 0.5], cooldown: 0.72 },
+  medium: { duration: ROLL_DURATION, distance: 1, iframes: [0.08, 0.55], cooldown: ROLL_COOLDOWN },
+  heavy: { duration: 1.2, distance: 0.6, iframes: [0.12, 0.46], cooldown: 1.15 },
+};
+/** Invincibility windows, seconds into the move. A backstep's is short and early. */
+export const ROLL_IFRAMES = [0.08, 0.55] as const;
+export const BACKSTEP_IFRAMES = [0.04, 0.22] as const;
+/** Late in a roll, an attack cancels its tail into a roll attack. */
+export const ROLL_ATTACK_FROM = 0.6;
+export function dodgeInvulnerable(
+  backstep: boolean,
+  elapsed: number,
+  weight: RollWeight = "medium",
+) {
+  const [from, to] = backstep ? BACKSTEP_IFRAMES : ROLL_WEIGHTS[weight].iframes;
+  return elapsed > from && elapsed < to;
+}
 
 export interface RollStartState {
   grounded: boolean;

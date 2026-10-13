@@ -63,6 +63,9 @@ test("death and result screens suppress movement; parish victory permits explora
         isSprintAllowed: () => true,
         platformer: undefined,
         paused: false,
+        movementProfile: undefined,
+        crouched: { current: false },
+        lockRef: { current: { yaw: null } },
       };
       new Function(...Object.keys(args), `return (${callback})();`)(...Object.values(args));
       assert.ok(
@@ -92,6 +95,8 @@ void test("backsteps preserve facing while directional rolls turn toward travel"
       combat: undefined,
       platformer: undefined,
       paused: false,
+      movementProfile: undefined,
+      crouched: { current: false },
       isResultScreenActive: () => false,
     };
     // Executes the checked-in frame callback with an isolated character handle.

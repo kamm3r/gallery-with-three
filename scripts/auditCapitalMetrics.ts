@@ -1,20 +1,27 @@
+import {
+  CAPITAL_METRICS as metrics,
+  capitalPlayerProfile,
+  capitalControllerTuning,
+} from "../src/gameplay/capitalMetrics.ts";
+import { ROLL_DURATION, ROLL_FALLOFF } from "../src/gameplay/playerRules.ts";
 import RAPIER from "@dimforge/rapier3d-compat";
 import * as THREE from "three";
-import { isCapitalStair } from "../src/gameplay/capitalReferenceDetails.ts";
 import { buildCapitalEnvironment } from "../src/gameplay/capitalEnvironment.ts";
 import {
-  capitalBuildings,
-  capitalRailSurfaces,
+  capitalLevel,
+  capitalSurfaces,
   capitalSurfaceHeight,
 } from "../src/gameplay/capitalLayout.ts";
 
-/** Run from the repository root:
- * node --experimental-strip-types scripts/auditCapitalMetrics.ts
- * Measures the rendered capital against the reference blockout metrics for the
- * 1.84 m capsule: 3 m hallway and 4 m stair headroom, 1.5 m paths and 2 x 3.5 m
- * doors. Only points where the capsule can stand are measured; each failure
- * names the triangle that limits it. Sampling is advisory: it does not certify
- * the chart's room sizes, street widths, stair widths or movement speeds.
+/** The route record a surface belongs to: its id, or the id before a segment suffix. */
+const routeOf = (id: string) =>
+  capitalLevel.routes.find((r) => id === r.id || id.startsWith(r.id + ":"));
+const capitalRailSurfaces = capitalSurfaces;
+
+/** Run: node --experimental-strip-types scripts/auditCapitalMetrics.ts
+ * Audits room/door records, the live movement profile, and sampled clearance
+ * against the metre grid. A nonzero exit code means a measured violation.
+ * The geometric sampling is not an exhaustive proof of every point on a route.
  */
 type Point = { x: number; y: number; z: number };
 
@@ -87,12 +94,12 @@ const floorNear = (x: number, z: number, y: number) => {
   return best;
 };
 /** Clear walking distance until the floor ends or a wall rises at knee or head height. */
-const reach = (x: number, y: number, z: number, dx: number, dz: number) => {
+const reach = (x: number, y: number, z: number, dx: number, dz: number, target: number) => {
   let px = x,
     py = y,
     pz = z,
     distance = 0;
-  while (distance < 0.75) {
+  while (distance < target / 2) {
     const nx = px + dx * 0.25,
       nz = pz + dz * 0.25;
     const ny = floorNear(nx, nz, py);
@@ -144,44 +151,91 @@ const report: string[] = [];
 for (const s of capitalRailSurfaces) {
   const xs = s.vertices.map((p) => p[0]),
     zs = s.vertices.map((p) => p[2]);
-  const flight = isCapitalStair(s);
+  const route = routeOf(s.id),
+    flight = route?.kind === "stair";
+  const targetWidth = route?.kind === "street" ? metrics.streetWidth : metrics.pathWidth;
   const [x0, x1, z0, z1] = [Math.min(...xs), Math.max(...xs), Math.min(...zs), Math.max(...zs)];
-  let headroom = { clear: Infinity, at: "", limit: "" };
   let width = { clear: -Infinity, at: "", limit: "" };
+  const samples: number[][] = [
+    [
+      s.vertices.reduce((n, p) => n + p[0], 0) / s.vertices.length,
+      s.vertices.reduce((n, p) => n + p[2], 0) / s.vertices.length,
+    ],
+  ];
   for (let x = x0 + 0.2; x <= x1 - 0.2; x += Math.max(0.4, (x1 - x0) / 14))
-    for (let z = z0 + 0.2; z <= z1 - 0.2; z += Math.max(0.4, (z1 - z0) / 14)) {
-      const y = capitalSurfaceHeight(s, x, z);
-      if (y === null || !standable(x, y, z)) continue;
-      const at = [x, y, z].map((n) => n.toFixed(1)).join(",");
-      // Start above foot-level overlays such as paving bands and thresholds.
-      const up = cast({ x, y: y + 0.4, z }, { x: 0, y: 1, z: 0 });
-      const clear = up ? up.distance + 0.4 : Infinity;
-      if (clear < headroom.clear) headroom = { clear, at, limit: up?.triangle ?? "" };
-      // Once a 1.5-metre disk fits, further width queries cannot change the verdict.
-      if (width.clear >= 1.5) continue;
-      // Inscribed width: a path is as wide as its widest clear disk.
-      let narrowest = { distance: Infinity, limit: "" };
-      for (let k = 0; k < 16; k++) {
-        const a = (k * Math.PI) / 8;
-        const r = reach(x, y, z, Math.cos(a), Math.sin(a));
-        if (r.distance < narrowest.distance) narrowest = r;
-      }
-      if (2 * narrowest.distance > width.clear)
-        width = { clear: 2 * narrowest.distance, at, limit: narrowest.limit };
-    }
-  if (headroom.clear < (flight ? 4 : 3) - 0.01)
-    report.push(
-      `headroom ${headroom.clear.toFixed(2)} m on ${s.id} at ${headroom.at}: ${headroom.limit}`,
+    for (let z = z0 + 0.2; z <= z1 - 0.2; z += Math.max(0.4, (z1 - z0) / 14)) samples.push([x, z]);
+  for (const [x, z] of samples) {
+    const y = capitalSurfaceHeight(s, x, z);
+    if (y === null || !standable(x, y, z)) continue;
+    const at = [x, y, z].map((n) => n.toFixed(1)).join(",");
+    // Start above foot-level overlays such as paving bands and thresholds.
+    const up = cast({ x, y: y + 0.4, z }, { x: 0, y: 1, z: 0 });
+    const clear = up ? up.distance + 0.4 : Infinity;
+    // The nave side aisles include the stair underpass; the central hall is five metres.
+    // Doorway lintels sit lower than the hall they open into.
+    const inDoorway = capitalLevel.doors.some(
+      (d) => Math.hypot(d.position[0] - x, d.position[2] - z) < d.width / 2 + 1.2,
     );
-  if (width.clear >= 0 && width.clear < 1.5)
-    report.push(`width ${width.clear.toFixed(2)} m on ${s.id} at ${width.at}: ${width.limit}`);
+    const highHall =
+      !inDoorway &&
+      (s.id === "chapel" ||
+        s.id === "apse" ||
+        s.id === "colosseum" ||
+        (s.id === "nave" && Math.abs(x) < 8));
+    const required = flight
+      ? metrics.stairHeight
+      : highHall
+        ? metrics.highHallHeight
+        : metrics.hallwayHeight;
+    if (clear < required - 0.01)
+      report.push(
+        `headroom ${clear.toFixed(2)} m < ${required} m on ${s.id} at ${at}: ${up?.triangle ?? ""}`,
+      );
+    // Once the required disk fits, further width queries cannot change the verdict.
+    // Lift pads are bounded by the moving deck, which carries the walk across.
+    if (width.clear >= targetWidth || s.id.includes("lift-pad")) continue;
+    // Inscribed width: a path is as wide as its widest clear disk.
+    let narrowest = { distance: Infinity, limit: "" };
+    for (let k = 0; k < 16; k++) {
+      const a = (k * Math.PI) / 8;
+      const r = reach(x, y, z, Math.cos(a), Math.sin(a), targetWidth);
+      if (r.distance < narrowest.distance) narrowest = r;
+    }
+    if (2 * narrowest.distance > width.clear)
+      width = { clear: 2 * narrowest.distance, at, limit: narrowest.limit };
+  }
+  if (width.clear >= 0 && width.clear < targetWidth)
+    report.push(
+      `width ${width.clear.toFixed(2)} m < ${targetWidth} m on ${s.id} at ${width.at}: ${width.limit}`,
+    );
 }
-for (const b of capitalBuildings)
-  for (const d of b.doors)
-    if (d.width < 2 || d.height < 3.5)
-      report.push(`door ${d.width} x ${d.height} m on ${b.id} ${d.side}`);
+for (const d of capitalLevel.doors)
+  if (d.width < metrics.doorWidth || d.height < metrics.doorHeight)
+    report.push(`door ${d.width} x ${d.height} m at ${d.id}`);
+for (const r of capitalLevel.rooms)
+  if (Math.min(r.width, r.depth) < metrics.roomSize || r.height < metrics.hallwayHeight)
+    report.push(`room ${r.id}: ${r.width} x ${r.depth} x ${r.height} m`);
+for (const [name, actual, expected] of [
+  ["standing height", capitalPlayerProfile.height, metrics.playerHeight],
+  ["crouch height", capitalPlayerProfile.crouchHeight, metrics.crouchHeight],
+] as const)
+  if (Math.abs(actual - expected) > 0.001) report.push(`${name}: ${actual} instead of ${expected}`);
+// Movement may be faster than the chart's pacing minimums, never slower.
+for (const [name, actual, minimum] of [
+  ["walk speed", capitalControllerTuning.walkSpeed, metrics.walkSpeed],
+  ["sprint speed", capitalControllerTuning.runSpeed, metrics.runSpeed],
+  [
+    "roll distance",
+    capitalPlayerProfile.rollSpeed * ROLL_DURATION * (1 - ROLL_FALLOFF / 2),
+    metrics.rollDistance,
+  ],
+] as const)
+  if (actual < minimum) report.push(`${name}: ${actual} is below ${minimum}`);
 console.log(
-  report.length ? report.join("\n") : "No sampled headroom, path-width or door-size violations.",
+  report.length
+    ? report.join("\n")
+    : `Reference metric audit passes (${capitalSurfaces.length} surfaces, ${capitalLevel.doors.length} doors, ${capitalLevel.rooms.length} rooms, capital movement profile).`,
 );
+process.exitCode = report.length ? 1 : 0;
 world.free();
 environment.dispose();

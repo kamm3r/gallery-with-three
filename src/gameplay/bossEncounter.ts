@@ -1,9 +1,12 @@
-import { swordHitActive } from "./characterAnimations.ts";
+import { swordHitActive, swordSpec } from "./characterAnimations.ts";
+import { RIPOSTE_MULTIPLIER, RIPOSTE_TIME, receiveBlow } from "./playerDefense.ts";
 import { combatTuning } from "./combatTuning.ts";
 
 type BossPhase = "approach" | "windup" | "strike" | "recovery" | "roar" | "defeated";
 export type BossMove = "sweep" | "slam" | "combo" | "leap" | "nova";
 
+/** Stamina starts to recover this long after the player last spent it. */
+export const STAMINA_REGEN_DELAY = 0.5;
 /** Seconds the player is staggered (no input, knocked back) after a hit. */
 export const PLAYER_HURT_TIME = 0.45;
 /** The Warden keeps its fights inside the ring of pillars. */
@@ -186,6 +189,40 @@ export function createEncounter(groundY = 0) {
     seed: 0x2f6b1d,
     attackTime: 0,
     attackId: 0,
+    /** Which swing of the light chain is playing (see SWORD_CHAIN). */
+    attackStep: 0,
+    /** Seconds since the last swing ended, for continuing the chain. */
+    sinceSwing: 99,
+    /** Hit-stop: while positive, the fight holds still for the blow to land. */
+    hitStop: 0,
+    /** Seconds until spent stamina begins to recover. */
+    staminaDelay: 0,
+    /** Guard raised (front blows cost stamina instead of health). */
+    guarding: false,
+    /** Seconds into a parry, or -1. */
+    parryTime: -1,
+    /** Hyper-armour: flinches do not interrupt the current move. */
+    hyperArmor: false,
+    /** The guard's recoil after holding a blow. */
+    guardHitTime: 0,
+    guardHitId: 0,
+    parryId: 0,
+    /** Seconds since a deflecting guard press, or -1. */
+    deflectTime: -1,
+    sinceGuardPress: 99,
+    deflectId: 0,
+    /** While positive the Warden is open from a parry; the next blow is a riposte. */
+    riposte: 0,
+    /** Falling with the blade down, waiting to land a plunge. */
+    plunging: false,
+    /** Enemies are engaged: sprinting drains stamina. */
+    inCombat: false,
+    /** Drinking a flask: slowed to a walk, with no attacks, rolls, parries or guard. */
+    drinkTime: 0,
+    /** Mid-roll, reported by the player: a flask cannot be drunk then. */
+    rolling: false,
+    /** Out of breath from sprinting: no sprint until stamina recovers. */
+    winded: false,
     hitAttackId: 0,
     inputAttack: 0,
     invulnerable: false,
@@ -268,18 +305,28 @@ function resolveHit(state: Encounter, hit: BossHit) {
   if (
     distance >= hit.range ||
     (hit.arc > -1 && frontal <= hit.arc) ||
-    state.invulnerable ||
     Math.abs(state.playerY - state.groundY) > state.verticalHitRange
   )
     return;
-  state.health = Math.max(0, state.health - hit.damage);
-  if (hit.damage > 0) state.playerHitId++;
-  state.hurtTime = PLAYER_HURT_TIME;
-  const nx = distance > 0.01 ? dx / distance : Math.sin(state.bossYaw);
-  const nz = distance > 0.01 ? dz / distance : Math.cos(state.bossYaw);
-  state.knockX = nx * hit.knockback;
-  state.knockZ = nz * hit.knockback;
-  state.shake = Math.max(state.shake, 0.5);
+  // Only the single sweep can be parried. The combo's flurry, slams, leaps, the nova
+  // and the roar are too heavy or too fast: dodge or guard them.
+  const parryable = state.phase === "strike" && state.move === "sweep";
+  const outcome = receiveBlow(state, {
+    damage: hit.damage,
+    x: distance > 0.01 ? state.bossX : state.bossX - Math.sin(state.bossYaw),
+    z: distance > 0.01 ? state.bossZ : state.bossZ - Math.cos(state.bossYaw),
+    knockback: hit.knockback,
+    shake: 0.5,
+    parryable,
+  });
+  if (outcome === "parried") {
+    // Thrown off balance: the rest of the move is lost and the Warden stays open.
+    state.phase = "recovery";
+    state.timer = -1.2;
+    state.hitIndex = Infinity;
+    state.riposte = RIPOSTE_TIME;
+    state.hitStop = 0.14;
+  }
 }
 
 /** Warden height during a leap: a ballistic arc landing at LEAP_AIRTIME. */
@@ -289,9 +336,16 @@ function leapHeight(timer: number) {
 }
 
 export function stepEncounter(state: Encounter, delta: number) {
-  const dt = Math.min(delta, 0.05);
+  let dt = Math.min(delta, 0.05);
   state.shake = Math.max(0, state.shake - dt * 2.2);
   state.bossFlash = Math.max(0, state.bossFlash - dt * 5);
+  if (state.hitStop > 0) {
+    // Hit-stop consumes exactly its length; the rest of the frame plays on.
+    const held = Math.min(state.hitStop, dt);
+    state.hitStop -= held;
+    dt -= held;
+    if (dt <= 1e-6) return;
+  }
   if (state.health <= 0 || state.bossHealth <= 0) {
     if (state.bossHealth <= 0) {
       state.phase = "defeated";
@@ -304,9 +358,17 @@ export function stepEncounter(state: Encounter, delta: number) {
     return;
   }
   state.hurtTime = Math.max(0, state.hurtTime - dt);
+  state.guardHitTime = Math.max(0, state.guardHitTime - dt);
+  state.drinkTime = Math.max(0, state.drinkTime - dt);
+  state.riposte = Math.max(0, state.riposte - dt);
   for (const move of MOVES) state.cooldowns[move] = Math.max(0, state.cooldowns[move] - dt);
-  if (state.attackTime <= 0 && !state.invulnerable)
-    state.stamina = Math.min(100, state.stamina + combatTuning.staminaRegen * dt);
+  state.staminaDelay = Math.max(0, state.staminaDelay - dt);
+  // A raised guard recovers stamina at half the rate.
+  if (state.attackTime <= 0 && !state.invulnerable && state.staminaDelay === 0)
+    state.stamina = Math.min(
+      100,
+      state.stamina + combatTuning.staminaRegen * (state.guarding ? 0.5 : 1) * dt,
+    );
   if (!state.bossActive) return;
   let dx = state.playerX - state.bossX,
     dz = state.playerZ - state.bossZ;
@@ -314,23 +376,28 @@ export function stepEncounter(state: Encounter, delta: number) {
   const airborne = state.phase === "strike" && state.move === "leap" && state.timer < LEAP_AIRTIME;
   if (
     state.attackTime > 0 &&
-    swordHitActive(state.attackId, state.attackTime) &&
+    !state.plunging &&
+    swordHitActive(state.attackStep, state.attackTime) &&
     state.attackId !== state.hitAttackId
   ) {
     state.hitAttackId = state.attackId;
     const facing =
       (-dx * Math.sin(state.playerYaw) - dz * Math.cos(state.playerYaw)) / Math.max(distance, 0.01);
-    if (
-      !airborne &&
-      Math.abs(state.playerY - state.bossY) <= state.verticalHitRange &&
-      distance < combatTuning.hitDistance &&
-      facing > combatTuning.hitFacingThreshold
-    ) {
-      const dmg =
-        state.phase === "recovery"
-          ? combatTuning.baseDamage + combatTuning.recoveryBonusDamage
-          : combatTuning.baseDamage;
+    const swing = swordSpec(state.attackStep);
+    // A plunge strikes all around where it lands; swings need the blade facing in.
+    const reaches = swing.radius
+      ? distance < swing.radius + 1
+      : distance < combatTuning.hitDistance && facing > combatTuning.hitFacingThreshold;
+    if (!airborne && Math.abs(state.playerY - state.bossY) <= state.verticalHitRange && reaches) {
+      let dmg =
+        Math.round(combatTuning.baseDamage * swing.motion) +
+        (state.phase === "recovery" ? combatTuning.recoveryBonusDamage : 0);
+      if (state.riposte > 0) {
+        dmg = Math.round(dmg * RIPOSTE_MULTIPLIER);
+        state.riposte = 0;
+      }
       state.bossHealth = Math.max(0, state.bossHealth - dmg);
+      state.hitStop = swing.hitStop;
       state.bossFlash = 1;
       state.bossHitId++;
       state.shake = Math.max(state.shake, 0.12);
@@ -358,7 +425,9 @@ export function stepEncounter(state: Encounter, delta: number) {
     const leap = distance >= moveSpec("leap").minRange ? chooseMove(state, distance) : null;
     if (leap) {
       beginMove(state, leap);
-    } else if (distance > combatTuning.approachStopDistance) {
+    } else if (distance > combatTuning.approachStopDistance + 0.01) {
+      // The tolerance matters: closing exactly to the stop distance can leave rounding
+      // error above it, and the Warden would creep forever without attacking.
       const speed = enraged ? combatTuning.approachSpeedEnraged : combatTuning.approachSpeed;
       const step = Math.min(distance - combatTuning.approachStopDistance, dt * speed);
       state.bossX += (dx / distance) * step;

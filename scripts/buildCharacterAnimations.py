@@ -42,6 +42,20 @@ def aim(name, direction):
     bpy.context.view_layer.update()
 
 
+def point_blade(direction):
+    # The sword hangs off Fist.R along that bone's local Z: turn the fist about its
+    # head until the blade points along `direction` (armature space).
+    bone = rig.pose.bones['Fist.R']
+    matrix = bone.matrix.copy()
+    current = matrix.to_quaternion() @ Vector((0, 0, 1))
+    rotation = current.rotation_difference(Vector(direction).normalized())
+    head = bone.head.copy()
+    matrix = rotation.to_matrix().to_4x4() @ matrix
+    matrix.translation = head
+    bone.matrix = matrix
+    bpy.context.view_layer.update()
+
+
 def rotate(name, axis, angle):
     bone = rig.pose.bones[name]
     bone.rotation_quaternion = bone.rotation_quaternion @ Quaternion(axis, angle)
@@ -172,6 +186,147 @@ def slash(t, heavy=False):
 
 make_action('SwordSlashQuick', .6, slash)
 make_action('SwordSlashHeavy', .8, lambda t: slash(t, True))
+
+# --- Lock-on locomotion, guard, parry and aerial attacks -------------------------
+apply(idle)
+rest_feet = {s: rig.pose.bones['Foot.' + s].matrix.translation.copy() for s in 'LR'}
+WALK_FRAMES = originals['Walk'].frame_range[1]
+
+
+def calm_arms(pose, amount):
+    # Pull the arms part way back to the idle hang, so strafes do not march.
+    return {n: (pose[n].lerp(idle[n], amount) if 'Arm' in n or 'Fist' in n else pose[n])
+            for n in pose}
+
+
+def strafe(t, left):
+    # The walk's stride turned sideways: each foot's forward swing becomes a side step.
+    apply(calm_arms(sample('Walk', t * WALK_FRAMES), .55))
+    sign = 1 if left else -1
+    for s in 'LR':
+        bone = rig.pose.bones['Foot.' + s]
+        matrix = bone.matrix.copy()
+        d = matrix.translation - rest_feet[s]
+        matrix.translation = rest_feet[s] + Vector((-d.y * sign * .55, d.y * .12, d.z))
+        bone.matrix = matrix
+        bpy.context.view_layer.update()
+    rotate('Torso', (0, 0, 1), sign * .06)
+    return {bone.name: bone.matrix_basis.copy() for bone in rig.pose.bones}
+
+
+def backpedal(t):
+    # The walk run backwards, leaning back a touch with the guard half up.
+    apply(calm_arms(sample('Walk', (1 - t) * WALK_FRAMES), .35))
+    rotate('Torso', (1, 0, 0), -.07)
+    return {bone.name: bone.matrix_basis.copy() for bone in rig.pose.bones}
+
+
+# Guard: the blade raised across the body, the free arm braced behind it.
+apply(idle)
+aim('UpperArm.R', (-.35, -.6, -.7))
+aim('LowerArm.R', (.6, -.55, .4))
+point_blade((.6, -.3, .75))
+aim('UpperArm.L', (.3, -.55, -.65))
+aim('LowerArm.L', (-.55, -.65, .35))
+move_foot('L', .18, 0)
+move_foot('R', -.14, 0)
+rotate('Torso', (1, 0, 0), .1)
+rotate('Head', (1, 0, 0), -.06)
+guard_pose = {bone.name: bone.matrix_basis.copy() for bone in rig.pose.bones}
+
+
+def guard_at(t):
+    apply(guard_pose)
+    rotate('Torso', (1, 0, 0), math.sin(t * math.tau) * .012)
+    return {bone.name: bone.matrix_basis.copy() for bone in rig.pose.bones}
+
+
+def guard_hit(t):
+    # Driven back a step by the blow, then settling into the guard again.
+    k = math.sin(min(1, t / .35) * math.pi / 2) * (1 - max(0, t - .35) / .65)
+    apply(guard_pose)
+    rotate('Torso', (1, 0, 0), -.22 * k)
+    rotate('Head', (1, 0, 0), -.12 * k)
+    move_foot('R', -.18 * k, 0)
+    return {bone.name: bone.matrix_basis.copy() for bone in rig.pose.bones}
+
+
+# Parry: from the guard, a short hard sweep of the blade outwards, then recovery.
+apply(guard_pose)
+aim('UpperArm.R', (-.85, -.45, -.2))
+aim('LowerArm.R', (-.75, -.6, .1))
+point_blade((-.45, -.85, .25))
+rotate('Torso', (0, 0, 1), -.35)
+parry_pose = {bone.name: bone.matrix_basis.copy() for bone in rig.pose.bones}
+
+
+def parry_at(t):
+    if t < .15:
+        f = t / .15
+        return interpolate(guard_pose, parry_pose, f * f)
+    if t < .45:
+        return parry_pose
+    f = (t - .45) / .55
+    return interpolate(parry_pose, idle, f * f * (3 - 2 * f))
+
+
+# Aerial attacks keep the legs tucked from the jump.
+tuck = sample('Jump', 12)
+
+
+def with_legs(pose, legs):
+    return {n: (legs[n] if n.startswith(('Foot', 'UpperLeg', 'LowerLeg', 'Pole', 'Hips', 'Body'))
+                else pose[n]) for n in pose}
+
+
+def jump_attack(t):
+    # An overhead cut from the slash, delivered with the jump's tucked legs.
+    frame = t / .45 * 10 if t < .45 else 10 + (t - .45) / .55 * 15
+    apply(with_legs(sample('SwordSlash', frame), tuck))
+    rotate('Torso', (1, 0, 0), math.sin(min(1, t / .6) * math.pi) * .35)
+    return {bone.name: bone.matrix_basis.copy() for bone in rig.pose.bones}
+
+
+# Plunge: both hands on the hilt at the chest, blade pointing at the ground.
+apply(tuck)
+for side, sign in [('L', 1), ('R', -1)]:
+    aim('UpperArm.' + side, (sign * .25, -.55, -.3))
+    aim('LowerArm.' + side, (-sign * .45, -.6, .45))
+point_blade((0, -.25, -1))
+rotate('Torso', (1, 0, 0), .18)
+plunge_pose = {bone.name: bone.matrix_basis.copy() for bone in rig.pose.bones}
+
+# Landing: crouched over the blade driven into the ground.
+apply(idle)
+for side, sign in [('L', 1), ('R', -1)]:
+    aim('UpperArm.' + side, (sign * .1, -.75, -.35))
+    aim('LowerArm.' + side, (-sign * .15, -.2, -1))
+point_blade((0, -.3, -1))
+rotate('Torso', (1, 0, 0), .5)
+move_foot('L', .3, 0)
+move_foot('R', -.25, 0)
+root = rig.pose.bones['Body']
+matrix = root.matrix.copy(); matrix.translation.z -= .35; root.matrix = matrix
+bpy.context.view_layer.update()
+plunge_land = {bone.name: bone.matrix_basis.copy() for bone in rig.pose.bones}
+
+
+def plunge_land_at(t):
+    if t < .55:
+        return plunge_land
+    f = (t - .55) / .45
+    return interpolate(plunge_land, idle, f * f * (3 - 2 * f))
+
+
+make_action('StrafeLeft', WALK_FRAMES / 24, lambda t: strafe(t, True))
+make_action('StrafeRight', WALK_FRAMES / 24, lambda t: strafe(t, False))
+make_action('WalkBack', WALK_FRAMES / 24, backpedal)
+make_action('Guard', 2, guard_at)
+make_action('GuardHit', .5, guard_hit)
+make_action('Parry', .7, parry_at)
+make_action('JumpAttack', .75, jump_attack)
+make_action('PlungeFall', .5, lambda t: interpolate(tuck, plunge_pose, min(1, t / .3)))
+make_action('PlungeLand', .7, plunge_land_at)
 
 # A small bone-attached sword, hidden by the game outside combat.
 rig.animation_data.action = originals['Idle']

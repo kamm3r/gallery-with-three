@@ -20,9 +20,10 @@ import {
 } from "../gameplay/frameTelemetry";
 import { GameplayState } from "../gameplay/ecs/stateBinding";
 import { setControlsPaused } from "../hooks/usePlayerControls";
+import { FreeCamera, FreeCameraTools } from "./FreeCamera";
 
 function PauseRenderLoop({ preparing }: { preparing: boolean }) {
-  const { paused } = useGame();
+  const { paused, freeCamera } = useGame();
   const clock = useThree((state) => state.clock);
   const advance = useThree((state) => state.advance);
   const gl = useThree((state) => state.gl);
@@ -40,12 +41,12 @@ function PauseRenderLoop({ preparing }: { preparing: boolean }) {
       frame = requestAnimationFrame(tick);
       gl.info.reset();
       const begin = performance.now();
-      advance(clock.elapsedTime + delta);
+      advance(clock.elapsedTime + (freeCamera ? 0 : delta));
       if (!document.hidden) recordFrame(telemetry.current, interval, performance.now() - begin);
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [advance, clock, gl, paused, preparing, telemetry]);
+  }, [advance, clock, gl, paused, preparing, freeCamera, telemetry]);
   return null;
 }
 
@@ -119,13 +120,13 @@ export function GameCanvas({
   adaptiveResolution?: boolean;
   prepareScene?: boolean;
 }) {
-  const { paused, settings } = useGame();
+  const { paused, freeCamera, settings } = useGame();
   const [renderScale, setRenderScale] = useState(settings.resolution);
   const [preparing, setPreparing] = useState(false);
   useLayoutEffect(() => {
-    setControlsPaused(paused || preparing);
-    return () => setControlsPaused(paused);
-  }, [paused, preparing]);
+    setControlsPaused(paused || preparing || freeCamera);
+    return () => setControlsPaused(paused || freeCamera);
+  }, [paused, preparing, freeCamera]);
   return (
     <>
       <div
@@ -155,6 +156,7 @@ export function GameCanvas({
               />
             )}
             <RuntimeSystems />
+            <FreeCamera />
             {children}
             <GraphicsQuality />
             {pointLightBudget !== undefined && <PointLightBudget limit={pointLightBudget} />}
@@ -168,13 +170,20 @@ export function GameCanvas({
           </WorldProvider>
         </Canvas>
       </div>
+      <FreeCameraTools unavailable={preparing} />
       {preparing && (
         <div className="graphics-preparing" role="status">
           Preparing graphics…
         </div>
       )}
       {import.meta.env.DEV && (
-        <Leva collapsed={!tuningInitiallyOpen} titleBar={{ title: "Tuning", drag: true }} />
+        <Leva
+          hidden={
+            !tuningInitiallyOpen && !new URLSearchParams(window.location.search).has("tuning")
+          }
+          collapsed={!tuningInitiallyOpen}
+          titleBar={{ title: "Tuning", drag: true }}
+        />
       )}
     </>
   );

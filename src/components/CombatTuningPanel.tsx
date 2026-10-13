@@ -1,7 +1,8 @@
-import { useControls, Leva } from "leva";
+import { useControls } from "leva";
 import { useEffect } from "react";
 import { combatTuning } from "../gameplay/combatTuning";
 
+/** Combat folders in the dev "Tuning" panel (open it with ?tuning). Writes combatTuning live. */
 export function CombatTuningPanel() {
   const values = useControls("Combat / Hitbox", {
     hitDistance: {
@@ -31,20 +32,6 @@ export function CombatTuningPanel() {
       max: 1,
       step: 0.05,
       label: "Hit window end",
-    },
-    swordTipOffset: {
-      value: combatTuning.swordTipOffset,
-      min: 0,
-      max: 2,
-      step: 0.05,
-      label: "Tip offset (-Z)",
-    },
-    swordTipRadius: {
-      value: combatTuning.swordTipRadius,
-      min: 0.1,
-      max: 1.5,
-      step: 0.05,
-      label: "Tip radius",
     },
     showHitbox: { value: combatTuning.showHitbox, label: "Show hitbox" },
   });
@@ -89,12 +76,12 @@ export function CombatTuningPanel() {
   });
 
   const stamina = useControls("Boss — Stamina", {
-    attackStaminaCost: {
-      value: combatTuning.attackStaminaCost,
+    attackStaminaScale: {
+      value: combatTuning.attackStaminaScale,
       min: 0,
-      max: 60,
-      step: 1,
-      label: "Attack cost",
+      max: 3,
+      step: 0.05,
+      label: "Attack cost ×",
     },
     rollStaminaCost: {
       value: combatTuning.rollStaminaCost,
@@ -175,20 +162,9 @@ export function CombatTuningPanel() {
     },
   });
 
-  const diagnostics = useControls("Diagnostics", {
-    perfEnabled: { value: combatTuning.perfEnabled, label: "r3f-perf overlay" },
-  });
-
   useEffect(() => {
-    Object.assign(combatTuning, values, boss, stamina, motion, phases, diagnostics);
-  }, [values, boss, stamina, motion, phases, diagnostics]);
+    Object.assign(combatTuning, values, boss, stamina, motion, phases);
+  }, [values, boss, stamina, motion, phases]);
 
-  return (
-    <Leva
-      collapsed={false}
-      hidden={false}
-      titleBar={{ title: "⚔ Combat tuning", drag: true }}
-      theme={{ sizes: { rootWidth: "360px" } }}
-    />
-  );
+  return null;
 }

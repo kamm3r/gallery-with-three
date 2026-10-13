@@ -17,10 +17,16 @@ import type { ParishProgress } from "./ashenParish.ts";
 import type { ParishEncounter } from "./parishEncounter.ts";
 
 export type CapitalLiftState = { y: number; target: number };
+const liftStart = (id: CapitalLiftId) => {
+  const lift = capitalLifts.find((l) => l.id === id)!,
+    y = id === "town" ? lift.low : lift.high;
+  return { y, target: y };
+};
+/** Ground lifts wait at the top until released from below; the town lift waits below. */
 export const newCapitalLiftStates = () => ({
-  beacon: { y: 24, target: 24 },
-  arena: { y: 24, target: 24 },
-  town: { y: 8, target: 8 },
+  beacon: liftStart("beacon"),
+  arena: liftStart("arena"),
+  town: liftStart("town"),
 });
 export type CapitalLiftsState = ReturnType<typeof newCapitalLiftStates>;
 export function stepCapitalLift(state: CapitalLiftState, delta: number) {
@@ -75,17 +81,18 @@ export function capitalInteraction(
       available: p.cathedralFelled && !bossActive && !threatened,
       prompt: p.cathedralFelled
         ? "E · Light the crown beacon · reveal the lower city"
-        : "The oratory keeper guards the beacon",
+        : "The keeper of the apse guards the switch",
     };
   if (!p.caches.includes("town-key") && near(capitalTownGate.position, 3))
     return {
       kind: "town-lock",
       id: "town-key",
       available: false,
-      prompt: "Locked · find the mountain passage key in the lower town",
+      prompt: "Barred · the key lies in a house on the second tier",
     };
   if (!p.court && near(capitalCathedralShortcut.position, 4)) {
-    const inside = z < capitalCathedralShortcut.position[2] - 0.25;
+    const { position, yaw } = capitalCathedralShortcut;
+    const inside = (x - position[0]) * Math.sin(yaw) + (z - position[2]) * Math.cos(yaw) > 0.25;
     return {
       kind: "gate",
       id: "court",
@@ -94,7 +101,7 @@ export function capitalInteraction(
         ? threatened || bossActive
           ? "Clear the cathedral watch"
           : "E · Unbar the cathedral return to the chapel"
-        : "Barred within · follow the western exterior to the galleries",
+        : "Barred within · take the outside path along the cathedral's east side",
     };
   }
   for (const npc of capitalNpcs)
@@ -116,9 +123,9 @@ export function capitalInteraction(
       prompt:
         side < -0.25
           ? threatened
-            ? "Clear the town watch"
-            : "E · Open the city-wall return"
-          : "Barred from the town side",
+            ? "Clear the street watch"
+            : "E · Unbar the great gate"
+          : "Barred from outside the walls",
     };
   }
   for (const s of capitalShrines)
@@ -161,7 +168,7 @@ export function capitalInteraction(
             : canUnlock
               ? "E · Release the lift mechanism"
               : lift.id === "town"
-                ? "Locked · find the mountain passage key below the town"
+                ? "Locked · find the prow gate key on the second tier"
                 : "Mechanism locked below · find the other end",
       };
     }
@@ -211,7 +218,7 @@ export function beginCapitalBoss(
     verticalHitRange: 1.8,
     bossX: spec.origin[0],
     bossZ: spec.origin[2] - 7,
-    bossHealth: id === "cathedral" ? 260 : combatTuning.bossMaxHealth,
+    bossHealth: spec.health,
     playerX: spec.spawn[0],
     playerY: spec.spawn[1],
     playerZ: spec.spawn[2],

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
+import type { RollWeight } from "../gameplay/playerRules";
 import { useLocation, useNavigate } from "react-router-dom";
 import { defaultSettings, useGame } from "../gameSettings";
 import { isResultScreenActive } from "../gameplay/resultScreen";
@@ -55,7 +56,6 @@ export function PauseMenu() {
   const [bindingAction, setBindingAction] = useState<BindingAction | "sprint" | null>(null);
   const [message, setMessage] = useState("");
   const dialog = useRef<HTMLDialogElement>(null);
-  const trigger = useRef<HTMLButtonElement>(null);
   const location = useLocation();
   const navigate = useNavigate();
   const resume = useCallback(() => setPaused(false), [setPaused]);
@@ -77,7 +77,7 @@ export function PauseMenu() {
     if (paused) element?.showModal();
     else if (element?.open) {
       element.close();
-      (document.querySelector<HTMLElement>(".game-viewport") ?? trigger.current)?.focus();
+      document.querySelector<HTMLElement>(".game-viewport")?.focus();
     }
   }, [paused]);
   useEffect(() => {
@@ -185,18 +185,6 @@ export function PauseMenu() {
 
   return (
     <>
-      <button
-        ref={trigger}
-        className="pause-trigger"
-        aria-label="Pause game"
-        onClick={() => {
-          setPage("pause");
-          setPaused(true);
-          playSound("ui");
-        }}
-      >
-        <span aria-hidden="true">Ⅱ</span> Menu <kbd>Esc</kbd>
-      </button>
       <dialog
         ref={dialog}
         className="pause-menu"
@@ -217,6 +205,16 @@ export function PauseMenu() {
               >
                 Continue
               </button>
+              {location.pathname === "/boss" && (
+                <button
+                  onClick={() => {
+                    window.dispatchEvent(new Event("capital-map-open"));
+                    resume();
+                  }}
+                >
+                  Capital map
+                </button>
+              )}
               <button onClick={() => setPage("options")}>Options</button>
               <button
                 onClick={() => {
@@ -431,11 +429,31 @@ export function PauseMenu() {
               <button
                 className="setting-row"
                 role="switch"
+                aria-checked={settings.cameraAutoRotate}
+                onClick={() => updateSettings({ cameraAutoRotate: !settings.cameraAutoRotate })}
+              >
+                Camera auto-rotation<span>{settings.cameraAutoRotate ? "On" : "Off"}</span>
+              </button>
+              <button
+                className="setting-row"
+                role="switch"
                 aria-checked={settings.reducedMotion}
                 onClick={() => updateSettings({ reducedMotion: !settings.reducedMotion })}
               >
                 Reduce motion<span>{settings.reducedMotion ? "On" : "Use system setting"}</span>
               </button>
+              <label className="setting-row">
+                Roll weight
+                <select
+                  aria-label="Roll weight"
+                  value={settings.rollWeight}
+                  onChange={(e) => updateSettings({ rollWeight: e.target.value as RollWeight })}
+                >
+                  <option value="light">Light · quick and far</option>
+                  <option value="medium">Medium</option>
+                  <option value="heavy">Heavy · slow and short</option>
+                </select>
+              </label>
               <button
                 className="menu-reset"
                 onClick={() =>
@@ -443,8 +461,10 @@ export function PauseMenu() {
                     soundVolume: 60,
                     sensitivity: 100,
                     invertY: false,
+                    cameraAutoRotate: true,
                     showHints: true,
                     reducedMotion: false,
+                    rollWeight: "medium",
                   })
                 }
               >
@@ -455,6 +475,22 @@ export function PauseMenu() {
           {page === "controls" && (
             <>
               <dl className="menu-controls">
+                {location.pathname === "/boss" && (
+                  <>
+                    <div>
+                      <dt>Ember flask</dt>
+                      <dd>
+                        <kbd>R</kbd>
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Capital map</dt>
+                      <dd>
+                        <kbd>M</kbd>
+                      </dd>
+                    </div>
+                  </>
+                )}
                 {(Object.keys(bindingLabels) as BindingAction[]).map((action) => (
                   <div key={action}>
                     <dt>{bindingLabels[action]}</dt>

@@ -1,10 +1,12 @@
+import { action, condition, selector, sequence, type BehaviorNode } from "./behaviorTree.ts";
+import { createEncounter, stepEncounter, type Encounter } from "./bossEncounter.ts";
+import { swordHitActive, swordSpec } from "./characterAnimations.ts";
 import {
-  createEncounter,
-  PLAYER_HURT_TIME,
-  stepEncounter,
-  type Encounter,
-} from "./bossEncounter.ts";
-import { swordHitActive } from "./characterAnimations.ts";
+  RIPOSTE_MULTIPLIER,
+  RIPOSTE_TIME,
+  receiveBlow,
+  type BlowOutcome,
+} from "./playerDefense.ts";
 import { combatTuning } from "./combatTuning.ts";
 import {
   enemySpecs,
@@ -51,6 +53,8 @@ export type ParishEnemy = {
   poise: number;
   poiseDelay: number;
   staggerLockout: number;
+  /** While positive, a parry has left this enemy open: the next blow is a riposte. */
+  riposte: number;
   flinch: number;
   guardFlash: number;
   moveAmount: number;
@@ -142,6 +146,7 @@ function createEnemies(world: ParishWorld | null = null): ParishEnemy[] {
     poise: enemySpecs[kind].poise,
     poiseDelay: 0,
     staggerLockout: 0,
+    riposte: 0,
     flinch: 0,
     guardFlash: 0,
     moveAmount: 0,
@@ -243,20 +248,19 @@ function move(
   enemy.stride += step * 4.8 * (forward < 0 ? -1 : 1);
   enemy.moveAmount = Math.min(1, step / Math.max(0.001, dt * enemySpecs[enemy.kind].speed));
 }
-function damagePlayer(combat: Encounter, damage: number, x: number, z: number) {
-  if (combat.invulnerable || combat.hurtTime > 0 || combat.health <= 0) return;
-  const dx = combat.playerX - x,
-    dz = combat.playerZ - z;
-  const length = Math.max(0.01, Math.hypot(dx, dz));
-  combat.health = Math.max(0, combat.health - damage);
-  combat.playerHitId++;
-  combat.hurtTime = PLAYER_HURT_TIME;
-  combat.knockX = (dx / length) * 4;
-  combat.knockZ = (dz / length) * 4;
-  combat.shake = Math.max(combat.shake, 0.3);
+/** A blow from an enemy or bolt; melee blows can be parried, bolts only guarded. */
+function damagePlayer(
+  combat: Encounter,
+  damage: number,
+  x: number,
+  z: number,
+  parryable = false,
+): BlowOutcome | null {
+  if (combat.hurtTime > 0 || combat.health <= 0) return null;
+  return receiveBlow(combat, { damage, x, z, knockback: 4, parryable });
 }
 /** Health damage and poise are independent: a flinch must not cancel every action. */
-export function hitParishEnemy(state: ParishEncounter, enemy: ParishEnemy, heavy = false) {
+export function hitParishEnemy(state: ParishEncounter, enemy: ParishEnemy, step = 0) {
   if (enemy.health <= 0) return;
   const spec = enemySpecs[enemy.kind];
   const dx = state.combat.playerX - enemy.x,
@@ -265,7 +269,13 @@ export function hitParishEnemy(state: ParishEncounter, enemy: ParishEnemy, heavy
     (dx * Math.sin(enemy.yaw) + dz * Math.cos(enemy.yaw)) / Math.max(0.01, Math.hypot(dx, dz));
   const blocked =
     enemy.kind === "sentinel" && ["guard", "pursue"].includes(enemy.phase) && front > 0.55;
-  const damage = combatTuning.baseDamage + (enemy.phase === "recovery" ? 10 : 0);
+  const swing = swordSpec(step);
+  let damage =
+    Math.round(combatTuning.baseDamage * swing.motion) + (enemy.phase === "recovery" ? 10 : 0);
+  if (enemy.riposte > 0) {
+    damage = Math.round(damage * RIPOSTE_MULTIPLIER);
+    enemy.riposte = 0;
+  }
   enemy.health = Math.max(
     0,
     enemy.health - (blocked ? Math.max(1, Math.round(damage * 0.2)) : damage),
@@ -275,6 +285,8 @@ export function hitParishEnemy(state: ParishEncounter, enemy: ParishEnemy, heavy
   enemy.flinch = blocked ? 0 : 0.18;
   enemy.poiseDelay = 2.5;
   state.enemyHitId++;
+  // A clean blow freezes the fight for an instant; a guarded one barely does.
+  state.combat.hitStop = blocked ? 0.03 : swing.hitStop;
   if (enemy.health <= 0) {
     enemy.phase = "dead";
     enemy.timer = 0;
@@ -286,7 +298,7 @@ export function hitParishEnemy(state: ParishEncounter, enemy: ParishEnemy, heavy
     (enemy.phase === "windup" && enemy.timer >= parishWindupDuration(enemy) * spec.armorStart);
   // Existing stagger never extends. Protection leaves enough time to retaliate.
   if (enemy.phase === "stagger" || enemy.staggerLockout > 0 || armored) return;
-  enemy.poise -= blocked ? (heavy ? 18 : 8) : heavy ? 40 : 25;
+  enemy.poise -= blocked ? Math.round(swing.poise * 0.35) : swing.poise;
   if (enemy.poise > 0) return;
   enemy.poise = spec.poise;
   enemy.phase = "stagger";
@@ -355,6 +367,8 @@ export function parishThreatened(state: ParishEncounter) {
     )
   );
 }
+/** Seconds a flask commits the player: slowed, and unable to attack, roll or guard. */
+export const FLASK_DRINK_TIME = 1;
 export function drinkEmber(state: ParishEncounter) {
   const c = state.combat;
   if (
@@ -364,12 +378,16 @@ export function drinkEmber(state: ParishEncounter) {
     c.hurtTime > 0 ||
     c.attackTime > 0 ||
     c.invulnerable ||
+    c.rolling ||
+    c.parryTime >= 0 ||
+    c.plunging ||
     state.healTime > 0
   )
     return false;
   state.flasks--;
   c.health = Math.min(combatTuning.playerMaxHealth, c.health + 45);
-  state.healTime = 1;
+  state.healTime = FLASK_DRINK_TIME;
+  c.drinkTime = FLASK_DRINK_TIME;
   return true;
 }
 export function stepParishEncounter(
@@ -380,9 +398,14 @@ export function stepParishEncounter(
   stepProjectiles = stepParishProjectiles,
   stepCombat = stepEncounter,
 ) {
-  const dt = Math.min(delta, 0.05),
+  const step = Math.min(delta, 0.05),
     c = state.combat;
-  stepCombat(c, dt);
+  // Hit-stop holds the whole fight still, enemies and bolts included, for exactly
+  // its length; the rest of the frame plays on.
+  const held = Math.min(c.hitStop, step);
+  stepCombat(c, step);
+  const dt = step - held;
+  if (dt <= 1e-6) return;
   state.healTime = Math.max(0, state.healTime - dt);
   state.dialogueTime = Math.max(0, state.dialogueTime - dt);
   if (state.dialogueTime === 0) state.dialogue = "";
@@ -417,12 +440,14 @@ export function stepParishEncounter(
 
   if (
     c.attackTime > 0 &&
-    swordHitActive(c.attackId, c.attackTime) &&
+    !c.plunging &&
+    swordHitActive(c.attackStep, c.attackTime) &&
     state.resolvedAttack !== c.attackId
   ) {
     state.resolvedAttack = c.attackId;
-    // One enemy per swing. Sort a filtered copy, never reorder the live rig array.
-    const target = state.enemies
+    const swing = swordSpec(c.attackStep);
+    // Sort a filtered copy, never reorder the live rig array.
+    const struck = state.enemies
       .filter((e) => {
         const dx = e.x - c.playerX,
           dz = e.z - c.playerZ,
@@ -432,8 +457,9 @@ export function stepParishEncounter(
         return (
           e.health > 0 &&
           Math.abs(e.y - c.playerY) < 1.8 &&
-          distance < combatTuning.hitDistance &&
-          facing > combatTuning.hitFacingThreshold &&
+          (swing.radius
+            ? distance < swing.radius
+            : distance < combatTuning.hitDistance && facing > combatTuning.hitFacingThreshold) &&
           parishLineClear(c.playerX, c.playerZ, e.x, e.z, progress, c.playerY, state.world)
         );
       })
@@ -441,13 +467,273 @@ export function stepParishEncounter(
         (a, b) =>
           Math.hypot(a.x - c.playerX, a.z - c.playerZ) -
           Math.hypot(b.x - c.playerX, b.z - c.playerZ),
-      )[0];
-    if (target) hitParishEnemy(state, target, c.attackId % 2 === 0);
+      );
+    // A swing strikes the nearest enemy; a plunge strikes everyone around it.
+    for (const target of swing.radius ? struck : struck.slice(0, 1))
+      hitParishEnemy(state, target, c.attackStep);
   }
+  // Enemies are engaged once any of them is closing in or fighting nearby.
+  c.inCombat =
+    c.bossActive ||
+    state.enemies.some(
+      (e) =>
+        e.health > 0 &&
+        !["idle", "search", "dead"].includes(e.phase) &&
+        Math.hypot(e.x - c.playerX, e.z - c.playerZ) < 18,
+    );
 
   stepEnemies(state, dt, progress);
   stepProjectiles(state, dt, progress);
 }
+
+type EnemyBehaviorContext = {
+  state: ParishEncounter;
+  e: ParishEnemy;
+  c: Encounter;
+  dt: number;
+  progress: ParishProgress;
+  spec: (typeof enemySpecs)[EnemyKind];
+  distance: number;
+  visible: boolean;
+};
+
+function enemyTask(
+  name: string,
+  run: (context: EnemyBehaviorContext) => void,
+): BehaviorNode<EnemyBehaviorContext> {
+  return action(name, (context) => {
+    run(context);
+    return "running";
+  });
+}
+
+function enemyBranch(
+  name: string,
+  guard: (context: EnemyBehaviorContext) => boolean,
+  ...children: BehaviorNode<EnemyBehaviorContext>[]
+) {
+  return sequence(name, condition(`${name} allowed`, guard), ...children);
+}
+
+function moveEnemyTo(context: EnemyBehaviorContext, x: number, z: number, speed: number) {
+  const { state, e, dt, progress } = context;
+  move(e, x, z, speed, dt, progress, state.enemies, state.world);
+}
+
+const attackWhenReady = (range: number | ((context: EnemyBehaviorContext) => number)) =>
+  enemyBranch(
+    "Commit attack",
+    (context) => {
+      const { e, c, spec, distance, state } = context;
+      return (
+        distance <= (typeof range === "number" ? range : range(context)) &&
+        e.timer > spec.decisionDelay &&
+        frontalToPlayer(e, c) > 0.65 &&
+        canCommit(state, e)
+      );
+    },
+    enemyTask("Begin windup", ({ e }) => beginAttack(e)),
+  );
+
+const acolyteTree = selector(
+  "Acolyte tactics",
+  enemyBranch(
+    "Create casting space",
+    ({ distance, e, spec }) => distance < 4.5 && e.timer < spec.decisionDelay,
+    enemyTask("Retreat", (context) => {
+      const { e, c, spec, distance } = context;
+      e.phase = "retreat";
+      const length = Math.max(0.1, distance);
+      moveEnemyTo(
+        context,
+        e.x + ((e.x - c.playerX) / length) * 2,
+        e.z + ((e.z - c.playerZ) / length) * 2,
+        spec.speed * 1.6,
+      );
+    }),
+  ),
+  attackWhenReady(({ spec }) => spec.range),
+  enemyTask("Approach casting range", (context) => {
+    const { e, c, spec, distance } = context;
+    e.phase = "pursue";
+    if (distance > spec.range * 0.85) moveEnemyTo(context, c.playerX, c.playerZ, spec.speed);
+  }),
+);
+
+function meleeTree(kind: "sentinel" | "hound") {
+  return selector(
+    `${kind} tactics`,
+    enemyBranch(
+      "Close the gap",
+      ({ distance, spec }) => distance > spec.range + 0.4,
+      enemyTask("Pursue", (context) => {
+        const { e, c, spec } = context;
+        e.phase = "pursue";
+        moveEnemyTo(context, c.playerX, c.playerZ, spec.speed);
+      }),
+    ),
+    sequence(
+      "Fight at melee range",
+      action<EnemyBehaviorContext>("Adopt combat stance", ({ e }) => {
+        e.phase = kind === "hound" ? "circle" : "guard";
+        return "success";
+      }),
+      selector(
+        "Attack or reposition",
+        attackWhenReady(({ spec }) => (kind === "hound" ? 2.9 : spec.range)),
+        enemyBranch(
+          "Step into sword range",
+          ({ distance, spec }) => kind === "sentinel" && distance > spec.range,
+          enemyTask("Advance with guard", (context) => {
+            const { c, spec } = context;
+            moveEnemyTo(context, c.playerX, c.playerZ, spec.speed * 1.25);
+          }),
+        ),
+        enemyTask("Circle and maintain spacing", (context) => {
+          const { e, c, spec } = context;
+          const angle = Math.atan2(e.x - c.playerX, e.z - c.playerZ) + e.orbit * 0.35;
+          const spacing = kind === "hound" ? 2.7 : 2.4;
+          moveEnemyTo(
+            context,
+            c.playerX + Math.sin(angle) * spacing,
+            c.playerZ + Math.cos(angle) * spacing,
+            spec.speed * (kind === "hound" ? 0.7 : 0.4),
+          );
+        }),
+      ),
+    ),
+  );
+}
+
+const enemyTactics: Record<EnemyKind, BehaviorNode<EnemyBehaviorContext>> = {
+  sentinel: meleeTree("sentinel"),
+  hound: meleeTree("hound"),
+  acolyte: acolyteTree,
+};
+
+/** Shared priorities; attack phases stay committed until complete or interrupted by a hit. */
+const parishEnemyTree = selector(
+  "Enemy priorities",
+  enemyBranch(
+    "Death",
+    ({ e }) => e.phase === "dead",
+    enemyTask("Animate death", ({ e, dt }) => {
+      e.deathTime += dt;
+    }),
+  ),
+  enemyBranch(
+    "Stagger",
+    ({ e }) => e.phase === "stagger",
+    enemyTask("Recover poise", ({ e, spec }) => {
+      if (e.timer >= spec.stagger) {
+        e.phase = "pursue";
+        e.timer = 0.5;
+      }
+    }),
+  ),
+  enemyBranch(
+    "Windup",
+    ({ e }) => e.phase === "windup",
+    enemyTask("Commit telegraphed attack", ({ e, c, dt }) => {
+      // Stop tracking before impact: a committed, readable dodge window.
+      if (e.timer < parishWindupDuration(e) * 0.65) face(e, c.playerX, c.playerZ, dt);
+      if (e.timer >= parishWindupDuration(e)) {
+        e.phase = "strike";
+        e.timer = 0;
+        e.targetX = e.x + Math.sin(e.yaw) * (e.kind === "hound" ? 3 : 1.2);
+        e.targetZ = e.z + Math.cos(e.yaw) * (e.kind === "hound" ? 3 : 1.2);
+      }
+    }),
+  ),
+  enemyBranch(
+    "Strike",
+    ({ e }) => e.phase === "strike",
+    enemyTask("Resolve attack", ({ state, e, c, dt, progress, spec, distance, visible }) => {
+      if (e.kind !== "acolyte" && (e.kind === "hound" || distance > 1.35))
+        move(e, e.targetX, e.targetZ, spec.strikeSpeed, dt, progress, state.enemies, state.world);
+      if (!e.hit && e.timer >= spec.contact) {
+        e.hit = true;
+        if (e.kind === "acolyte") {
+          state.bolts.push({
+            id: ++state.boltId,
+            x: e.x,
+            y: e.y + 1.1,
+            z: e.z,
+            vx: Math.sin(e.yaw) * 12,
+            vz: Math.cos(e.yaw) * 12,
+            life: 2.5,
+          });
+        } else {
+          const dx = c.playerX - e.x,
+            dz = c.playerZ - e.z,
+            reach = Math.hypot(dx, dz);
+          const frontal = (dx * Math.sin(e.yaw) + dz * Math.cos(e.yaw)) / Math.max(0.01, reach);
+          if (
+            visible &&
+            reach < spec.reach &&
+            frontal > 0.25 &&
+            parishLineClear(e.x, e.z, c.playerX, c.playerZ, progress, e.y, state.world)
+          ) {
+            // A parried enemy reels open: the next blow on it is a riposte.
+            if (damagePlayer(c, spec.damage, e.x, e.z, true) === "parried") {
+              e.phase = "stagger";
+              e.timer = 0;
+              e.staggerLockout = spec.stagger + spec.staggerProtection;
+              e.riposte = RIPOSTE_TIME;
+              c.hitStop = 0.12;
+            }
+          }
+        }
+      }
+      if (e.timer >= spec.strike) {
+        if (e.kind === "sentinel" && e.comboStep === 0 && visible && distance < spec.range + 1.2)
+          beginAttack(e, true);
+        else {
+          e.phase = "recovery";
+          e.timer = 0;
+        }
+      }
+    }),
+  ),
+  enemyBranch(
+    "Recovery",
+    ({ e }) => e.phase === "recovery",
+    enemyTask("Leave punishable opening", ({ e, spec }) => {
+      if (e.timer >= spec.recovery) {
+        e.phase = "pursue";
+        e.timer = 0;
+      }
+    }),
+  ),
+  enemyBranch(
+    "Visible target",
+    ({ e, visible, distance }) => visible && distance < (e.phase === "idle" ? 11 : 16),
+    action<EnemyBehaviorContext>("Face target", ({ e, c, dt }) => {
+      face(e, c.playerX, c.playerZ, dt);
+      return "success";
+    }),
+    action<EnemyBehaviorContext>("Choose archetype tactics", (context) =>
+      enemyTactics[context.e.kind].tick(context),
+    ),
+  ),
+  enemyBranch(
+    "Remembered target",
+    ({ e, c }) => e.phase !== "idle" && e.awareness > 0 && !c.bossActive,
+    enemyTask("Search last seen position", (context) => {
+      const { e, dt, spec } = context;
+      e.phase = "search";
+      face(e, e.lastSeenX, e.lastSeenZ, dt);
+      moveEnemyTo(context, e.lastSeenX, e.lastSeenZ, spec.speed * 0.7);
+    }),
+  ),
+  enemyTask("Return home", (context) => {
+    const { e, dt, spec } = context;
+    e.phase = "idle";
+    e.timer = 0;
+    face(e, e.homeX, e.homeZ, dt);
+    moveEnemyTo(context, e.homeX, e.homeZ, spec.speed * 0.7);
+  }),
+);
 
 export function stepParishEnemy(
   state: ParishEncounter,
@@ -460,10 +746,20 @@ export function stepParishEnemy(
   e.guardFlash = Math.max(0, e.guardFlash - dt * 5);
   e.flinch = Math.max(0, e.flinch - dt);
   e.staggerLockout = Math.max(0, e.staggerLockout - dt);
+  e.riposte = Math.max(0, e.riposte - dt);
   e.poiseDelay = Math.max(0, e.poiseDelay - dt);
   e.moveAmount *= Math.exp(-dt * 14);
   if (e.phase === "dead") {
-    e.deathTime += dt;
+    parishEnemyTree.tick({
+      state,
+      e,
+      c,
+      dt,
+      progress,
+      spec: enemySpecs[e.kind],
+      distance: 0,
+      visible: false,
+    });
     return;
   }
   e.timer += dt;
@@ -482,141 +778,7 @@ export function stepParishEnemy(
     e.lastSeenX = c.playerX;
     e.lastSeenZ = c.playerZ;
   } else e.awareness = Math.max(0, e.awareness - dt);
-  if (e.phase === "stagger") {
-    if (e.timer >= spec.stagger) {
-      e.phase = "pursue";
-      e.timer = 0.5;
-    }
-    return;
-  }
-  if (["idle", "pursue", "guard", "circle", "retreat", "search"].includes(e.phase)) {
-    const engaged = e.phase !== "idle";
-    if (visible && distance < (engaged ? 16 : 11)) {
-      face(e, c.playerX, c.playerZ, dt);
-      if (e.kind === "acolyte") {
-        // A finite retreat creates space without running away forever.
-        if (distance < 4.5 && e.timer < spec.decisionDelay) {
-          e.phase = "retreat";
-          const length = Math.max(0.1, distance);
-          move(
-            e,
-            e.x + ((e.x - c.playerX) / length) * 2,
-            e.z + ((e.z - c.playerZ) / length) * 2,
-            spec.speed * 1.6,
-            dt,
-            progress,
-            state.enemies,
-            state.world,
-          );
-        } else if (
-          distance <= spec.range &&
-          e.timer > spec.decisionDelay &&
-          frontalToPlayer(e, c) > 0.65
-        ) {
-          beginAttack(e);
-        } else {
-          e.phase = "pursue";
-          if (distance > spec.range * 0.85)
-            move(e, c.playerX, c.playerZ, spec.speed, dt, progress, state.enemies, state.world);
-        }
-      } else if (distance > spec.range + 0.4) {
-        e.phase = "pursue";
-        move(e, c.playerX, c.playerZ, spec.speed, dt, progress, state.enemies, state.world);
-      } else {
-        e.phase = e.kind === "hound" ? "circle" : "guard";
-        if (
-          distance <= (e.kind === "hound" ? 2.9 : spec.range) &&
-          e.timer > spec.decisionDelay &&
-          frontalToPlayer(e, c) > 0.65 &&
-          canCommit(state, e)
-        ) {
-          beginAttack(e);
-        } else if (e.kind === "sentinel" && distance > spec.range) {
-          move(
-            e,
-            c.playerX,
-            c.playerZ,
-            spec.speed * 1.25,
-            dt,
-            progress,
-            state.enemies,
-            state.world,
-          );
-        } else {
-          const angle = Math.atan2(e.x - c.playerX, e.z - c.playerZ) + e.orbit * 0.35;
-          const spacing = e.kind === "hound" ? 2.7 : 2.4;
-          move(
-            e,
-            c.playerX + Math.sin(angle) * spacing,
-            c.playerZ + Math.cos(angle) * spacing,
-            spec.speed * (e.kind === "hound" ? 0.7 : 0.4),
-            dt,
-            progress,
-            state.enemies,
-            state.world,
-          );
-        }
-      }
-    } else if (engaged && e.awareness > 0 && !c.bossActive) {
-      e.phase = "search";
-      face(e, e.lastSeenX, e.lastSeenZ, dt);
-      move(e, e.lastSeenX, e.lastSeenZ, spec.speed * 0.7, dt, progress, state.enemies, state.world);
-    } else {
-      e.phase = "idle";
-      e.timer = 0;
-      face(e, e.homeX, e.homeZ, dt);
-      move(e, e.homeX, e.homeZ, spec.speed * 0.7, dt, progress, state.enemies, state.world);
-    }
-  } else if (e.phase === "windup") {
-    // Stop tracking before impact: a committed, readable dodge window.
-    if (e.timer < parishWindupDuration(e) * 0.65) face(e, c.playerX, c.playerZ, dt);
-    if (e.timer >= parishWindupDuration(e)) {
-      e.phase = "strike";
-      e.timer = 0;
-      e.targetX = e.x + Math.sin(e.yaw) * (e.kind === "hound" ? 3 : 1.2);
-      e.targetZ = e.z + Math.cos(e.yaw) * (e.kind === "hound" ? 3 : 1.2);
-    }
-  } else if (e.phase === "strike") {
-    if (e.kind !== "acolyte" && (e.kind === "hound" || distance > 1.35))
-      move(e, e.targetX, e.targetZ, spec.strikeSpeed, dt, progress, state.enemies, state.world);
-    if (!e.hit && e.timer >= spec.contact) {
-      e.hit = true;
-      if (e.kind === "acolyte") {
-        state.bolts.push({
-          id: ++state.boltId,
-          x: e.x,
-          y: e.y + 1.1,
-          z: e.z,
-          vx: Math.sin(e.yaw) * 12,
-          vz: Math.cos(e.yaw) * 12,
-          life: 2.5,
-        });
-      } else {
-        const dx = c.playerX - e.x,
-          dz = c.playerZ - e.z,
-          reach = Math.hypot(dx, dz);
-        const frontal = (dx * Math.sin(e.yaw) + dz * Math.cos(e.yaw)) / Math.max(0.01, reach);
-        if (
-          visible &&
-          reach < spec.reach &&
-          frontal > 0.25 &&
-          parishLineClear(e.x, e.z, c.playerX, c.playerZ, progress, e.y, state.world)
-        )
-          damagePlayer(c, spec.damage, e.x, e.z);
-      }
-    }
-    if (e.timer >= spec.strike) {
-      if (e.kind === "sentinel" && e.comboStep === 0 && visible && distance < spec.range + 1.2)
-        beginAttack(e, true);
-      else {
-        e.phase = "recovery";
-        e.timer = 0;
-      }
-    }
-  } else if (e.phase === "recovery" && e.timer >= spec.recovery) {
-    e.phase = "pursue";
-    e.timer = 0;
-  }
+  parishEnemyTree.tick({ state, e, c, dt, progress, spec, distance, visible });
 }
 
 export function stepParishEnemies(state: ParishEncounter, dt: number, progress: ParishProgress) {

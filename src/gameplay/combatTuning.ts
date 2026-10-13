@@ -9,9 +9,7 @@ export const combatTuning = {
   hitFacingThreshold: 0.1,
   hitWindowStart: 0.3,
   hitWindowEnd: 0.5,
-  /** Forward offset from PlayerSword pivot to tip along local -Z (world units). */
-  swordTipOffset: 0.85,
-  swordTipRadius: 0.6,
+  /** Draws the sword's reach at the player's feet, lit while a swing can hit. */
   showHitbox: false,
 
   // — Damage —
@@ -25,7 +23,8 @@ export const combatTuning = {
   enrageThreshold: 150,
 
   // — Stamina —
-  attackStaminaCost: 20,
+  /** Scales every swing's own stamina cost (see SWORD_MOVES). */
+  attackStaminaScale: 1,
   rollStaminaCost: 25,
   staminaRegen: 22,
 
@@ -43,7 +42,4 @@ export const combatTuning = {
 
   // — Boss attack reach —
   bossStrikeRange: 4.8,
-
-  // — Diagnostics —
-  perfEnabled: false,
 };

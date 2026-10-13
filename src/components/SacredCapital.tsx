@@ -6,6 +6,7 @@ import {
   RigidBody,
   useBeforePhysicsStep,
   type RapierRigidBody,
+  type RapierCollider,
 } from "@react-three/rapier";
 import * as THREE from "three";
 import { buildCapitalEnvironment } from "../gameplay/capitalEnvironment";
@@ -20,6 +21,7 @@ import {
   capitalShrines,
   capitalShortcut,
   capitalCathedralShortcut,
+  capitalBeaconSeal,
   type CapitalLiftId,
 } from "../gameplay/capitalLayout";
 import { stepCapitalLift, type CapitalLiftsState } from "../gameplay/capitalProgress";
@@ -27,21 +29,63 @@ import type { ParishProgress } from "../gameplay/ashenParish";
 import type { ParishEncounter } from "../gameplay/parishEncounter";
 import { useReducedMotion } from "../hooks/useReducedMotion";
 import { sunlight } from "../gameplay/sunlight";
+import { capitalLiftGeometry } from "../gameplay/capitalLiftGeometry";
 import { CapitalSky } from "./CapitalSky";
+import {
+  capitalKitGeometry,
+  capitalKitUv,
+  type CapitalKitModel,
+} from "../gameplay/capitalBuildingKit";
+
+type KitMaterials = ReturnType<typeof buildCapitalEnvironment>["kitMaterials"];
+
+/** Moving and interactive props are assembled from the same kit as the static city. */
+function KitPiece({
+  model,
+  size,
+  material,
+  position,
+  rotation,
+}: {
+  model: CapitalKitModel;
+  size: readonly [number, number, number];
+  material: THREE.Material;
+  position?: [number, number, number];
+  rotation?: [number, number, number];
+}) {
+  const [w, h, d] = size;
+  const geometry = useMemo(
+    () => capitalKitUv(capitalKitGeometry(model, [w, h, d])),
+    [model, w, h, d],
+  );
+  useEffect(() => () => geometry.dispose(), [geometry]);
+  return (
+    <mesh
+      geometry={geometry}
+      material={material}
+      position={position}
+      rotation={rotation}
+      castShadow
+      receiveShadow
+    />
+  );
+}
 
 function CapitalLift({
   id,
   states,
   resetVersion,
-  deck,
+  kit,
 }: {
   id: CapitalLiftId;
   states: MutableRefObject<CapitalLiftsState>;
   resetVersion: number;
-  deck: THREE.Material;
+  kit: KitMaterials;
 }) {
   const spec = capitalLifts.find((l) => l.id === id)!;
   const body = useRef<RapierRigidBody>(null);
+  const blockingColliders = useMemo(() => new Set<number>(), []);
+  const colliderRefs = useRef<Array<RapierCollider | null>>([]);
   useEffect(() => {
     const y = states.current[id].y;
     body.current?.setTranslation({ x: spec.center[0], y: y - 0.3, z: spec.center[2] }, true);
@@ -63,22 +107,31 @@ function CapitalLift({
       colliders={false}
       position={[spec.center[0], states.current[id].y - 0.3, spec.center[2]]}
       friction={1}
+      rotation={[0, spec.yaw, 0]}
       name={`capital-${id}-lift`}
+      userData={{ rideBlockingColliders: blockingColliders }}
     >
-      <CuboidCollider args={[3, 0.3, 3]} />
-      <mesh castShadow receiveShadow material={deck}>
-        <boxGeometry args={[6, 0.6, 6]} />
-      </mesh>
-      {[-1, 1].map((side) => (
-        <mesh key={side} position={[side * 2.85, 1.5, 0]} castShadow>
-          <boxGeometry args={[0.15, 3, 5.8]} />
-          <meshStandardMaterial color="#404951" metalness={0.5} />
-        </mesh>
+      {capitalLiftGeometry.map(({ size, position }, index) => (
+        <group key={index}>
+          <CuboidCollider
+            ref={(collider) => {
+              const previous = colliderRefs.current[index];
+              if (previous) blockingColliders.delete(previous.handle);
+              colliderRefs.current[index] = collider;
+              if (index > 0 && collider) blockingColliders.add(collider.handle);
+            }}
+            args={[size[0] / 2, size[1] / 2, size[2] / 2]}
+            position={position}
+          />
+          <KitPiece
+            model="block"
+            size={size}
+            position={position}
+            material={index === 0 ? kit.floor : kit.wall}
+          />
+        </group>
       ))}
-      <mesh position={[0, 0.5, 0]}>
-        <cylinderGeometry args={[0.45, 0.6, 0.9, 8]} />
-        <meshStandardMaterial color="#bdab78" metalness={0.45} />
-      </mesh>
+      <KitPiece model="post" size={[1.2, 0.9, 1.2]} material={kit.floor} position={[0, 0.3, 0]} />
     </RigidBody>
   );
 }
@@ -97,7 +150,7 @@ function CapitalSeal({
         <CuboidCollider args={[width / 2, 3, 0.25]} position={[0, 3, 0]} />
       </RigidBody>
       <mesh position={[0, 3, 0]}>
-        <planeGeometry args={[width, 6]} />
+        <boxGeometry args={[width, 6, 0.05]} />
         <meshBasicMaterial
           color="#c7e1e9"
           transparent
@@ -123,6 +176,7 @@ export const SacredCapital = memo(
     revision: string;
   }) {
     const environment = useMemo(() => buildCapitalEnvironment(), []);
+    const kit = environment.kitMaterials;
     const sun = useRef<THREE.DirectionalLight>(null);
     const lanterns = useRef<(THREE.PointLight | null)[]>([]);
     const reduced = useReducedMotion();
@@ -144,8 +198,8 @@ export const SacredCapital = memo(
             0.8,
             Math.min(delta, 0.05),
           );
-      sunlight.fogColor.value.set("#7f94b4");
-      sunlight.color.value.set("#ffd2a4");
+      sunlight.fogColor.value.set("#a3afbd");
+      sunlight.color.value.set("#fff3e2");
       sunlight.direction.value.set(-0.6, 0.7, 0.4).normalize();
       if (scene.fog instanceof THREE.Fog) scene.fog.color.copy(sunlight.fogColor.value);
       const c = state.current.combat;
@@ -168,15 +222,15 @@ export const SacredCapital = memo(
     });
     return (
       <>
-        <color attach="background" args={["#b58d70"]} />
+        <color attach="background" args={["#c3ccd4"]} />
         <CapitalSky />
-        <fog attach="fog" args={["#7f94b4", 160, 700]} />
-        <hemisphereLight args={["#86aee6", "#1f2a3e", 0.9]} />
+        <fog attach="fog" args={["#a3afbd", 220, 900]} />
+        <hemisphereLight args={["#e2e8ef", "#6e665e", 1.3]} />
         <directionalLight
           ref={sun}
           position={[-25, 65, 28]}
           intensity={3.4}
-          color="#ffb46c"
+          color="#fff1df"
           castShadow
           shadow-mapSize={[1024, 1024]}
           shadow-camera-left={-32}
@@ -235,37 +289,45 @@ export const SacredCapital = memo(
                   0.3 +
                   (i * (gate.width - 0.6)) / (Math.ceil(gate.width / 0.9) - 1),
               ).map((x) => (
-                <mesh key={x} position={[x, 2.5, 0]} castShadow>
-                  <boxGeometry args={[0.16, 5, 0.22]} />
-                  <meshStandardMaterial color="#384552" metalness={0.7} roughness={0.5} />
-                </mesh>
+                <KitPiece
+                  key={x}
+                  model="block"
+                  size={[0.16, 5, 0.22]}
+                  material={kit.iron}
+                  position={[x, 2.5, 0]}
+                />
               ))}
-              <mesh position={[0, 4.5, 0]} castShadow>
-                <boxGeometry args={[gate.width, 0.22, 0.3]} />
-                <meshStandardMaterial color="#807052" metalness={0.5} />
-              </mesh>
+              <KitPiece
+                model="block"
+                size={[gate.width, 0.22, 0.3]}
+                material={kit.floor}
+                position={[0, 4.5, 0]}
+              />
             </RigidBody>
           ))}
         {!progress.caches.includes("town-key") && (
-          <CapitalSeal position={capitalTownGate.position} width={6} />
+          <CapitalSeal
+            position={capitalTownGate.position}
+            width={capitalTownGate.width}
+            yaw={capitalTownGate.yaw}
+          />
         )}
         <group position={capitalBeacon.position} name="crown-beacon-switch">
-          <mesh position={[0, 0.5, 0]} castShadow>
-            <cylinderGeometry args={[0.65, 0.85, 1, 8]} />
-            <meshStandardMaterial color="#6e6e68" />
-          </mesh>
-          <mesh position={[0, 1.25, 0]} rotation={[0, 0, progress.fogCleared ? -0.7 : 0.7]}>
-            <boxGeometry args={[0.12, 1.3, 0.12]} />
-            <meshStandardMaterial color="#c6b481" metalness={0.5} />
-          </mesh>
-          <mesh position={[0, 1.7, 0]}>
-            <icosahedronGeometry args={[0.3, 1]} />
-            <meshStandardMaterial
-              color={progress.fogCleared ? "#89e5fa" : "#d5b96f"}
-              emissive={progress.fogCleared ? "#39bee8" : "#bd7634"}
-              emissiveIntensity={3}
-            />
-          </mesh>
+          <KitPiece model="crate" size={[1.4, 1, 1.4]} material={kit.wall} />
+          <KitPiece
+            model="block"
+            size={[0.12, 1.3, 0.12]}
+            material={kit.floor}
+            position={[0, 1.25, 0]}
+            rotation={[0, 0, progress.fogCleared ? -0.7 : 0.7]}
+          />
+          <KitPiece
+            model="block"
+            size={[0.45, 0.45, 0.45]}
+            material={progress.fogCleared ? kit.marker : kit.glow}
+            position={[0, 1.7, 0]}
+            rotation={[Math.PI / 4, 0, Math.PI / 4]}
+          />
         </group>
         {capitalNpcs.map((n) => (
           <RigidBody
@@ -276,42 +338,53 @@ export const SacredCapital = memo(
             name={`capital-npc-${n.id}`}
           >
             <CuboidCollider args={[0.3, 0.9, 0.3]} position={[0, 0.9, 0]} />
-            <mesh position={[0, 0.75, 0]} castShadow>
-              <coneGeometry args={[0.42, 1.5, 8]} />
-              <meshStandardMaterial color={n.id === "sage" ? "#5b7790" : "#706858"} />
-            </mesh>
-            <mesh position={[0, 1.7, 0]} castShadow>
-              <sphereGeometry args={[0.23, 10, 8]} />
-              <meshStandardMaterial color="#c4b390" />
-            </mesh>
-            <mesh position={[0.4, 0.9, 0]}>
-              <cylinderGeometry args={[0.045, 0.06, 1.8, 6]} />
-              <meshStandardMaterial color="#8e7a53" />
-            </mesh>
+            <KitPiece
+              model="crate"
+              size={[0.6, 1.5, 0.6]}
+              material={n.id === "sage" ? kit.wall : kit.floor}
+            />
+            <KitPiece
+              model="crate"
+              size={[0.42, 0.42, 0.42]}
+              material={kit.floor}
+              position={[0, 1.5, 0]}
+            />
+            <KitPiece
+              model="post"
+              size={[0.2, 1.8, 0.2]}
+              material={kit.iron}
+              position={[0.4, 0, 0]}
+            />
           </RigidBody>
         ))}
         {!progress.finalFelled && (
-          <CapitalSeal position={capitalBosses.colosseum.entry} width={8} />
+          <CapitalSeal
+            position={capitalBosses.colosseum.entry}
+            width={capitalBosses.colosseum.entryWidth}
+            yaw={capitalBosses.colosseum.yaw}
+          />
         )}
         {!progress.fogCleared && (
-          <CapitalSeal position={[26, 24, -29.33]} width={7} yaw={Math.atan2(24, 8)} />
+          <CapitalSeal
+            position={capitalBeaconSeal.position}
+            width={capitalBeaconSeal.width}
+            yaw={capitalBeaconSeal.yaw}
+          />
         )}
         {capitalLifts.map((l) => (
-          <CapitalLift
-            key={l.id}
-            id={l.id}
-            states={lifts}
-            resetVersion={resetVersion}
-            deck={environment.liftMaterial}
-          />
+          <CapitalLift key={l.id} id={l.id} states={lifts} resetVersion={resetVersion} kit={kit} />
         ))}
         {capitalCaches
           .filter((c) => !progress.caches.includes(c.id))
           .map((c) => (
-            <mesh key={c.id} position={[c.position[0], c.position[1] + 0.65, c.position[2]]}>
-              <icosahedronGeometry args={[0.24, 1]} />
-              <meshStandardMaterial color="#efc994" emissive="#ffb661" emissiveIntensity={2.5} />
-            </mesh>
+            <KitPiece
+              key={c.id}
+              model="block"
+              size={[0.36, 0.36, 0.36]}
+              material={kit.glow}
+              position={[c.position[0], c.position[1] + 0.65, c.position[2]]}
+              rotation={[Math.PI / 4, 0, Math.PI / 4]}
+            />
           ))}
         {[0, 1].map((i) => (
           <pointLight

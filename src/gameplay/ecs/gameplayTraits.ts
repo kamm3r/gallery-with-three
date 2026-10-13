@@ -26,6 +26,10 @@ export const PlayerInput = trait(() => ({
   rollPress: 0,
   interactPress: 0,
   attackPress: 0,
+  lockPress: 0,
+  guard: false,
+  crouch: false,
+  parryPress: 0,
 }));
 export const ResultScreen = trait({ active: false });
 

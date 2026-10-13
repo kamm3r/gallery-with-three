@@ -7,6 +7,7 @@ import { PauseMenu } from "./components/PauseMenu";
 
 const GalleryLevel = lazy(() => import("./pages/gallery"));
 const PlaygroundLevel = lazy(() => import("./pages/playground"));
+const CapitalKit = lazy(() => import("./pages/capitalKit"));
 const RealmLevel = lazy(() => import("./pages/realm"));
 const SeasonsLevel = lazy(() => import("./pages/seasons"));
 const WarpRoom = lazy(() => import("./pages/warp"));
@@ -28,6 +29,7 @@ export function App() {
           <Route path="/gallery" element={<GalleryLevel />} />
           <Route path="/playground" element={<PlaygroundLevel />} />
           <Route path="/seasons" element={<SeasonsLevel />} />
+          <Route path="/capital-kit" element={<CapitalKit />} />
           <Route path="/boss" element={<RealmLevel />} />
           <Route path="/warp" element={<WarpRoom />} />
           <Route path="/warp/boss" element={<WarpBoss />} />

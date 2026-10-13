@@ -39,3 +39,28 @@ export function blocksCamera(collider: { parent(): { userData?: unknown } | null
     | undefined;
   return !data?.cameraIgnore && !data?.nonBlocking;
 }
+
+/** Elden Ring's camera auto-rotation starts this long after the player last looked around. */
+export const AUTO_ROTATE_DELAY = 0.9;
+/** Seconds the drift takes to ease in once it starts. */
+const AUTO_ROTATE_EASE = 0.6;
+/** Yaw rate (rad/s) per m/s of travel across the view. */
+export const AUTO_ROTATE_GAIN = 0.11;
+
+/**
+ * Swings the camera round behind sideways travel once the player stops steering it.
+ * Running straight toward or away from the camera leaves it alone. Camera forward is
+ * (-sin, -cos) of its yaw, so turning it to the right lowers the yaw.
+ */
+export function autoRotateYaw(
+  yaw: number,
+  velocityX: number,
+  velocityZ: number,
+  lookIdle: number,
+  delta: number,
+) {
+  const ease = Math.min(1, Math.max(0, (lookIdle - AUTO_ROTATE_DELAY) / AUTO_ROTATE_EASE));
+  if (ease === 0) return yaw;
+  const across = velocityX * Math.cos(yaw) - velocityZ * Math.sin(yaw);
+  return yaw - across * AUTO_ROTATE_GAIN * ease * delta;
+}

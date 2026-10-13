@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from "react";
 import * as THREE from "three";
 
-/** Static dusk cloud field; the reference's warm horizon frames the cool masonry. */
+/** Static overcast daylight cloud field; a pale horizon behind the white masonry. */
 export function CapitalSky() {
   const material = useMemo(
     () =>
@@ -18,15 +18,15 @@ export function CapitalSky() {
         mix(mix(hash(i+vec3(0,0,1)),hash(i+vec3(1,0,1)),f.x),mix(hash(i+vec3(0,1,1)),hash(i+vec3(1,1,1)),f.x),f.y),f.z);}
       void main(){vec3 d=normalize(vDirection);float h=smoothstep(-.08,.75,d.y);
         float sun=pow(max(0.,dot(d,normalize(vec3(-.65,.18,.75)))),2.);
-        vec3 sky=mix(vec3(.83,.44,.20),vec3(.23,.36,.53),h);
-        sky=mix(sky,vec3(.94,.57,.28),sun*(1.-h*.7));
+        vec3 sky=mix(vec3(.82,.85,.88),vec3(.45,.6,.76),h);
+        sky=mix(sky,vec3(.97,.95,.9),sun*(1.-h*.7));
         float cloud=noise(d*7.+vec3(4.,0.,0.))*.57+noise(d*15.)*.28+noise(d*31.)*.15;
         cloud=smoothstep(.46,.7,cloud)*smoothstep(-.04,.12,d.y)*(1.-smoothstep(.5,.9,d.y));
-        sky=mix(sky,mix(vec3(.52,.38,.32),vec3(.89,.65,.46),sun),cloud*.65);
-        float haze=1.-smoothstep(-.15,.13,d.y);sky=mix(sky,vec3(.63,.46,.37),haze*.35);
-        // A hot disc behind the haze; bloom turns it into the footage's glare.
+        sky=mix(sky,mix(vec3(.78,.8,.83),vec3(.96,.95,.93),sun),cloud*.65);
+        float haze=1.-smoothstep(-.15,.13,d.y);sky=mix(sky,vec3(.74,.77,.8),haze*.35);
+        // A soft disc behind the haze.
         float disc=max(0.,dot(d,normalize(vec3(-.65,.18,.75))));
-        sky+=vec3(3.2,2.1,1.1)*pow(disc,900.)+vec3(.5,.28,.12)*pow(disc,60.);
+        sky+=vec3(2.6,2.5,2.3)*pow(disc,900.)+vec3(.22,.2,.17)*pow(disc,60.);
         gl_FragColor=vec4(sky,1.);
         #include <colorspace_fragment>
       }`,
@@ -35,7 +35,7 @@ export function CapitalSky() {
   );
   useEffect(() => () => material.dispose(), [material]);
   return (
-    <mesh name="capital-dusk-sky" renderOrder={-100} material={material}>
+    <mesh name="capital-sky" renderOrder={-100} material={material}>
       <sphereGeometry args={[600, 32, 16]} />
     </mesh>
   );

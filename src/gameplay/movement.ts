@@ -4,7 +4,8 @@
 // Grounded speed and heading are steered separately (speed approaches the
 // target, heading rotates toward input), so turns carve at full speed like
 // Mario Odyssey instead of braking through zero. Reversing hard at speed
-// skids first. Airborne keeps momentum and only steers.
+// skids first. Airborne keeps momentum and only steers. SOULS_MOVEMENT swaps
+// the skid for a quick pivot and commits to the jump arc.
 
 export interface MovementTuning {
   walkSpeed: number;
@@ -28,6 +29,11 @@ export interface MovementTuning {
   /** Facing damping (1/s): higher snaps the body toward travel faster. */
   facingDampGround: number;
   facingDampAir: number;
+  /**
+   * Braking while turning (m/s^2 at a full reversal, scaled by the turn angle).
+   * Souls-style pivots shed speed as they come round instead of skidding.
+   */
+  turnBrake: number;
 }
 
 export const MOVEMENT_DEFAULTS: MovementTuning = {
@@ -43,6 +49,25 @@ export const MOVEMENT_DEFAULTS: MovementTuning = {
   airDrag: 1.5,
   facingDampGround: 16,
   facingDampAir: 6,
+  turnBrake: 0,
+};
+
+/**
+ * Elden Ring / Sekiro locomotion: grounded and responsive. No skids: a reversal
+ * pivots almost on the spot and sheds some speed. In the air the arc is
+ * committed, keeping takeoff momentum with only a little steering.
+ */
+export const SOULS_MOVEMENT: MovementTuning = {
+  ...MOVEMENT_DEFAULTS,
+  groundAccel: 30,
+  groundDecel: 38,
+  groundTurnRate: 18,
+  skidAngle: Number.POSITIVE_INFINITY,
+  turnBrake: 70,
+  airAccel: 3,
+  airDrag: 0.4,
+  facingDampGround: 22,
+  facingDampAir: 3,
 };
 
 export interface Planar {
@@ -136,10 +161,10 @@ export function stepPlanarVelocity(
   }
   const maxTurn = tuning.groundTurnRate * dt;
   const nextHeading = heading + Math.max(-maxTurn, Math.min(maxTurn, turn));
-  const nextSpeed = approach(
-    speed,
-    maxSpeed,
-    (speed < maxSpeed ? tuning.groundAccel : tuning.groundDecel) * dt,
+  const nextSpeed = Math.max(
+    0,
+    approach(speed, maxSpeed, (speed < maxSpeed ? tuning.groundAccel : tuning.groundDecel) * dt) -
+      tuning.turnBrake * (Math.abs(turn) / Math.PI) * dt,
   );
   velocity.x = Math.sin(nextHeading) * nextSpeed;
   velocity.z = Math.cos(nextHeading) * nextSpeed;

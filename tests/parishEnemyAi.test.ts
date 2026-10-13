@@ -8,6 +8,8 @@ import {
 } from "../src/gameplay/parishEncounter.ts";
 import { enemySpecs, newParishProgress, type EnemyKind } from "../src/gameplay/ashenParish.ts";
 import { parishEnemyPose } from "../src/gameplay/parishAnimation.ts";
+import { swordSpec } from "../src/gameplay/characterAnimations.ts";
+import { combatTuning } from "../src/gameplay/combatTuning.ts";
 
 function duel(kind: EnemyKind = "sentinel") {
   const progress = newParishProgress();
@@ -45,17 +47,20 @@ void test("repeated hits cannot keep any enemy stun-locked: each gets a retaliat
     const { state, enemy, tick } = duel(kind);
     enemy.health = 10000;
     enemy.phase = "windup";
-    hitParishEnemy(state, enemy, true);
-    if (kind === "sentinel") hitParishEnemy(state, enemy, true);
+    hitParishEnemy(state, enemy, 2);
+    if (kind === "sentinel") hitParishEnemy(state, enemy, 2);
     assert.equal(enemy.phase, "stagger");
     let reachedStrike = false,
       longestStagger = 0,
       streak = 0;
+    // A hit every 0.3 s: as fast as the light chain can cancel into its next swing.
     for (let i = 0; i < 120; i++) {
-      if (i % 2 === 0) hitParishEnemy(state, enemy, true);
+      if (i % 6 === 0) hitParishEnemy(state, enemy, 2);
+      // Stagger runs in fight time, which stands still during hit-stop.
+      const held = Math.min(state.combat.hitStop, 0.05);
       tick();
       reachedStrike ||= enemy.phase === "strike";
-      streak = enemy.phase === "stagger" ? streak + 0.05 : 0;
+      streak = enemy.phase === "stagger" ? streak + 0.05 - held : 0;
       longestStagger = Math.max(streak, longestStagger);
     }
     assert.equal(reachedStrike, true, `${kind} must get an attack despite hit spam`);
@@ -69,12 +74,13 @@ void test("repeated hits cannot keep any enemy stun-locked: each gets a retaliat
 void test("committed attacks take health damage without cancellation, including lethal hits", () => {
   for (const phase of ["windup", "strike"] as const) {
     const { state, enemy } = duel();
-    enemy.health = 75;
+    const heavy = Math.round(combatTuning.baseDamage * swordSpec(2).motion);
+    enemy.health = 2 * heavy + 25;
     enemy.phase = phase;
     enemy.timer = phase === "windup" ? enemySpecs.sentinel.windup * 0.8 : 0.04;
     const timer = enemy.timer;
-    hitParishEnemy(state, enemy, true);
-    hitParishEnemy(state, enemy, true);
+    hitParishEnemy(state, enemy, 2);
+    hitParishEnemy(state, enemy, 2);
     assert.equal(enemy.health, 25);
     assert.equal(enemy.phase, phase);
     assert.equal(enemy.timer, timer);
@@ -148,6 +154,8 @@ void test("late windup stops tracking, allowing a side dodge to make the attack 
 void test("poise recovers out of combat; lost targets are searched briefly then forgotten", () => {
   const { state, enemy, tick } = duel();
   hitParishEnemy(state, enemy);
+  // Let the blow's hit-stop pass, then one live frame to notice the player.
+  while (state.combat.hitStop > 0) tick(0.01);
   tick();
   state.combat.playerY = 20;
   tick();
@@ -283,4 +291,29 @@ void test("a careless stationary player cannot survive a sentinel's repeated pre
   const { state, tick } = duel();
   for (let i = 0; i < 120; i++) tick();
   assert.equal(state.combat.health, 0);
+});
+
+void test("committed windups outrank searching after losing sight of the player", () => {
+  const { state, enemy, tick } = duel("hound");
+  enemy.phase = "windup";
+  enemy.timer = 0;
+  enemy.awareness = 2;
+  state.combat.playerY = enemy.y + 20;
+  tick();
+  assert.equal(enemy.phase, "windup");
+  for (let i = 0; i < 30; i++) tick();
+  assert.ok(["strike", "recovery"].includes(enemy.phase));
+  assert.equal(state.combat.playerHitId, 0);
+});
+
+void test("boss activation overrides remembered-target search and returns enemies home", () => {
+  const { state, enemy, tick } = duel();
+  enemy.phase = "search";
+  enemy.awareness = 2;
+  enemy.lastSeenX = enemy.x + 3;
+  enemy.lastSeenZ = enemy.z;
+  state.combat.bossActive = true;
+  tick();
+  assert.equal(enemy.phase, "idle");
+  assert.equal(enemy.timer, 0);
 });
