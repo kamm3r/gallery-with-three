@@ -235,6 +235,7 @@ export function mountPlayground(
             (window as typeof window & { __playground?: unknown }).__playground = {
               zone,
               pending: pendingTeleport,
+              teleport: (to: Tuple3) => (pendingTeleport = to),
               player: player.toArray(),
               encounter,
             };

@@ -9,12 +9,19 @@ import {
   BACKSTEP_SPEED,
   ROLL_DISTANCE,
   canEnterPortal,
+  canGrabLedge,
   dodgeInvulnerable,
+  HANG_TIMEOUT,
+  LEDGE_TOP_MAX,
+  LEDGE_WALL_REACH,
   rollPeakFor,
   rollSpeedAt,
   ROLL_WEIGHTS,
 } from "../gameplay/playerRules";
 import {
+  LEDGE_HAND_HEIGHT,
+  climbProgress,
+  CLIP_SECONDS,
   JUMP_ATTACK,
   PLUNGE_ATTACK,
   PLUNGE_HEIGHT,
@@ -433,6 +440,18 @@ export async function mountLevel(host: HTMLElement, signal: AbortSignal, config:
   const sunOffset = sun.position.lengthSq() ? sun.position.clone() : new THREE.Vector3(-18, 28, 14);
   const link = content.platformer;
   let spinSeen = heldControls().attackPress + heldControls().interactPress;
+  const hang = {
+    active: false,
+    time: 0,
+    climbTime: -1,
+    point: new THREE.Vector3(),
+    forward: new THREE.Vector3(),
+    normal: new THREE.Vector3(),
+    climbStart: new THREE.Vector3(),
+    lastJumpPress: heldControls().jumpPress,
+  };
+  const hangTarget = new THREE.Vector3();
+  const CENTER = HALF_HEIGHT + RADIUS;
   const fight = content.combat;
   let shownAttack = fight?.attackId ?? 0;
   const buffer = createCombatInput(heldControls().attackPress, heldControls().rollPress);
@@ -680,6 +699,131 @@ export async function mountLevel(host: HTMLElement, signal: AbortSignal, config:
       if (lockYaw !== null && enabled && rollTime >= rollDuration && grounded)
         player.handle.turnTo(dampAngle(bodyYaw(), lockYaw, 14, delta));
 
+      // Ledge grab: a chest-height wall ray, then a downward ray for a walkable top.
+      const velocity = player.handle.velocity;
+      if (!hang.active && enabled && !grounded && velocity.y < -0.5 && !link?.frozen) {
+        const planar = Math.hypot(velocity.x, velocity.z);
+        let ax = -Math.sin(yaw);
+        let az = -Math.cos(yaw);
+        if (planar > 1) {
+          ax = velocity.x / planar;
+          az = velocity.z / planar;
+        }
+        const wallHit = world.castRayAndGetNormal(
+          new RAPIER.Ray({ x: feet.x, y: feet.y + 0.35, z: feet.z }, { x: ax, y: 0, z: az }),
+          LEDGE_WALL_REACH,
+          true,
+          RAPIER.QueryFilterFlags.EXCLUDE_SENSORS,
+          undefined,
+          player.collider,
+          player.body,
+        );
+        if (wallHit) {
+          const top = { x: feet.x + ax * 0.6, y: feet.y + 1.5, z: feet.z + az * 0.6 };
+          const topHit = world.castRayAndGetNormal(
+            new RAPIER.Ray(top, { x: 0, y: -1, z: 0 }),
+            1.5 + LEDGE_TOP_MAX,
+            true,
+            RAPIER.QueryFilterFlags.EXCLUDE_SENSORS,
+            undefined,
+            player.collider,
+            player.body,
+          );
+          if (topHit) {
+            const topY = top.y - topHit.timeOfImpact;
+            if (
+              canGrabLedge({
+                grounded,
+                verticalSpeed: velocity.y,
+                wallDist: wallHit.timeOfImpact,
+                topHeight: topY - (feet.y - CENTER),
+                wallNormalY: wallHit.normal.y,
+                topNormalY: topHit.normal.y,
+              })
+            ) {
+              hang.active = true;
+              hang.climbTime = -1;
+              hang.time = 0;
+              hang.point.set(
+                feet.x + ax * wallHit.timeOfImpact,
+                topY,
+                feet.z + az * wallHit.timeOfImpact,
+              );
+              hang.forward.set(ax, 0, az);
+              hang.normal.set(-ax, 0, -az);
+              hang.lastJumpPress = input.jumpPress;
+              velocity.set(0, 0, 0);
+              playSound("grab");
+            }
+          }
+        }
+      }
+      if (hang.active) {
+        hang.time += delta;
+        velocity.set(0, 0, 0);
+        hangTarget.set(
+          hang.point.x - hang.forward.x * 0.43,
+          hang.point.y - LEDGE_HAND_HEIGHT + CENTER,
+          hang.point.z - hang.forward.z * 0.43,
+        );
+        if (input.jumpPress !== hang.lastJumpPress && hang.climbTime < 0) {
+          hang.lastJumpPress = input.jumpPress;
+          const clearance = world.castRay(
+            new RAPIER.Ray(
+              {
+                x: hang.point.x + hang.forward.x * 0.55,
+                y: hang.point.y + 0.05,
+                z: hang.point.z + hang.forward.z * 0.55,
+              },
+              { x: 0, y: 1, z: 0 },
+            ),
+            2.4,
+            true,
+            RAPIER.QueryFilterFlags.EXCLUDE_SENSORS,
+            undefined,
+            player.collider,
+            player.body,
+          );
+          if (!clearance) {
+            hang.climbTime = 0;
+            hang.climbStart.copy(feet);
+          }
+        }
+        if (hang.climbTime >= 0) {
+          hang.climbTime += delta;
+          const progress = climbProgress(hang.climbTime);
+          hangTarget.set(
+            THREE.MathUtils.lerp(
+              hang.climbStart.x,
+              hang.point.x + hang.forward.x * 0.55,
+              progress.forward,
+            ),
+            THREE.MathUtils.lerp(hang.climbStart.y, hang.point.y + CENTER + 0.06, progress.up),
+            THREE.MathUtils.lerp(
+              hang.climbStart.z,
+              hang.point.z + hang.forward.z * 0.55,
+              progress.forward,
+            ),
+          );
+          if (progress.done) hang.active = false;
+        } else {
+          const blend = 1 - Math.exp(-10 * delta);
+          hangTarget.set(
+            feet.x + (hangTarget.x - feet.x) * blend,
+            feet.y + (hangTarget.y - feet.y) * blend,
+            feet.z + (hangTarget.z - feet.z) * blend,
+          );
+        }
+        player.body.setTranslation(hangTarget, true);
+        player.body.setNextKinematicTranslation(hangTarget);
+        player.handle.turnTo(Math.atan2(hang.forward.x, hang.forward.z));
+        if (hang.active && hang.climbTime < 0 && (input.backward || hang.time > HANG_TIMEOUT)) {
+          hang.active = false;
+          hang.lastJumpPress = input.jumpPress;
+          velocity.set(hang.normal.x * 2.5, 0, hang.normal.z * 2.5);
+        }
+      } else hang.lastJumpPress = input.jumpPress;
+
       accumulator += delta;
       while (accumulator >= STEP) {
         const speed = rollTime < rollDuration ? rollSpeedAt(rollPeak, rollTime, rollDuration) : 0;
@@ -703,7 +847,7 @@ export async function mountLevel(host: HTMLElement, signal: AbortSignal, config:
           planarOverride,
         });
         content.beforeStep?.(STEP);
-        player.step();
+        if (!hang.active) player.step();
         world.step();
         accumulator -= STEP;
         rollTime += STEP;
@@ -735,21 +879,27 @@ export async function mountLevel(host: HTMLElement, signal: AbortSignal, config:
                   ? "PlungeFall"
                   : fight && fight.attackTime > 0
                     ? SWORD_MOVES[swordStep(fight.attackStep)].clip
-                    : rollTime < rollDuration
-                      ? backstep
-                        ? "Backstep"
-                        : "Roll"
-                      : !player.handle.isOnGround
-                        ? player.handle.velocity.y > 0
-                          ? "JumpRise"
-                          : "JumpFall"
-                        : walking
-                          ? input.run
-                            ? "Run"
-                            : "Walk"
-                          : fight?.guarding
-                            ? "Guard"
-                            : "Idle";
+                    : hang.active
+                      ? hang.climbTime >= 0
+                        ? "LedgeClimb"
+                        : hang.time < CLIP_SECONDS.LedgeGrab
+                          ? "LedgeGrab"
+                          : "LedgeHang"
+                      : rollTime < rollDuration
+                        ? backstep
+                          ? "Backstep"
+                          : "Roll"
+                        : !player.handle.isOnGround
+                          ? player.handle.velocity.y > 0
+                            ? "JumpRise"
+                            : "JumpFall"
+                          : walking
+                            ? input.run
+                              ? "Run"
+                              : "Walk"
+                            : fight?.guarding
+                              ? "Guard"
+                              : "Idle";
       const next = actions.get(clip) ?? actions.get("Idle");
       const restart = fight && clip.startsWith("Sword") && fight.attackId !== shownAttack;
       if (next && (next !== action || restart)) {
@@ -761,7 +911,11 @@ export async function mountLevel(host: HTMLElement, signal: AbortSignal, config:
         next.timeScale =
           fight && clip.startsWith("Sword") && fight.attackTime > 0
             ? next.getClip().duration / Math.max(0.05, swordAttackDuration(fight.attackStep))
-            : 1;
+            : CLIP_SECONDS[clip]
+              ? next.getClip().duration / CLIP_SECONDS[clip]
+              : clip === "Roll" || clip === "Backstep"
+                ? next.getClip().duration / Math.max(0.05, rollDuration)
+                : 1;
         next.reset().fadeIn(0.08).play();
         action = next;
       }
