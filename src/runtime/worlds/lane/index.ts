@@ -47,6 +47,7 @@ import {
   type Outcome,
 } from "../../../gameplay/hollowNight";
 import { heldItems } from "../../../gameplay/heldItems";
+import { cameraRig } from "../../../gameplay/cameraRig";
 import {
   addItem,
   closeInventory,
@@ -1286,6 +1287,7 @@ export function mountHollowLane(
             delta,
           );
 
+          cameraRig.indoor = insideHouse(player) >= 0;
           // The night's rules.
           const controls = gameStore.getSnapshot().paused ? null : heldControls();
           if (controls) {
@@ -1441,6 +1443,7 @@ export function mountHollowLane(
           setSprintAllowed(true);
           setChase(false);
           heldItems.flashlightLens = null;
+          cameraRig.indoor = false;
         },
       };
     },

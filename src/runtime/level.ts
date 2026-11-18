@@ -3,6 +3,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { PLAYER_MODEL } from "../gameplay/characterAnimations";
 import { heldItems } from "../gameplay/heldItems";
+import { cameraRig } from "../gameplay/cameraRig";
 import { isSprintAllowed } from "../gameplay/sprintGate";
 import {
   BACKSTEP_DURATION,
@@ -380,9 +381,15 @@ export async function mountLevel(host: HTMLElement, signal: AbortSignal, config:
   const cameraDistance = config.cameraDistance ?? 6.5;
   const focus = new THREE.Vector3();
   const cameraRay = new THREE.Vector3();
-  function placeCamera() {
+  let indoorBlend = 0;
+  function placeCamera(delta: number) {
+    // Indoors the rig closes in over the right shoulder.
+    indoorBlend = THREE.MathUtils.damp(indoorBlend, cameraRig.indoor ? 1 : 0, 5, delta);
     focus.copy(avatar.position);
-    focus.y += 1.35;
+    focus.y += THREE.MathUtils.lerp(1.35, 1.45, indoorBlend);
+    focus.x += Math.cos(yaw) * 0.95 * indoorBlend;
+    focus.z -= Math.sin(yaw) * 0.95 * indoorBlend;
+    const reach = THREE.MathUtils.lerp(cameraDistance, 3, indoorBlend);
     cameraRay.set(
       Math.sin(yaw) * Math.cos(pitch),
       Math.sin(pitch),
@@ -390,7 +397,7 @@ export async function mountLevel(host: HTMLElement, signal: AbortSignal, config:
     );
     const obstruction = world.castRay(
       new RAPIER.Ray(focus, cameraRay),
-      cameraDistance,
+      reach,
       true,
       RAPIER.QueryFilterFlags.EXCLUDE_SENSORS,
       undefined,
@@ -956,7 +963,7 @@ export async function mountLevel(host: HTMLElement, signal: AbortSignal, config:
         return;
       }
     }
-    placeCamera();
+    placeCamera(paused ? 0 : interval / 1000);
     sun.target.position.copy(avatar.position);
     sun.position.copy(avatar.position).add(sunOffset);
     const nextSize = ps2ShadowSize(shadowSizes[settings.shadows], settings.ps2Style);
