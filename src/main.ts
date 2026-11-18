@@ -75,6 +75,7 @@ function showRoute() {
     "warpBoss",
     "gallery",
     "playground",
+    "seasons",
   ];
   if (!native.includes(route)) {
     notice(
@@ -90,82 +91,94 @@ function showRoute() {
   host.append(loading, menu);
   outlet.replaceChildren(host);
   const mount =
-    route === "playground"
-      ? import("./runtime/worlds/playground").then(({ mountPlayground }) =>
-          mountPlayground(
+    route === "seasons"
+      ? import("./runtime/worlds/lane").then(({ mountHollowLane }) =>
+          mountHollowLane(
             host,
             state,
             (path, next) => router.navigate(path, { state: next }),
+            showRoute,
             signal,
           ),
         )
-      : route === "gallery"
-        ? import("./runtime/worlds/gallery").then(({ mountGallery }) =>
-            mountGallery(
+      : route === "playground"
+        ? import("./runtime/worlds/playground").then(({ mountPlayground }) =>
+            mountPlayground(
               host,
               state,
               (path, next) => router.navigate(path, { state: next }),
               signal,
             ),
           )
-        : route === "warpBoss"
-          ? import("./runtime/worlds/warpBoss").then(({ mountWarpBoss }) => {
-              if (!bossUnlocked(readWarpProgress())) {
-                router.navigate("/warp", { replace: true });
-                return undefined;
-              }
-              return mountWarpBoss(
+        : route === "gallery"
+          ? import("./runtime/worlds/gallery").then(({ mountGallery }) =>
+              mountGallery(
                 host,
+                state,
                 (path, next) => router.navigate(path, { state: next }),
-                showRoute,
                 signal,
-              );
-            })
-          : route === "warpLevel"
-            ? import("./runtime/worlds/warpLevel").then(({ mountWarpLevel }) => {
-                const id = router.getSnapshot().params.levelId;
-                if (!isWarpLevelId(id)) {
+              ),
+            )
+          : route === "warpBoss"
+            ? import("./runtime/worlds/warpBoss").then(({ mountWarpBoss }) => {
+                if (!bossUnlocked(readWarpProgress())) {
                   router.navigate("/warp", { replace: true });
                   return undefined;
                 }
-                return mountWarpLevel(
+                return mountWarpBoss(
                   host,
-                  WARP_LEVELS[id],
                   (path, next) => router.navigate(path, { state: next }),
+                  showRoute,
                   signal,
                 );
               })
-            : route === "capital"
-              ? import("./runtime/worlds/capital").then(({ mountCapital }) =>
-                  mountCapital(
+            : route === "warpLevel"
+              ? import("./runtime/worlds/warpLevel").then(({ mountWarpLevel }) => {
+                  const id = router.getSnapshot().params.levelId;
+                  if (!isWarpLevelId(id)) {
+                    router.navigate("/warp", { replace: true });
+                    return undefined;
+                  }
+                  return mountWarpLevel(
                     host,
-                    () => router.navigate("/", { state: { returnPortal: "north" } }),
+                    WARP_LEVELS[id],
+                    (path, next) => router.navigate(path, { state: next }),
                     signal,
-                  ),
-                )
-              : route === "warp"
-                ? import("./runtime/worlds/warpRoom").then(({ mountWarpRoom }) =>
-                    mountWarpRoom(
+                  );
+                })
+              : route === "capital"
+                ? import("./runtime/worlds/capital").then(({ mountCapital }) =>
+                    mountCapital(
                       host,
-                      state,
-                      (path, next) => router.navigate(path, { state: next }),
+                      () => router.navigate("/", { state: { returnPortal: "north" } }),
                       signal,
                     ),
                   )
-                : route === "capitalKit"
-                  ? import("./runtime/capitalKit").then(({ mountCapitalKit }) =>
-                      mountCapitalKit(host, signal),
-                    )
-                  : import("./runtime/forest").then(({ mountForest }) =>
-                      mountForest(
+                : route === "warp"
+                  ? import("./runtime/worlds/warpRoom").then(({ mountWarpRoom }) =>
+                      mountWarpRoom(
                         host,
-                        state?.returnPortal,
-                        (portal) => {
-                          router.navigate(portal.destination, { state: { fromPortal: portal.id } });
-                        },
+                        state,
+                        (path, next) => router.navigate(path, { state: next }),
                         signal,
                       ),
-                    );
+                    )
+                  : route === "capitalKit"
+                    ? import("./runtime/capitalKit").then(({ mountCapitalKit }) =>
+                        mountCapitalKit(host, signal),
+                      )
+                    : import("./runtime/forest").then(({ mountForest }) =>
+                        mountForest(
+                          host,
+                          state?.returnPortal,
+                          (portal) => {
+                            router.navigate(portal.destination, {
+                              state: { fromPortal: portal.id },
+                            });
+                          },
+                          signal,
+                        ),
+                      );
   void mount
     .then((dispose) => {
       if (signal.aborted) {

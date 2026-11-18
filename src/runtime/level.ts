@@ -2,6 +2,8 @@ import RAPIER from "@dimforge/rapier3d-compat";
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { PLAYER_MODEL } from "../gameplay/characterAnimations";
+import { heldItems } from "../gameplay/heldItems";
+import { isSprintAllowed } from "../gameplay/sprintGate";
 import {
   BACKSTEP_DURATION,
   BACKSTEP_SPEED,
@@ -99,6 +101,8 @@ export type LevelContent = {
   beforeStep?: (step: number) => void;
   /** Sword combat state shared with the world's enemy simulation. */
   combat?: Encounter;
+  /** Something held in the right hand (Hollow Lane's flashlight). */
+  held?: "flashlight";
   /** Warp-platformer handshake: spin attacks, bounces and the death freeze. */
   platformer?: PlatformerLink;
   /** Lock-on candidates, read when the lock control is pressed. */
@@ -190,6 +194,57 @@ export function createSun(color: THREE.ColorRepresentation, intensity: number, e
   return sun;
 }
 
+/** A flashlight gripped where the sword would be; publishes its lens to `heldItems`. */
+function mountFlashlight(character: THREE.Object3D) {
+  const fist = PLAYER_MODEL.mounts.map((name) => character.getObjectByName(name)).find(Boolean);
+  if (!fist) return;
+  const torch = new THREE.Group();
+  torch.position.set(0, PLAYER_MODEL.torch.offset, 0);
+  torch.quaternion.set(Math.SQRT1_2, 0, 0, Math.SQRT1_2);
+  const metal = new THREE.MeshStandardMaterial({
+    color: "#2a2b30",
+    metalness: 0.7,
+    roughness: 0.35,
+  });
+  const lensMaterial = new THREE.MeshBasicMaterial({
+    color: new THREE.Color(0.15, 0.15, 0.12),
+    toneMapped: false,
+  });
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.3, 12), metal);
+  body.position.y = 0.1;
+  const head = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.05, 0.1, 14), metal);
+  head.position.y = 0.3;
+  const lens = new THREE.Mesh(new THREE.CircleGeometry(0.066, 14), lensMaterial);
+  lens.position.y = 0.352;
+  lens.rotation.x = -Math.PI / 2;
+  const halo = new THREE.Mesh(
+    new THREE.SphereGeometry(0.06, 12, 8),
+    new THREE.MeshBasicMaterial({
+      color: new THREE.Color(2.4, 2.1, 1.6),
+      transparent: true,
+      opacity: 0.5,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      toneMapped: false,
+    }),
+  );
+  halo.position.y = 0.37;
+  body.castShadow = head.castShadow = true;
+  torch.add(body, head, lens, halo);
+  torch.scale.setScalar(PLAYER_MODEL.torch.scale);
+  fist.add(torch);
+  heldItems.flashlightLens = lens;
+  torch.onBeforeRender = () => {};
+  lens.onBeforeRender = () => {
+    lensMaterial.color.setScalar(heldItems.flashlightOn ? 3 : 0.12);
+    halo.visible = heldItems.flashlightOn;
+  };
+  for (const name of ["PlayerSword", "PlayerShield"]) {
+    const item = character.getObjectByName(name);
+    if (item) item.visible = false;
+  }
+}
+
 /** Native third-person level: physics, player, camera, HUD and portal entry. */
 export async function mountLevel(host: HTMLElement, signal: AbortSignal, config: LevelConfig) {
   await (physicsInit ??= RAPIER.init());
@@ -248,6 +303,7 @@ export async function mountLevel(host: HTMLElement, signal: AbortSignal, config:
         if (object.name === "PlayerSword" || object.name === "PlayerShield")
           object.visible = Boolean(content.combat);
       });
+      if (content.held === "flashlight") mountFlashlight(model);
       avatar.add(model);
       placeholder.visible = false;
       mixer = new THREE.AnimationMixer(model);
@@ -639,7 +695,7 @@ export async function mountLevel(host: HTMLElement, signal: AbortSignal, config:
           backward: enabled && input.backward,
           leftward: enabled && input.left,
           rightward: enabled && input.right,
-          run: input.run && !(fight?.winded ?? false) && !fight?.guarding,
+          run: input.run && isSprintAllowed() && !(fight?.winded ?? false) && !fight?.guarding,
           jump: enabled && input.jump && !speed,
           preserveFacing: speed > 0 || !enabled || lockYaw !== null,
           planarOverride,
