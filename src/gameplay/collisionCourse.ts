@@ -6,7 +6,7 @@
 //   lift, spin, tilt, orbit, sweeping wall), dynamic bodies, thin geometry,
 //   spawning inside geometry, and terrain. Extras cover this controller's own
 //   features (ledge grab, jump pads, one-way boards).
-// Every station is data here; `CollisionCourse.tsx` turns it into bodies.
+// Every station is data here; `runtime/worlds/playground/course.ts` turns it into bodies.
 // Each static piece carries its zone / structure / name, and
 // `scripts/syncPlaygroundObstacles.ts` writes them to playgroundObstacles.json.
 
@@ -66,7 +66,7 @@ const WALKABLE = "#2eff5a";
 const STALL = "#ffd23e";
 const TOO_STEEP = "#ff2e3e";
 
-// Controller limits (gameplay/controllerTuning.ts, CharacterController.tsx).
+// Controller limits (gameplay/controllerTuning.ts, runtime/characterMotor.ts).
 /** Steepest climbable slope (slopeMaxAngle). */
 export const SLOPE_LIMIT_DEG = 50;
 /** Sliding starts 5 deg past the climb limit; between the two the capsule stalls. */

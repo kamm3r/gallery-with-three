@@ -20,6 +20,5 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src", "tests", "scripts/**/*.ts", "vite.config.ts"],
-  "exclude": ["src/**/*.tsx", "src/hooks/**", "src/dev/**"]
+  "include": ["src", "tests", "scripts/**/*.ts", "vite.config.ts"]
 }
