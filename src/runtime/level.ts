@@ -49,7 +49,7 @@ import { gameStore } from "./gameStore";
 import { startFrameLoop } from "./frameLoop";
 import { createPlayerController } from "./playerController";
 import { heldControls, mountPlayerControls, setPlayerControl } from "./playerInput";
-import { createViewport } from "./viewport";
+import { createViewport, type ViewportPost } from "./viewport";
 import { disposeObjects } from "./disposeObjects";
 
 const HALF_HEIGHT = 0.5;
@@ -121,6 +121,8 @@ export type LevelConfig = {
   boundary?: number;
   killY?: number;
   cameraDistance?: number;
+  /** Atmosphere and colour grade for this world. */
+  post?: ViewportPost;
   build: (context: LevelContext) => LevelContent | Promise<LevelContent>;
   onEnter: (portalId: string) => void;
 };
@@ -254,7 +256,7 @@ export async function mountLevel(host: HTMLElement, signal: AbortSignal, config:
   const view = element("div", "game-viewport");
   view.tabIndex = -1;
   host.append(view);
-  const viewport = createViewport(view, scene, camera);
+  const viewport = createViewport(view, scene, camera, config.post);
   const world = new RAPIER.World({ x: 0, y: -30, z: 0 });
   const content = await config.build({ scene, world, rapier: RAPIER, camera, host, signal });
   if (signal.aborted) {

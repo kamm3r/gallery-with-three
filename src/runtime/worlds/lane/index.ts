@@ -1121,6 +1121,18 @@ export function mountHollowLane(
     spawn: { position: LANE_START, yaw: Math.PI },
     killY: -20,
     cameraDistance: 6,
+    post: {
+      atmosphere: {
+        density: 0.02,
+        falloff: 0.28,
+        fogStart: 8,
+        skyFog: 0.15,
+        scatter: 0.1,
+        shafts: 0.25,
+        shaftDensity: 0.02,
+        shaftDistance: 50,
+      },
+    },
     onEnter: exit,
     build: ({ scene, world, camera }) => {
       scene.background = new THREE.Color("#05050a");

@@ -32,6 +32,7 @@ import { createHubGround } from "./hubGround";
 import { createPlayerController } from "./playerController";
 import { heldControls, mountPlayerControls, setPlayerControl } from "./playerInput";
 import { createViewport } from "./viewport";
+import { FOREST_ATMOSPHERE } from "../components/AtmosphereEffect";
 import { disposeObjects } from "./disposeObjects";
 
 const HALF_HEIGHT = 0.5;
@@ -54,7 +55,7 @@ export async function mountForest(
   const view = element("div", "game-viewport");
   view.tabIndex = -1;
   host.append(view);
-  const viewport = createViewport(view, scene, camera);
+  const viewport = createViewport(view, scene, camera, { atmosphere: FOREST_ATMOSPHERE });
   const world = new RAPIER.World({ x: 0, y: -30, z: 0 });
   const grid = buildTerrainGrid();
   world.createCollider(
