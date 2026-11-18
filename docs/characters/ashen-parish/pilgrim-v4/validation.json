@@ -1,0 +1,44 @@
+{
+  "source_geometry": "PASS",
+  "packed_references": "PASS",
+  "normalized_skin_weights": "PASS",
+  "uv_bounds": "PASS",
+  "real_body_depth": "PASS",
+  "glb_round_trip": "PASS",
+  "basic_deformation_probes": "PASS",
+  "mesh_modules": 5,
+  "bones": 22,
+  "texture_images": 4,
+  "triangles": 16702,
+  "draw_primitives": 18,
+  "bytes": 7827324,
+  "scope": "Cathedral Pilgrim only. Surface transitions still need paint cleanup; no gameplay animations.",
+  "refinement_regressions": {
+    "no_full_figure_projection_on_garments": "PASS",
+    "garment_uv_tile_bounds": "PASS",
+    "pommel_hidden_inside_glove": "PASS",
+    "pommel_clearance_metres": 0.005126798896526452,
+    "guard_below_fingers": "PASS",
+    "helmet_rim_no_face_texture": "PASS",
+    "physical_shield_straps": "PASS",
+    "physical_mantle_clasp": "PASS",
+    "modeled_fingers_bound_to_hands": "PASS",
+    "belt_accessory_connections": "PASS",
+    "sleeve_wrist_overlap_no_air_gap": "PASS",
+    "rest_pose_mantle_sleeve_intersections": {
+      "L": 0,
+      "R": 0
+    },
+    "in_place_polish": {
+      "same_source_filename": "PASS",
+      "thin_closed_helmet_brim": "PASS",
+      "pouch_body_support": "PASS",
+      "pouch_flap_contact": "PASS",
+      "cape_back_spacing": "PASS",
+      "shield_band_mounts_and_clearance": "PASS",
+      "hood_and_face_under_brim": "PASS",
+      "sword_guard_finger_gap_metres": 0.0059999823570251465,
+      "modeled_buckle_tag_and_shield_grip": "PASS"
+    }
+  }
+}

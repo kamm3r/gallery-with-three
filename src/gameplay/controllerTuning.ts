@@ -1,0 +1,33 @@
+import { MOVEMENT_DEFAULTS, SOULS_MOVEMENT } from "./movement.ts";
+import { JUMP_DEFAULTS, SOULS_JUMP } from "./playerRules.ts";
+
+// Character controller settings shared by every world. The playground's Leva
+// panel starts from these values and passes overrides to its own player only.
+
+export const controllerDefaults = {
+  ...MOVEMENT_DEFAULTS,
+  ...JUMP_DEFAULTS,
+  /** Rapier `offset`: gap kept between the capsule and everything it touches (m). */
+  skinWidth: 0.03,
+  /** Tallest ledge walked up without jumping. Counts the skin width, so
+   * 0.55 clears the park's 0.48m steps and still blocks the 0.6m curb. */
+  stepHeight: 0.55,
+  /** How far down the controller pulls to stay glued when descending (m). */
+  snapDistance: 0.5,
+  /** Steepest walkable slope (rad). */
+  slopeMaxAngle: (50 * Math.PI) / 180,
+  /** Mass used to shove dynamic bodies (crates, seesaw). */
+  mass: 10,
+  /** Strongest steady shove (N). Light crates slide; heavy ones, whose
+   * ground friction exceeds it, stay put. */
+  pushForce: 600,
+};
+
+export type ControllerTuning = typeof controllerDefaults;
+
+/** The combat realms move like Elden Ring and Sekiro: quick pivots, committed jumps. */
+export const soulsControllerTuning: ControllerTuning = {
+  ...controllerDefaults,
+  ...SOULS_MOVEMENT,
+  ...SOULS_JUMP,
+};

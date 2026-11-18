@@ -1,0 +1,42 @@
+{
+  "surfaces": 604,
+  "samples": 512119,
+  "obstructedSamples": 57411,
+  "rayFallbacks": 0,
+  "gridSpacing": 0.5,
+  "edgeSpacing": 0.25,
+  "edgeInset": 0.02,
+  "failures": [],
+  "capsuleChecks": [
+    {
+      "surface": "backyard-below-door:threshold",
+      "expectedY": 24,
+      "actualY": 24.00009994506836,
+      "supported": true
+    },
+    {
+      "surface": "great-gate:threshold",
+      "expectedY": 0,
+      "actualY": -1.1920928910669204e-8,
+      "supported": true
+    },
+    {
+      "surface": "gallery-west-door:threshold",
+      "expectedY": 54,
+      "actualY": 54.00009994506836,
+      "supported": true
+    },
+    {
+      "surface": "colosseum-gate:threshold",
+      "expectedY": -20,
+      "actualY": -19.99990005493164,
+      "supported": true
+    },
+    {
+      "surface": "colosseum-lift:threshold",
+      "expectedY": -20,
+      "actualY": -19.99990005493164,
+      "supported": true
+    }
+  ]
+}

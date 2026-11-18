@@ -1,0 +1,47 @@
+{
+  "blender_source": "PASS",
+  "packed_512px_atlas": "PASS",
+  "source_vertex_weights": "PASS",
+  "exports": [
+    {
+      "id": "cathedral-pilgrim",
+      "round_trip": "PASS",
+      "triangles": 8905,
+      "draw_primitives": 5,
+      "mesh_modules": 3,
+      "bones": 22,
+      "animations": 1,
+      "bytes": 995116
+    },
+    {
+      "id": "grave-keeper",
+      "round_trip": "PASS",
+      "triangles": 8292,
+      "draw_primitives": 6,
+      "mesh_modules": 3,
+      "bones": 22,
+      "animations": 1,
+      "bytes": 948424
+    },
+    {
+      "id": "penitent-hammer",
+      "round_trip": "PASS",
+      "triangles": 9308,
+      "draw_primitives": 5,
+      "mesh_modules": 3,
+      "bones": 22,
+      "animations": 1,
+      "bytes": 1019452
+    },
+    {
+      "id": "penitent-greatsword",
+      "round_trip": "PASS",
+      "triangles": 9189,
+      "draw_primitives": 5,
+      "mesh_modules": 3,
+      "bones": 22,
+      "animations": 1,
+      "bytes": 1003516
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "programs": [],
+  "stream_groups": [],
+  "streams": [
+    {
+      "codec_name": "h264",
+      "width": 1920,
+      "height": 880,
+      "avg_frame_rate": "60/1",
+      "nb_read_frames": "3120"
+    }
+  ],
+  "format": {
+    "duration": "52.000000",
+    "size": "26092999"
+  },
+  "validation": {
+    "method": "Fixed-step 1/60-second pose rendering, 1560 frames per section",
+    "anatomy_tests": "6 tests covering IK reach, hinge direction, joint limits, facing, palms, gaits, grips and transform continuity",
+    "full_suite_passed": 391
+  }
+}

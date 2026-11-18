@@ -1,0 +1,666 @@
+{
+  "state": [
+    {
+      "domain": "parish",
+      "enemies": [
+        {
+          "id": "wall-watch",
+          "kind": "sentinel",
+          "x": 60.913935018964,
+          "y": 12,
+          "z": -81.81376730419785
+        },
+        {
+          "id": "lower-hound",
+          "kind": "hound",
+          "x": 93.10192190657314,
+          "y": 12,
+          "z": -41.66571897018405
+        },
+        {
+          "id": "wall-hound",
+          "kind": "hound",
+          "x": 62.87854135651304,
+          "y": 6,
+          "z": -58.67102382673477
+        },
+        {
+          "id": "wall-penitent",
+          "kind": "acolyte",
+          "x": 47.200153813970154,
+          "y": 9,
+          "z": -51.69279911107115
+        },
+        {
+          "id": "bridge-sentinel",
+          "kind": "sentinel",
+          "x": 62.63298487746869,
+          "y": 9,
+          "z": -20.811275918087734
+        },
+        {
+          "id": "foundry-kiln-bound",
+          "kind": "kiln",
+          "x": 20.375585390678626,
+          "y": 9,
+          "z": -37.29725888034084
+        },
+        {
+          "id": "town-penitent",
+          "kind": "acolyte",
+          "x": 37.876312802611004,
+          "y": 9,
+          "z": -19.277835160587035
+        },
+        {
+          "id": "upper-acolyte",
+          "kind": "acolyte",
+          "x": 41.573355789341896,
+          "y": 9,
+          "z": 8.826442568373311
+        },
+        {
+          "id": "gate-hound",
+          "kind": "hound",
+          "x": 33.291393659168044,
+          "y": 3,
+          "z": -26.418423651503236
+        },
+        {
+          "id": "town-hound",
+          "kind": "hound",
+          "x": 42.39353693067231,
+          "y": 3,
+          "z": -3.0063310708773736
+        },
+        {
+          "id": "town-watch",
+          "kind": "sentinel",
+          "x": 28.61001348346848,
+          "y": 15,
+          "z": -18.370278399516753
+        },
+        {
+          "id": "upper-watch",
+          "kind": "sentinel",
+          "x": 33.62225204415985,
+          "y": 15,
+          "z": 5.054123809226364
+        },
+        {
+          "id": "tunnel-penitent",
+          "kind": "acolyte",
+          "x": 2,
+          "y": 3,
+          "z": -39.1
+        },
+        {
+          "id": "tunnel-crypt-clinger",
+          "kind": "clinger",
+          "x": -16,
+          "y": 3,
+          "z": -39.1
+        },
+        {
+          "id": "uptown-sentinel",
+          "kind": "sentinel",
+          "x": -35.982556604089986,
+          "y": 6,
+          "z": -36.14215848885426
+        },
+        {
+          "id": "uptown-acolyte",
+          "kind": "acolyte",
+          "x": -63.859419820581614,
+          "y": 6,
+          "z": -12.123304012467425
+        },
+        {
+          "id": "uptown-hound",
+          "kind": "hound",
+          "x": -84.38533617035618,
+          "y": 6,
+          "z": -24.96227232076391
+        },
+        {
+          "id": "uptown-penitent",
+          "kind": "acolyte",
+          "x": 1.4796232426227747,
+          "y": 6,
+          "z": -87.98756000174053
+        },
+        {
+          "id": "terrace-watch",
+          "kind": "sentinel",
+          "x": -35.79456026884644,
+          "y": 6,
+          "z": -54.25633101454539
+        },
+        {
+          "id": "terrace-hound",
+          "kind": "hound",
+          "x": -49.317070392432065,
+          "y": 6,
+          "z": -12.993327822690391
+        },
+        {
+          "id": "north-watch",
+          "kind": "sentinel",
+          "x": -12.173537413309774,
+          "y": 6,
+          "z": -53.63585542197259
+        },
+        {
+          "id": "plaza-sentinel",
+          "kind": "sentinel",
+          "x": 0,
+          "y": 24,
+          "z": -8
+        },
+        {
+          "id": "blade-hound",
+          "kind": "hound",
+          "x": 0,
+          "y": 20,
+          "z": -39
+        },
+        {
+          "id": "path-acolyte",
+          "kind": "acolyte",
+          "x": 23.5,
+          "y": 24,
+          "z": 35
+        },
+        {
+          "id": "path-sentinel",
+          "kind": "sentinel",
+          "x": 31,
+          "y": 24,
+          "z": 50
+        },
+        {
+          "id": "gallery-penitent",
+          "kind": "acolyte",
+          "x": -15.5,
+          "y": 31,
+          "z": 80
+        },
+        {
+          "id": "procession-bearer",
+          "kind": "bearer",
+          "x": -14,
+          "y": 24,
+          "z": 50
+        },
+        {
+          "id": "transept-hound",
+          "kind": "hound",
+          "x": 12,
+          "y": 24,
+          "z": 48
+        },
+        {
+          "id": "garden-hound",
+          "kind": "hound",
+          "x": 70,
+          "y": 28,
+          "z": 40
+        },
+        {
+          "id": "garden-sentinel",
+          "kind": "sentinel",
+          "x": 84,
+          "y": 28,
+          "z": 76
+        },
+        {
+          "id": "bell-widow",
+          "kind": "widow",
+          "x": -42.9,
+          "y": 18,
+          "z": 93.8
+        },
+        {
+          "id": "street-watch",
+          "kind": "sentinel",
+          "x": -50,
+          "y": -8,
+          "z": 24.5
+        },
+        {
+          "id": "gate-penitent",
+          "kind": "acolyte",
+          "x": -16.5,
+          "y": -8,
+          "z": -42
+        },
+        {
+          "id": "street-hound",
+          "kind": "hound",
+          "x": -23.853275704444133,
+          "y": -8,
+          "z": -12.649950125110182
+        }
+      ],
+      "health": 100
+    },
+    {
+      "domain": "combat"
+    },
+    {
+      "domain": "teleport"
+    },
+    {
+      "domain": "capital-lifts"
+    },
+    {
+      "domain": "heal-request"
+    },
+    {
+      "domain": "parish-reset"
+    },
+    {
+      "domain": "parish-save"
+    },
+    {
+      "domain": "parish-progress"
+    },
+    {
+      "domain": "frame-telemetry"
+    },
+    {
+      "domain": "render-shadow-budget"
+    },
+    {
+      "domain": "render-point-light-budget"
+    },
+    {
+      "domain": "parish-runtime"
+    },
+    {
+      "domain": "visualTime"
+    },
+    {
+      "domain": "enabled"
+    },
+    {
+      "domain": "enemy-record"
+    },
+    {
+      "domain": "visualTime"
+    },
+    {
+      "domain": "enabled"
+    },
+    {
+      "domain": "enemy-record"
+    },
+    {
+      "domain": "visualTime"
+    },
+    {
+      "domain": "enabled"
+    },
+    {
+      "domain": "enemy-record"
+    },
+    {
+      "domain": "visualTime"
+    },
+    {
+      "domain": "enabled"
+    },
+    {
+      "domain": "enemy-record"
+    },
+    {
+      "domain": "visualTime"
+    },
+    {
+      "domain": "enabled"
+    },
+    {
+      "domain": "enemy-record"
+    },
+    {
+      "domain": "visualTime"
+    },
+    {
+      "domain": "enabled"
+    },
+    {
+      "domain": "enemy-record"
+    },
+    {
+      "domain": "visualTime"
+    },
+    {
+      "domain": "enabled"
+    },
+    {
+      "domain": "enemy-record"
+    },
+    {
+      "domain": "visualTime"
+    },
+    {
+      "domain": "enabled"
+    },
+    {
+      "domain": "enemy-record"
+    },
+    {
+      "domain": "visualTime"
+    },
+    {
+      "domain": "enabled"
+    },
+    {
+      "domain": "enemy-record"
+    },
+    {
+      "domain": "visualTime"
+    },
+    {
+      "domain": "enabled"
+    },
+    {
+      "domain": "enemy-record"
+    },
+    {
+      "domain": "visualTime"
+    },
+    {
+      "domain": "enabled"
+    },
+    {
+      "domain": "enemy-record"
+    },
+    {
+      "domain": "visualTime"
+    },
+    {
+      "domain": "enabled"
+    },
+    {
+      "domain": "enemy-record"
+    },
+    {
+      "domain": "visualTime"
+    },
+    {
+      "domain": "enabled"
+    },
+    {
+      "domain": "enemy-record"
+    },
+    {
+      "domain": "visualTime"
+    },
+    {
+      "domain": "enabled"
+    },
+    {
+      "domain": "enemy-record"
+    },
+    {
+      "domain": "visualTime"
+    },
+    {
+      "domain": "enabled"
+    },
+    {
+      "domain": "enemy-record"
+    },
+    {
+      "domain": "visualTime"
+    },
+    {
+      "domain": "enabled"
+    },
+    {
+      "domain": "enemy-record"
+    },
+    {
+      "domain": "visualTime"
+    },
+    {
+      "domain": "enabled"
+    },
+    {
+      "domain": "enemy-record"
+    },
+    {
+      "domain": "visualTime"
+    },
+    {
+      "domain": "enabled"
+    },
+    {
+      "domain": "enemy-record"
+    },
+    {
+      "domain": "visualTime"
+    },
+    {
+      "domain": "enabled"
+    },
+    {
+      "domain": "enemy-record"
+    },
+    {
+      "domain": "visualTime"
+    },
+    {
+      "domain": "enabled"
+    },
+    {
+      "domain": "enemy-record"
+    },
+    {
+      "domain": "visualTime"
+    },
+    {
+      "domain": "enabled"
+    },
+    {
+      "domain": "enemy-record"
+    },
+    {
+      "domain": "visualTime"
+    },
+    {
+      "domain": "enabled"
+    },
+    {
+      "domain": "enemy-record"
+    },
+    {
+      "domain": "visualTime"
+    },
+    {
+      "domain": "enabled"
+    },
+    {
+      "domain": "enemy-record"
+    },
+    {
+      "domain": "visualTime"
+    },
+    {
+      "domain": "enabled"
+    },
+    {
+      "domain": "enemy-record"
+    },
+    {
+      "domain": "visualTime"
+    },
+    {
+      "domain": "enabled"
+    },
+    {
+      "domain": "enemy-record"
+    },
+    {
+      "domain": "visualTime"
+    },
+    {
+      "domain": "enabled"
+    },
+    {
+      "domain": "enemy-record"
+    },
+    {
+      "domain": "visualTime"
+    },
+    {
+      "domain": "enabled"
+    },
+    {
+      "domain": "enemy-record"
+    },
+    {
+      "domain": "visualTime"
+    },
+    {
+      "domain": "enabled"
+    },
+    {
+      "domain": "enemy-record"
+    },
+    {
+      "domain": "visualTime"
+    },
+    {
+      "domain": "enabled"
+    },
+    {
+      "domain": "enemy-record"
+    },
+    {
+      "domain": "visualTime"
+    },
+    {
+      "domain": "enabled"
+    },
+    {
+      "domain": "enemy-record"
+    },
+    {
+      "domain": "visualTime"
+    },
+    {
+      "domain": "enabled"
+    },
+    {
+      "domain": "enemy-record"
+    },
+    {
+      "domain": "visualTime"
+    },
+    {
+      "domain": "enabled"
+    },
+    {
+      "domain": "enemy-record"
+    },
+    {
+      "domain": "visualTime"
+    },
+    {
+      "domain": "enabled"
+    },
+    {
+      "domain": "enemy-record"
+    },
+    {
+      "domain": "visualTime"
+    },
+    {
+      "domain": "enabled"
+    },
+    {
+      "domain": "enemy-record"
+    },
+    {
+      "domain": "camera-arm"
+    },
+    {
+      "domain": "camera-indoor-blend"
+    },
+    {
+      "domain": "combat-input-buffer"
+    },
+    {
+      "domain": "wasGrounded"
+    },
+    {
+      "domain": "previousVerticalSpeed"
+    },
+    {
+      "domain": "landingCompression"
+    },
+    {
+      "domain": "proximity"
+    },
+    {
+      "domain": "notifiedHang"
+    },
+    {
+      "domain": "actionRef"
+    },
+    {
+      "domain": "landingTime"
+    },
+    {
+      "domain": "stepTime"
+    },
+    {
+      "domain": "controller-input"
+    },
+    {
+      "domain": "controller-jumpWasHeld"
+    },
+    {
+      "domain": "controller-jumpBuffer"
+    },
+    {
+      "domain": "controller-airTime"
+    },
+    {
+      "domain": "controller-launched"
+    },
+    {
+      "domain": "platform"
+    },
+    {
+      "domain": "character-body"
+    },
+    {
+      "domain": "cameraYawRef"
+    },
+    {
+      "domain": "cameraHeightRef"
+    },
+    {
+      "domain": "camera-zoom"
+    },
+    {
+      "domain": "enteringRef"
+    },
+    {
+      "domain": "seatRef"
+    },
+    {
+      "domain": "hangRef"
+    },
+    {
+      "domain": "rollRef"
+    },
+    {
+      "domain": "lock-on"
+    }
+  ],
+  "errors": []
+}

@@ -1,0 +1,14 @@
+{
+  "meshes": 391,
+  "triangles": 8994,
+  "packed_concept": true,
+  "atlas_size": [512, 512],
+  "player_objects": false,
+  "palette_colors": 256,
+  "project_tests": 379,
+  "production_build": "passed",
+  "changed_file_checks": "passed",
+  "closed_mantle": true,
+  "texture_mapping": "component UVs; no camera projection",
+  "material_emission": false
+}

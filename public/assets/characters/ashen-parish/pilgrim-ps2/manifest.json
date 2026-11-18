@@ -1,0 +1,50 @@
+{
+  "name": "Cathedral Pilgrim \u2014 PS2 souls-like",
+  "source": "cathedral-pilgrim-ps2.blend",
+  "glb": "cathedral-pilgrim-ps2.glb",
+  "texture": {
+    "file": "pilgrim-ps2-atlas.png",
+    "size": 512,
+    "palette_colours": 128,
+    "filter": "nearest",
+    "baked": "albedo \u00d7 ambient occlusion"
+  },
+  "triangles": {
+    "Pilgrim_Body": 6568,
+    "Pilgrim_Sword": 142,
+    "Pilgrim_Shield": 726
+  },
+  "total_triangles": 7436,
+  "materials": 1,
+  "skeleton": {
+    "standard": "Quaternius Universal Animation Library 2 (UE mannequin names and rest orientations)",
+    "bones": 67,
+    "extra_bones": ["cape_01", "cape_02"],
+    "bind_pose": "T-pose",
+    "default_pose": "Pilgrim_Guard_Pose"
+  },
+  "meshes": {
+    "Pilgrim_Body": "skinned, max 3 influences",
+    "Pilgrim_Sword": "rigid on hand_r",
+    "Pilgrim_Shield": "rigid on hand_l"
+  },
+  "animations": [
+    "Pilgrim_Guard_Pose",
+    "Idle_Shield_Loop",
+    "Sword_Regular_A",
+    "Sword_Regular_B",
+    "Sword_Regular_C",
+    "Sword_Regular_Combo",
+    "Sword_Heavy_Combo",
+    "Sword_Block",
+    "Sword_Dash",
+    "Shield_Dash",
+    "Shield_OneShot",
+    "Idle_Shield_Break",
+    "Hit_Knockback",
+    "Consume",
+    "Zombie_Walk_Fwd_Loop"
+  ],
+  "three_js": "Clips play by bone name. For clips loaded from UAL2_Standard.glb keep quaternion tracks and pelvis/root position only.",
+  "roundtrip_max_error_m": 4.655867755403517e-7
+}

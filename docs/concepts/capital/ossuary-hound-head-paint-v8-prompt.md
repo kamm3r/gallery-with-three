@@ -1,0 +1,10 @@
+# Hound head paint v8
+
+Mode: built-in imagegen. Reference: `ossuary-hound-redesign-v3.png`.
+
+Saved source: `public/assets/characters/ashen-parish/enemies/ossuary-hound-head-paint-v8.png`.
+Runtime atlas: `public/assets/characters/ashen-parish/enemies/ossuary-hound-atlas-v8.png`.
+
+## Final prompt
+
+Use case: stylized-concept. Asset type: production diffuse texture projection source for an existing PS2-style 3D enemy head. Reference image is the APPROVED Ossuary Hound concept, especially the big canine head and the head closeup. Preserve that exact gaunt, dangerous canine identity, angular cheekbones, long tapered muzzle, deep-set forward-looking amber eyes, scarred charcoal-brown sparse coat, ragged asymmetric ears. Create a 1536x1024 landscape texture-source sheet with TWO large orthographic heads, on an even matte dark warm grey #504b43 background. LEFT HALF: exact straight-on front view of head and upper neck, symmetrical camera, ears tips near y=80, head crown near y=265, eyes centered around y=420, nose centered around x=384,y=650, lower jaw y=740, neck finishes near bottom. RIGHT HALF: exact LEFT-facing side profile of the same head and upper neck, ear tips y=80, crown y=270, eye around x=1190,y=420, nose tip around x=850,y=650, rear skull x=1360,y=440, jaw y=740, neck to bottom. Heads fill their half with padding, no overlaps. REMOVE all equipment for this texture source: no cage, no bridle, no collar, no buckles, no stone plates. They are separate meshes on the game model. Paint natural anatomical skin and sparse fur under them. Keep closed jaws with a tight dark lip seam, no smile. Flat diffuse ambient lighting with only restrained painted crevice shading; no dramatic shadows or highlights. Sharp, hand-painted PS2/Resident Evil creature texture detail, readable planes and short coarse fur; avoid swirly brush texture, wood grain, marble, plastic, soft blur. No text, no labels, no render stage, no decorative layout. This is a UV projection paint source, not a finished model preview.
