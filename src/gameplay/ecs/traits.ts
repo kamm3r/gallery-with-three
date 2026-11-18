@@ -34,6 +34,10 @@ export interface KinematicBody {
 }
 export const PlatformBody = trait(() => ({ body: null as KinematicBody | null }));
 export const PlatformMotion = trait({
+  qx: 0,
+  qy: 0,
+  qz: 0,
+  qw: 1,
   x: 0,
   y: 0,
   z: 0,
@@ -44,4 +48,7 @@ export const PlatformMotion = trait({
   spin: 0,
   tiltAmp: 0,
   tiltSpeed: 1,
+  /** Circles the origin on the ground plane at this radius (0: no orbit). */
+  orbitRadius: 0,
+  orbitSpeed: 0,
 });

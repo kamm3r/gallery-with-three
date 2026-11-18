@@ -20,7 +20,7 @@ import {
 } from "react";
 import { Physics } from "@react-three/rapier";
 import { useFrame } from "@react-three/fiber";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "../hooks/useRoute";
 import { GameCanvas } from "../components/GameCanvas";
 import { ThirdPersonPlayer } from "../components/ThirdPersonPlayer";
 import { PortalFrameCollider } from "../components/PortalFrameCollider";
@@ -30,9 +30,10 @@ import { AshWarden } from "../components/AshWarden";
 import { CombatTuningPanel } from "../components/CombatTuningPanel";
 import { SacredCapital } from "../components/SacredCapital";
 import { ParishEnemies } from "../components/ParishEnemies";
+import { VitalBar } from "../components/VitalBar";
 import { combatTuning } from "../gameplay/combatTuning";
 import { keyLabel } from "../gameplay/controlBindings";
-import { useGame } from "../gameSettings";
+import { useGame } from "../hooks/useGame";
 import { useGameTimeout } from "../hooks/useGameTimeout";
 import {
   heldControls,
@@ -41,6 +42,7 @@ import {
   setControlsPaused,
 } from "../hooks/usePlayerControls";
 import { newParishProgress, type ParishPoint, type ParishProgress } from "../gameplay/ashenParish";
+import { createParishAutosave, readParishSave, writeParishSave } from "../gameplay/parishSave";
 import {
   capitalAreas as parishAreas,
   CAPITAL_EXIT as PARISH_EXIT,
@@ -57,6 +59,7 @@ import {
 import {
   capitalInteraction as parishInteraction,
   beginCapitalBoss,
+  claimCapitalCache,
   activateCapitalBeacon,
   newCapitalLiftStates,
   requestCapitalLift,
@@ -108,8 +111,6 @@ const PARISH_POST = {
   shadowTint: "#284d82",
   highlightTint: "#ffe2c0",
   bloomIntensity: 0.32,
-  aoIntensity: 1.1,
-  aoColor: "#27332f",
   grain: 0.015,
   vignetteDarkness: 0.3,
 };
@@ -163,6 +164,7 @@ function ParishRuntime({
     reportTime: 0,
     lastEnemyHit: 0,
     lastPlayerHit: 0,
+    save: createParishAutosave(),
   }));
   useEffect(() => {
     if (!import.meta.env.DEV) return;
@@ -215,10 +217,7 @@ function ParishRuntime({
             p.checkpoint = interaction.id;
             playSound("bossHit", { intensity: 0.2 });
           } else if (interaction.kind === "cache") {
-            const cache = parishCaches.find((cache) => cache.id === interaction.id)!;
-            p.caches.push(cache.id);
-            s.embers += cache.embers;
-            s.flasks = Math.min(3, s.flasks + 1);
+            claimCapitalCache(s, p, interaction.id);
             playSound("bossHit", { intensity: 0.2 });
           } else if (interaction.kind === "boss") {
             teleport.current = beginCapitalBoss(s, interaction.id, p);
@@ -244,6 +243,7 @@ function ParishRuntime({
     // Below the ground city there is only cloud.
     if (c.playerY < -40) c.health = 0;
     stepParishSystems(runtimeWorld, s, delta, p);
+    r.save(p, s.embers);
     if (s.enemyHitId > r.lastEnemyHit) playSound("bossHit", { intensity: 0.6 });
     r.lastEnemyHit = s.enemyHitId;
     if (!c.bossActive && c.playerHitId > r.lastPlayerHit) playSound("hurt");
@@ -367,29 +367,41 @@ function ParishMap({ snapshot, onClose }: { snapshot: ParishSnapshot; onClose: (
       </svg>
       <p>
         {snapshot.progress.fogCleared
-          ? "The fog has lifted. Take the beacon pathway down to the plain and the colosseum gate."
+          ? "The fog has lifted. Take the beacon pathway down to its tower and ride the lift to Grand Street and the colosseum gate."
           : snapshot.progress.cathedralFelled
             ? "Throw the switch behind the keeper's apse to lift the fog."
-            : !snapshot.progress.caches.includes("town-key")
-              ? "Climb the tiers through the prow gates. The third gate is barred; its key lies in a house on the second tier."
-              : snapshot.progress.checkpoint === "refuge"
-                ? "Climb the remaining tiers to the citadel and rest at the Oblivion Chapel."
-                : "Take the outside path along the cathedral's east side to its galleries."}
+            : snapshot.progress.checkpoint === "refuge"
+              ? "Cross a bridge to the town, go under its street and through the Mountain Tunnel to Up Town, then climb the blade to the plaza and rest at the Oblivion Chapel."
+              : "Take the outside path along the cathedral's east side to its galleries."}
         <br />
         Great gate: {snapshot.progress.refuge ? "open" : "barred"} · Cathedral return:{" "}
-        {snapshot.progress.court ? "open" : "barred within"} · Beacon lift:{" "}
-        {snapshot.progress.beaconLift ? "released" : "locked below"} · Arena lift:{" "}
-        {snapshot.progress.arenaLift ? "released" : "locked below"}
+        {snapshot.progress.court ? "open" : "barred within"} · Garden door:{" "}
+        {snapshot.progress.garden ? "open" : "barred above"} · Beacon lift:{" "}
+        {snapshot.progress.beaconLift
+          ? "released"
+          : snapshot.progress.fogCleared
+            ? "waiting at the tower"
+            : "held by fog"}{" "}
+        · Arena lift: {snapshot.progress.arenaLift ? "released" : "locked below"}
       </p>
     </div>
   );
 }
 
-function RealmRun({ progress }: { progress: MutableRefObject<ParishProgress> }) {
+function RealmRun({
+  progress,
+  initialEmbers,
+}: {
+  progress: MutableRefObject<ParishProgress>;
+  initialEmbers: number;
+}) {
   const { paused, freeCamera, settings } = useGame();
   const navigate = useNavigate();
   const { state: locationState } = useLocation();
-  const state = useEcsRef("parish", () => createParishEncounter(progress.current, capitalWorld));
+  const state = useEcsRef("parish", () => ({
+    ...createParishEncounter(progress.current, capitalWorld),
+    embers: initialEmbers,
+  }));
   const run = state.current;
   const combat = useEcsRef("combat", () => run.combat);
   const teleport = useEcsRef<ParishPoint | null>("teleport", () => null);
@@ -423,6 +435,22 @@ function RealmRun({ progress }: { progress: MutableRefObject<ParishProgress> }) 
   };
   const retryLater = useRef(retry);
   retryLater.current = retry;
+  useEffect(() => {
+    const save = () => writeParishSave(progress.current, state.current.embers);
+    const newRun = () => {
+      Object.assign(progress.current, newParishProgress());
+      state.current.embers = 0;
+      retryLater.current();
+      save();
+    };
+    window.addEventListener("pagehide", save);
+    window.addEventListener("parish-new-run", newRun);
+    return () => {
+      save();
+      window.removeEventListener("pagehide", save);
+      window.removeEventListener("parish-new-run", newRun);
+    };
+  }, [progress, state]);
   useEffect(() => {
     if (!over) return;
     const id = schedule(() => setResultOpen(true), died ? DEATH_SHOW_MS : 3400);
@@ -534,6 +562,7 @@ function RealmRun({ progress }: { progress: MutableRefObject<ParishProgress> }) 
                 snapshot.felled,
                 snapshot.progress.refuge,
                 snapshot.progress.court,
+                snapshot.progress.garden,
                 snapshot.progress.cathedralFelled,
                 snapshot.progress.fogCleared,
                 snapshot.progress.beaconLift,
@@ -708,42 +737,8 @@ function RealmRun({ progress }: { progress: MutableRefObject<ParishProgress> }) 
   );
 }
 
-function VitalBar({
-  label,
-  value,
-  max,
-  stamina = false,
-  boss = false,
-}: {
-  label: string;
-  value: number;
-  max: number;
-  stamina?: boolean;
-  boss?: boolean;
-}) {
-  const bounded = Math.max(0, Math.min(max, value));
-  const [lagging, setLagging] = useState(bounded);
-  useEffect(() => {
-    const timer = window.setTimeout(() => setLagging(bounded), 650);
-    return () => window.clearTimeout(timer);
-  }, [bounded]);
-  const trail = Math.max(lagging, bounded);
-  return (
-    <div
-      className={`vital-bar${stamina ? " is-stamina" : ""}${boss ? " is-boss" : ""}`}
-      role="meter"
-      aria-label={label}
-      aria-valuemin={0}
-      aria-valuemax={max}
-      aria-valuenow={Math.round(bounded)}
-    >
-      {!stamina && <span className="vital-trail" style={{ transform: `scaleX(${trail / max})` }} />}
-      <span className="vital-fill" style={{ transform: `scaleX(${bounded / max})` }} />
-    </div>
-  );
-}
-
 export default function RealmLevel() {
-  const progress = useEcsRef("parish-progress", newParishProgress);
-  return <RealmRun progress={progress} />;
+  const saved = useEcsRef("parish-save", readParishSave);
+  const progress = useEcsRef("parish-progress", () => saved.current.progress);
+  return <RealmRun progress={progress} initialEmbers={saved.current.embers} />;
 }

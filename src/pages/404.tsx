@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link } from "../hooks/useRoute";
 
 export default function Custom404() {
   return (

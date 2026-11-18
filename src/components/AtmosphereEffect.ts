@@ -123,10 +123,10 @@ export class AtmosphereEffect extends Effect {
   private readonly lightDirection = new THREE.Vector3();
   private readonly lightTarget = new THREE.Vector3();
 
-  constructor(
-    private readonly camera: THREE.Camera,
-    private readonly scene: THREE.Scene,
-  ) {
+  private readonly camera: THREE.Camera;
+  private readonly scene: THREE.Scene;
+
+  constructor(camera: THREE.Camera, scene: THREE.Scene) {
     super("AtmosphereEffect", fragmentShader, {
       blendFunction: BlendFunction.NORMAL,
       attributes: EffectAttribute.DEPTH,
@@ -151,6 +151,8 @@ export class AtmosphereEffect extends Effect {
         ["uShadowMap", new THREE.Uniform<THREE.Texture | null>(null)],
       ]),
     });
+    this.camera = camera;
+    this.scene = scene;
   }
 
   override dispose() {

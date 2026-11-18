@@ -1,3 +1,20 @@
+import { chooseCombatAction, combatRoll } from "./combatWheel.ts";
+import {
+  houndAttacks,
+  houndRakeContains,
+  selectHoundAttack,
+  type HoundAttack,
+} from "./houndAttacks.ts";
+import { enemyAttackSpec } from "./enemyAttacks.ts";
+import {
+  kilnAttacks,
+  kilnSweepContains,
+  kilnSweepWindow,
+  kilnSlamImpact,
+  kilnSlamRadius,
+  selectKilnAttack,
+  type KilnAttack,
+} from "./kilnAttacks.ts";
 import { action, condition, selector, sequence, type BehaviorNode } from "./behaviorTree.ts";
 import { createEncounter, stepEncounter, type Encounter } from "./bossEncounter.ts";
 import { swordHitActive, swordSpec } from "./characterAnimations.ts";
@@ -61,10 +78,14 @@ export type ParishEnemy = {
   orbit: number;
   attackNumber: number;
   comboStep: number;
+  kilnAttack?: KilnAttack;
+  houndAttack?: HoundAttack;
   awareness: number;
   lastSeenX: number;
   lastSeenZ: number;
   surfaceId: string | null;
+  /** Clinger unfolds over time instead of snapping on aggro or attack transitions. */
+  folded: number;
 };
 export type EmberBolt = {
   id: number;
@@ -104,7 +125,7 @@ export function createParishEncounter(progress: ParishProgress, world: ParishWor
     combat,
     world,
     activeBoss: null as "cathedral" | "colosseum" | null,
-    enemies: createEnemies(world),
+    enemies: world?.campaign && progress.finalFelled ? [] : createEnemies(world),
     bolts: [] as EmberBolt[],
     boltId: 0,
     enemyHitId: 0,
@@ -122,12 +143,13 @@ export function resetParishEncounter(state: ParishEncounter, progress: ParishPro
   const fresh = createParishEncounter(progress, state.world);
   const combat = state.combat;
   Object.assign(combat, fresh.combat);
-  return Object.assign(state, fresh, { combat });
+  return Object.assign(state, fresh, { combat, embers: state.embers });
 }
 function createEnemies(world: ParishWorld | null = null): ParishEnemy[] {
   return (world?.spawns ?? parishEnemySpawns).map(({ id, kind, position: [x, y, z] }, index) => ({
     id,
     kind,
+    folded: kind === "clinger" ? 1 : 0,
     x,
     y,
     z,
@@ -255,14 +277,15 @@ function damagePlayer(
   x: number,
   z: number,
   parryable = false,
+  knockback = 4,
 ): BlowOutcome | null {
   if (combat.hurtTime > 0 || combat.health <= 0) return null;
-  return receiveBlow(combat, { damage, x, z, knockback: 4, parryable });
+  return receiveBlow(combat, { damage, x, z, knockback, parryable });
 }
 /** Health damage and poise are independent: a flinch must not cancel every action. */
 export function hitParishEnemy(state: ParishEncounter, enemy: ParishEnemy, step = 0) {
   if (enemy.health <= 0) return;
-  const spec = enemySpecs[enemy.kind];
+  const spec = enemyAttackSpec(enemy);
   const dx = state.combat.playerX - enemy.x,
     dz = state.combat.playerZ - enemy.z;
   const front =
@@ -331,8 +354,10 @@ function canCommit(state: ParishEncounter, enemy: ParishEnemy) {
     return (ax * bx + az * bz) / Math.max(0.01, Math.hypot(ax, az) * Math.hypot(bx, bz)) < 0.35;
   });
 }
-export function parishWindupDuration(enemy: Pick<ParishEnemy, "kind" | "comboStep">) {
-  const spec = enemySpecs[enemy.kind];
+export function parishWindupDuration(
+  enemy: Pick<ParishEnemy, "kind" | "comboStep" | "kilnAttack" | "houndAttack">,
+) {
+  const spec = enemyAttackSpec(enemy);
   return enemy.comboStep > 0 ? spec.followupWindup : spec.windup;
 }
 function beginAttack(enemy: ParishEnemy, followup = false) {
@@ -528,11 +553,37 @@ const attackWhenReady = (range: number | ((context: EnemyBehaviorContext) => num
       return (
         distance <= (typeof range === "number" ? range : range(context)) &&
         e.timer > spec.decisionDelay &&
-        frontalToPlayer(e, c) > 0.65 &&
+        frontalToPlayer(e, c) > (e.kind === "kiln" ? 0.1 : e.kind === "hound" ? 0.25 : 0.65) &&
         canCommit(state, e)
       );
     },
-    enemyTask("Begin windup", ({ e }) => beginAttack(e)),
+    enemyTask("Begin windup", (context) => {
+      const { e, distance, c } = context;
+      if (e.kind === "kiln") {
+        const selected = selectKilnAttack(
+          distance,
+          frontalToPlayer(e, c),
+          e.kilnAttack ?? "check",
+          e.attackNumber,
+        );
+        if (distance > kilnAttacks[selected].range) {
+          e.phase = "pursue";
+          moveEnemyTo(context, c.playerX, c.playerZ, enemySpecs.kiln.speed);
+          return;
+        }
+        e.kilnAttack = selected;
+      }
+      if (e.kind === "hound") {
+        const selected = selectHoundAttack(distance, frontalToPlayer(e, c), e.houndAttack);
+        if (distance > houndAttacks[selected].range) {
+          e.phase = "pursue";
+          moveEnemyTo(context, c.playerX, c.playerZ, enemySpecs.hound.speed * 0.55);
+          return;
+        }
+        e.houndAttack = selected;
+      }
+      beginAttack(e);
+    }),
   );
 
 const acolyteTree = selector(
@@ -560,7 +611,7 @@ const acolyteTree = selector(
   }),
 );
 
-function meleeTree(kind: "sentinel" | "hound") {
+function meleeTree(kind: Exclude<EnemyKind, "acolyte">) {
   return selector(
     `${kind} tactics`,
     enemyBranch(
@@ -580,7 +631,47 @@ function meleeTree(kind: "sentinel" | "hound") {
       }),
       selector(
         "Attack or reposition",
-        attackWhenReady(({ spec }) => (kind === "hound" ? 2.9 : spec.range)),
+        enemyBranch(
+          "Combat wheel positioning",
+          ({ e, distance, spec }) =>
+            e.timer > spec.decisionDelay &&
+            e.timer < spec.decisionDelay + 0.3 &&
+            chooseCombatAction(
+              distance,
+              spec.range,
+              e.attackNumber,
+              combatRoll(e.id, e.attackNumber),
+            ) !== "attack",
+          enemyTask("Hold a short tactical goal", (context) => {
+            const { e, c, spec, distance } = context;
+            const choice = chooseCombatAction(
+              distance,
+              spec.range,
+              e.attackNumber,
+              combatRoll(e.id, e.attackNumber),
+            );
+            if (choice === "retreat") {
+              e.phase = "retreat";
+              const length = Math.max(0.1, distance);
+              moveEnemyTo(
+                context,
+                e.x + ((e.x - c.playerX) / length) * 2,
+                e.z + ((e.z - c.playerZ) / length) * 2,
+                spec.speed * 0.55,
+              );
+            } else {
+              e.phase = kind === "sentinel" ? "guard" : "circle";
+              const angle = Math.atan2(e.x - c.playerX, e.z - c.playerZ) + e.orbit * 0.35;
+              moveEnemyTo(
+                context,
+                c.playerX + Math.sin(angle) * distance,
+                c.playerZ + Math.cos(angle) * distance,
+                spec.speed * 0.4,
+              );
+            }
+          }),
+        ),
+        attackWhenReady(({ spec }) => (kind === "clinger" ? 2.9 : spec.range)),
         enemyBranch(
           "Step into sword range",
           ({ distance, spec }) => kind === "sentinel" && distance > spec.range,
@@ -597,7 +688,7 @@ function meleeTree(kind: "sentinel" | "hound") {
             context,
             c.playerX + Math.sin(angle) * spacing,
             c.playerZ + Math.cos(angle) * spacing,
-            spec.speed * (kind === "hound" ? 0.7 : 0.4),
+            spec.speed * (kind === "hound" ? 0.38 : 0.4),
           );
         }),
       ),
@@ -609,6 +700,10 @@ const enemyTactics: Record<EnemyKind, BehaviorNode<EnemyBehaviorContext>> = {
   sentinel: meleeTree("sentinel"),
   hound: meleeTree("hound"),
   acolyte: acolyteTree,
+  kiln: meleeTree("kiln"),
+  clinger: meleeTree("clinger"),
+  widow: meleeTree("widow"),
+  bearer: meleeTree("bearer"),
 };
 
 /** Shared priorities; attack phases stay committed until complete or interrupted by a hit. */
@@ -640,8 +735,16 @@ const parishEnemyTree = selector(
       if (e.timer >= parishWindupDuration(e)) {
         e.phase = "strike";
         e.timer = 0;
-        e.targetX = e.x + Math.sin(e.yaw) * (e.kind === "hound" ? 3 : 1.2);
-        e.targetZ = e.z + Math.cos(e.yaw) * (e.kind === "hound" ? 3 : 1.2);
+        const travel =
+          e.kind === "hound"
+            ? houndAttacks[e.houndAttack ?? "pounce"].travel
+            : e.kind === "clinger"
+              ? 3
+              : e.kind === "kiln" && e.kilnAttack === "check"
+                ? 0.45
+                : 1.2;
+        e.targetX = e.x + Math.sin(e.yaw) * travel;
+        e.targetZ = e.z + Math.cos(e.yaw) * travel;
       }
     }),
   ),
@@ -649,44 +752,105 @@ const parishEnemyTree = selector(
     "Strike",
     ({ e }) => e.phase === "strike",
     enemyTask("Resolve attack", ({ state, e, c, dt, progress, spec, distance, visible }) => {
-      if (e.kind !== "acolyte" && (e.kind === "hound" || distance > 1.35))
+      if (
+        e.kind !== "acolyte" &&
+        e.kind !== "widow" &&
+        (e.kind === "hound" ||
+          e.kind === "clinger" ||
+          (e.kind === "kiln" && e.kilnAttack === "check") ||
+          distance > 1.35)
+      )
         move(e, e.targetX, e.targetZ, spec.strikeSpeed, dt, progress, state.enemies, state.world);
-      if (!e.hit && e.timer >= spec.contact) {
-        e.hit = true;
+      const sweep = e.kind === "kiln" && e.kilnAttack === "sweep";
+      const rake = e.kind === "hound" && e.houndAttack === "rake";
+      const slam = e.kind === "kiln" && e.kilnAttack === "slam";
+      const activeStart = sweep ? kilnSweepWindow.start : rake ? 0.075 : spec.contact;
+      if (!e.hit && e.timer >= activeStart) {
+        if (!sweep && !slam && !rake) e.hit = true;
         if (e.kind === "acolyte") {
           state.bolts.push({
             id: ++state.boltId,
             x: e.x,
-            y: e.y + 1.1,
+            y: e.y + 1.4,
             z: e.z,
             vx: Math.sin(e.yaw) * 12,
             vz: Math.cos(e.yaw) * 12,
             life: 2.5,
           });
         } else {
-          const dx = c.playerX - e.x,
-            dz = c.playerZ - e.z,
+          const originX = e.x + (slam ? Math.sin(e.yaw) * kilnSlamImpact.forward : 0);
+          const originZ = e.z + (slam ? Math.cos(e.yaw) * kilnSlamImpact.forward : 0);
+          const dx = c.playerX - originX,
+            dz = c.playerZ - originZ,
             reach = Math.hypot(dx, dz);
           const frontal = (dx * Math.sin(e.yaw) + dz * Math.cos(e.yaw)) / Math.max(0.01, reach);
+          const angle = Math.atan2(
+            Math.sin(Math.atan2(dx, dz) - e.yaw),
+            Math.cos(Math.atan2(dx, dz) - e.yaw),
+          );
+          const elapsed = e.timer - spec.contact;
+          const radialContact =
+            !slam ||
+            (elapsed <= kilnSlamImpact.duration + dt &&
+              reach <= kilnSlamRadius(elapsed) + 0.3 &&
+              reach >= Math.max(0, kilnSlamRadius(elapsed - dt) - 0.3));
+          const inShape = slam
+            ? radialContact
+            : sweep
+              ? kilnSweepContains(angle, e.timer, dt)
+              : rake
+                ? houndRakeContains(angle, e.timer, dt)
+                : e.kind === "widow" ||
+                  frontal >
+                    (e.kind === "kiln"
+                      ? kilnAttacks[e.kilnAttack ?? "clamp"].frontal
+                      : e.kind === "hound"
+                        ? houndAttacks[e.houndAttack ?? "pounce"].frontal
+                        : e.kind === "bearer"
+                          ? 0.65
+                          : 0.25);
           if (
             visible &&
-            reach < spec.reach &&
-            frontal > 0.25 &&
-            parishLineClear(e.x, e.z, c.playerX, c.playerZ, progress, e.y, state.world)
+            reach < (slam ? kilnSlamImpact.radius + 0.3 : spec.reach) &&
+            inShape &&
+            parishLineClear(e.x, e.z, originX, originZ, progress, e.y, state.world) &&
+            parishLineClear(originX, originZ, c.playerX, c.playerZ, progress, e.y, state.world)
           ) {
-            // A parried enemy reels open: the next blow on it is a riposte.
-            if (damagePlayer(c, spec.damage, e.x, e.z, true) === "parried") {
+            e.hit = true;
+            const result = damagePlayer(
+              c,
+              spec.damage,
+              originX,
+              originZ,
+              !slam && e.kind !== "widow" && e.kind !== "bearer",
+              e.kind === "kiln" && e.kilnAttack === "check" ? 7 : 4,
+            );
+            if (result === "parried") {
               e.phase = "stagger";
               e.timer = 0;
               e.staggerLockout = spec.stagger + spec.staggerProtection;
               e.riposte = RIPOSTE_TIME;
               c.hitStop = 0.12;
+              return;
             }
           }
         }
       }
       if (e.timer >= spec.strike) {
-        if (e.kind === "sentinel" && e.comboStep === 0 && visible && distance < spec.range + 1.2)
+        if (
+          (e.kind === "sentinel" ||
+            e.kind === "widow" ||
+            (e.kind === "hound" &&
+              e.houndAttack === "snap" &&
+              e.attackNumber % 3 !== 0 &&
+              distance < 1.5) ||
+            (e.kind === "kiln" &&
+              (e.kilnAttack ?? "clamp") === "clamp" &&
+              e.attackNumber % 3 === 1)) &&
+          e.comboStep === 0 &&
+          visible &&
+          distance < spec.range + 1.2
+        )
           beginAttack(e, true);
         else {
           e.phase = "recovery";
@@ -707,7 +871,8 @@ const parishEnemyTree = selector(
   ),
   enemyBranch(
     "Visible target",
-    ({ e, visible, distance }) => visible && distance < (e.phase === "idle" ? 11 : 16),
+    ({ e, visible, distance }) =>
+      visible && distance < (e.phase === "idle" ? (e.kind === "clinger" ? 5.5 : 11) : 16),
     action<EnemyBehaviorContext>("Face target", ({ e, c, dt }) => {
       face(e, c.playerX, c.playerZ, dt);
       return "success";
@@ -756,14 +921,16 @@ export function stepParishEnemy(
       c,
       dt,
       progress,
-      spec: enemySpecs[e.kind],
+      spec: enemyAttackSpec(e),
       distance: 0,
       visible: false,
     });
     return;
   }
   e.timer += dt;
-  const spec = enemySpecs[e.kind];
+  const spec = ["windup", "strike", "recovery"].includes(e.phase)
+    ? enemyAttackSpec(e)
+    : enemySpecs[e.kind];
   if (e.poiseDelay === 0) e.poise = Math.min(spec.poise, e.poise + dt * spec.poise);
   const distance = Math.hypot(c.playerX - e.x, c.playerZ - e.z);
   const leash = Math.hypot(c.playerX - e.homeX, c.playerZ - e.homeZ);
@@ -773,6 +940,10 @@ export function stepParishEnemy(
     leash < 14 &&
     distance < 16 &&
     parishLineClear(e.x, e.z, c.playerX, c.playerZ, progress, e.y, state.world);
+  if (e.kind === "clinger") {
+    const target = e.phase !== "idle" || (visible && distance < 5.5) ? 0 : 1;
+    e.folded += Math.max(-dt / 0.75, Math.min(dt / 0.75, target - e.folded));
+  }
   if (visible && distance < 16) {
     e.awareness = 2;
     e.lastSeenX = c.playerX;

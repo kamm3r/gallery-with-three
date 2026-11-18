@@ -15,6 +15,7 @@ export type SoundEffect =
   | "portal"
   | "roll"
   | "grab"
+  | "houndBite"
   | "ui"
   // Gallery puzzle cues.
   | "press"
@@ -64,7 +65,8 @@ export type SoundEffect =
   | "mask"
   | "crystal"
   | "gem"
-  | "whoa";
+  | "whoa"
+  | "graveBell";
 
 export type SoundMood = "meadow" | "grove" | "still" | "ash" | "museum";
 
@@ -110,6 +112,7 @@ let zoneLayer: { gain: GainNode; stop: () => void } | undefined;
 const lastPlay = new Map<SoundEffect, number>();
 
 const MIN_GAP: Partial<Record<SoundEffect, number>> = {
+  graveBell: 0.35,
   spin: 0.2,
   crate: 0.03,
   fruit: 0.03,
@@ -505,6 +508,34 @@ export function playSound(effect: SoundEffect, options: SoundOptions = {}) {
   const intensity = Math.max(0, Math.min(1, options.intensity ?? 1));
   const placed = options.pan === undefined ? undefined : Math.max(-1, Math.min(1, options.pan));
   switch (effect) {
+    case "graveBell": {
+      // Inharmonic bronze partials make the Widow's second strike recognizable.
+      for (const [ratio, gain, duration] of [
+        [1, 0.15, 1.7],
+        [2.76, 0.07, 1.3],
+        [5.4, 0.035, 0.8],
+      ]) {
+        tone({
+          type: "sine",
+          frequency: 146 * ratio,
+          duration,
+          attack: 0.004,
+          peak: gain * intensity,
+          pan: placed,
+          wet: 0.65,
+        });
+      }
+      burst({
+        duration: 0.035,
+        type: "bandpass",
+        frequency: 1800,
+        peak: 0.09 * intensity,
+        pan: placed,
+        wet: 0.4,
+      });
+      break;
+    }
+
     case "step": {
       if (surface === "stone") {
         // Hard floor: a crisp heel click with a little room echo.
@@ -648,6 +679,20 @@ export function playSound(effect: SoundEffect, options: SoundOptions = {}) {
         frequency: 400,
         peak: 0.08,
         delay: 0.22,
+      });
+      break;
+    }
+    case "houndBite": {
+      // A throaty snap beneath the short rattle of the iron muzzle.
+      tone({ type: "triangle", frequency: 125, frequencyEnd: 55, duration: 0.16, peak: 0.13 });
+      burst({ duration: 0.12, type: "bandpass", frequency: 850, peak: 0.12 });
+      tone({
+        type: "square",
+        frequency: 340,
+        frequencyEnd: 210,
+        duration: 0.065,
+        peak: 0.025,
+        delay: 0.015,
       });
       break;
     }
@@ -1524,7 +1569,6 @@ function addSway(
 
 /** Schedules `callback` on a loose loop with a random delay between runs. */
 function every(
-  active: Graph,
   minSeconds: number,
   maxSeconds: number,
   callback: () => void,
@@ -1628,7 +1672,6 @@ function meadowBed(active: Graph): () => void {
   disposables.push(leaves.source, leaves.filter, leaves.gain);
   addSway(active, leaves.gain.gain, 0.11, 0.005, disposables);
   every(
-    active,
     2,
     7,
     () => chirp(active, rand(2200, 3400), rand(-0.7, 0.7), 2 + Math.floor(Math.random() * 3), 0.03),
@@ -1668,9 +1711,8 @@ function groveBed(active: Graph): () => void {
   disposables.push(droneFilter, droneGain);
   addSway(active, droneGain.gain, 0.05, 0.012, disposables);
   addSway(active, droneFilter.frequency, 0.03, 160, disposables);
-  every(active, 1.5, 4.5, () => Math.random() < 0.8 && cricketTrain(active), disposables);
+  every(1.5, 4.5, () => Math.random() < 0.8 && cricketTrain(active), disposables);
   every(
-    active,
     18,
     40,
     () => {
@@ -1695,7 +1737,6 @@ function groveBed(active: Graph): () => void {
     disposables,
   );
   every(
-    active,
     6,
     14,
     () => {
@@ -1728,7 +1769,6 @@ function groveBed(active: Graph): () => void {
     disposables,
   );
   every(
-    active,
     14,
     30,
     () => {
@@ -1751,9 +1791,9 @@ function groveBed(active: Graph): () => void {
     },
     disposables,
   );
-  every(active, 26, 55, () => wolfHowl(active), disposables);
-  every(active, 40, 80, () => musicBox(active), disposables);
-  every(active, 16, 34, () => playSound("whisper", { intensity: 0.3 }), disposables);
+  every(26, 55, () => wolfHowl(active), disposables);
+  every(40, 80, () => musicBox(active), disposables);
+  every(16, 34, () => playSound("whisper", { intensity: 0.3 }), disposables);
   return () => stopNodes(disposables);
 }
 
@@ -1858,7 +1898,6 @@ function ashBed(active: Graph): () => void {
   disposables.push(first, second, filter, droneGain);
   addSway(active, droneGain.gain, 0.08, 0.015, disposables);
   every(
-    active,
     0.3,
     1.6,
     () => {
@@ -2018,7 +2057,6 @@ function museumBed(active: Graph): () => void {
   addSway(active, air.gain.gain, 0.04, 0.008, disposables);
   pad(active, active.ambience, [58, 116.5], 0.006, disposables);
   every(
-    active,
     7,
     16,
     () =>
@@ -2043,7 +2081,6 @@ function zoneBed(active: Graph, which: SoundZone, out: GainNode): AudioNode[] {
       // A slow clock somewhere in the stacks and the odd turning page.
       let tock = false;
       every(
-        active,
         1,
         1,
         () => {
@@ -2060,7 +2097,6 @@ function zoneBed(active: Graph, which: SoundZone, out: GainNode): AudioNode[] {
         disposables,
       );
       every(
-        active,
         5,
         12,
         () =>
@@ -2079,7 +2115,6 @@ function zoneBed(active: Graph, which: SoundZone, out: GainNode): AudioNode[] {
       // Cold glass: a thin open-fifth drone and high shimmering pings.
       pad(active, out, [220, 330.5], 0.008, disposables);
       every(
-        active,
         1.5,
         4,
         () =>
@@ -2102,7 +2137,6 @@ function zoneBed(active: Graph, which: SoundZone, out: GainNode): AudioNode[] {
       disposables.push(wind.source, wind.filter, wind.gain);
       addSway(active, wind.gain.gain, 0.08, 0.015, disposables);
       every(
-        active,
         2,
         6,
         () =>
@@ -2116,7 +2150,6 @@ function zoneBed(active: Graph, which: SoundZone, out: GainNode): AudioNode[] {
         disposables,
       );
       every(
-        active,
         0.8,
         2.5,
         () =>
@@ -2135,7 +2168,6 @@ function zoneBed(active: Graph, which: SoundZone, out: GainNode): AudioNode[] {
       // Embers: a low throat of a drone, constant crackle, deep settling booms.
       pad(active, out, [55, 82.5], 0.03, disposables);
       every(
-        active,
         0.15,
         0.9,
         () =>
@@ -2149,7 +2181,6 @@ function zoneBed(active: Graph, which: SoundZone, out: GainNode): AudioNode[] {
         disposables,
       );
       every(
-        active,
         8,
         18,
         () =>
@@ -2168,7 +2199,6 @@ function zoneBed(active: Graph, which: SoundZone, out: GainNode): AudioNode[] {
       // Celestial: a suspended chord and slow twinkles high in the dome.
       pad(active, out, [196, 293.7, 392, 587.3], 0.006, disposables);
       every(
-        active,
         0.8,
         2.4,
         () =>

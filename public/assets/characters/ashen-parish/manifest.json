@@ -1,0 +1,40 @@
+{
+  "generator": "scripts/buildAshenCharacter.py",
+  "source": "ashen-parish-modular-v2.blend",
+  "revision": 2,
+  "units": "metres",
+  "forward": "-Y",
+  "atlas": "ashen-atlas.png",
+  "atlas_size": [512, 512],
+  "animation_status": "Shared original rig and breathing preview. Combat/locomotion retargeting not yet done.",
+  "variants": [
+    {
+      "id": "cathedral-pilgrim",
+      "glb": "cathedral-pilgrim.glb",
+      "triangles_before_edge_modifiers": 6519,
+      "mesh_parts": 142,
+      "bones": 22
+    },
+    {
+      "id": "grave-keeper",
+      "glb": "grave-keeper.glb",
+      "triangles_before_edge_modifiers": 7213,
+      "mesh_parts": 222,
+      "bones": 22
+    },
+    {
+      "id": "penitent-hammer",
+      "glb": "penitent-hammer.glb",
+      "triangles_before_edge_modifiers": 7562,
+      "mesh_parts": 226,
+      "bones": 22
+    },
+    {
+      "id": "penitent-greatsword",
+      "glb": "penitent-greatsword.glb",
+      "triangles_before_edge_modifiers": 7603,
+      "mesh_parts": 226,
+      "bones": 22
+    }
+  ]
+}

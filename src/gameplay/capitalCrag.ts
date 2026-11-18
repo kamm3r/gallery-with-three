@@ -1,6 +1,11 @@
 import * as THREE from "three";
-import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import type { ParishPoint } from "./ashenParish.ts";
+import { GROUND } from "./capitalDistricts.ts";
+
+/** Rock below this is hidden under the plain. */
+const GROUND_ROCK = GROUND - 2;
+/** The plain's level: just below the ground the walls and piers stand on. */
+const PLAIN = GROUND - 0.05;
 
 const CELL = 2;
 const EXTENT = 200;
@@ -20,8 +25,13 @@ export function capitalCeiling(
   polygons: Array<{ vertices: ParishPoint[] }>,
   sideMargin = 5,
   deepBelow = -Infinity,
+  /** Enclosed routes inside the mountain: rock may surround them, never cut through them. */
+  buriedPolygons: Array<{ vertices: ParishPoint[] }> = [],
 ) {
   const raw = new Float32Array(SIZE * SIZE).fill(Infinity);
+  const rawBuried = new Float32Array(SIZE * SIZE).fill(Infinity);
+  const rawBuriedTop = new Float32Array(SIZE * SIZE).fill(-Infinity);
+  let only: Float32Array | null = null;
   const rawDeep = new Float32Array(SIZE * SIZE).fill(Infinity);
   const rawLow = new Float32Array(SIZE * SIZE).fill(Infinity);
   let below = rawDeep;
@@ -30,7 +40,8 @@ export function capitalCeiling(
       cz = Math.floor((z + EXTENT) / CELL);
     if (cx < 0 || cz < 0 || cx >= SIZE || cz >= SIZE) return;
     const i = cz * SIZE + cx,
-      grid = y < deepBelow ? below : raw;
+      grid = only ?? (y < deepBelow ? below : raw);
+    if (only && y > rawBuriedTop[i]) rawBuriedTop[i] = y;
     if (y < grid[i]) grid[i] = y;
   };
   const a = new THREE.Vector3(),
@@ -86,6 +97,15 @@ export function capitalCeiling(
       c.set(...vertices[i + 1]);
       triangle();
     }
+  only = rawBuried;
+  for (const { vertices } of buriedPolygons)
+    for (let i = 1; i + 1 < vertices.length; i++) {
+      a.set(...vertices[0]);
+      b.set(...vertices[i]);
+      c.set(...vertices[i + 1]);
+      triangle();
+    }
+  only = null;
   // Separable square minimum: a conservative stand-in for a disk.
   const reach = Math.ceil(sideMargin / CELL);
   const widen = (raw: Float32Array) => {
@@ -107,9 +127,17 @@ export function capitalCeiling(
       }
     return out;
   };
+  const widenMax = (grid: Float32Array) => {
+    const negated = grid.map((v) => -v);
+    return widen(negated).map((v) => -v);
+  };
   const ceiling = widen(raw),
     deep = widen(rawDeep),
-    low = widen(rawLow);
+    low = widen(rawLow),
+    // One side margin reaches into the enclosures' thick walls, so any slope between a
+    // lowered and a full-height column is hidden inside the masonry.
+    buried = widen(rawBuried),
+    buriedTop = widenMax(rawBuriedTop);
   /** Lowest architecture within `radius` of a column, beyond the side margin. */
   const lowest =
     (grid: Float32Array) =>
@@ -146,6 +174,14 @@ export function capitalCeiling(
   return Object.assign(lowest(ceiling), {
     deep: lowest(deep),
     low: lowest(low),
+    /** The lowest enclosed (buried) floor over a column. */
+    buried: lowest(buried),
+    /** The highest enclosed floor over a column (−∞ where there is none). */
+    buriedTop: (x: number, z: number) => {
+      const cx = Math.floor((x + EXTENT) / CELL),
+        cz = Math.floor((z + EXTENT) / CELL);
+      return cx < 0 || cz < 0 || cx >= SIZE || cz >= SIZE ? -Infinity : buriedTop[cz * SIZE + cx];
+    },
     clearance: (rise: (d: number) => number, radius: number) => ({
       high: clearance(ceiling, rise, radius),
       low: clearance(low, rise, radius),
@@ -193,6 +229,9 @@ function heightfield(
   step: number,
   height: (x: number, z: number) => number,
   floor: number,
+  softenPeaks = 0,
+  /** A final per-vertex adjustment applied after softening. */
+  post?: (x: number, z: number, y: number) => number,
 ) {
   const nx = Math.round((x1 - x0) / step) + 1,
     nz = Math.round((z1 - z0) / step) + 1;
@@ -206,6 +245,23 @@ function heightfield(
       positions[k + 1] = height(x, z);
       positions[k + 2] = z;
     }
+  // Round narrow peaks created by intersecting clearance cuts. This filter only
+  // lowers vertices, so smoothing cannot put rock back into a cleared walkway.
+  for (let pass = 0; pass < softenPeaks; pass++) {
+    const next = positions.slice();
+    for (let j = 1; j < nz - 1; j++)
+      for (let i = 1; i < nx - 1; i++) {
+        let sum = 0;
+        for (let dz = -1; dz <= 1; dz++)
+          for (let dx = -1; dx <= 1; dx++) sum += positions[((j + dz) * nx + i + dx) * 3 + 1];
+        const k = (j * nx + i) * 3 + 1;
+        next[k] = Math.min(positions[k], sum / 9);
+      }
+    positions.set(next);
+  }
+  if (post)
+    for (let k = 0; k < positions.length; k += 3)
+      positions[k + 1] = post(positions[k], positions[k + 2], positions[k + 1]);
   const indices: number[] = [];
   const y = (i: number, j: number) => positions[(j * nx + i) * 3 + 1];
   for (let j = 0; j < nz - 1; j++)
@@ -225,42 +281,62 @@ function heightfield(
 }
 
 /**
- * The mountain the city is carved into: a massif that towers over the citadel from
- * behind, wraps the east end of every tier in a sheer cliff and falls to a lower western
- * shoulder, so the white tiers read as cut into its south-west face. Every vertex stays
- * two metres beneath the lowest reachable architecture within the ceiling's side margin,
- * then climbs steeply away from it, so cuts read as gorges and cliffs, not walls.
+ * The mountain the city is carved into: a broad, lumpy massif whose rounded crown rises
+ * only a little above the citadel, wrapping the back of the city and both ends of every
+ * tier, swelling forward into a great buttress east of the walls and falling to a lower
+ * western shoulder, so the white tiers read as cut into its south face. Every vertex
+ * stays two metres beneath the lowest reachable architecture within the ceiling's side
+ * margin, then climbs steeply away from it, so cuts read as gorges and cliffs, not walls.
  */
 export function buildCapitalMountain(ceiling: CapitalCeiling) {
-  const bump = (x: number, z: number, cx: number, cz: number, sx: number, sz: number) =>
-    Math.exp(-((x - cx) ** 2 / (2 * sx * sx) + (z - cz) ** 2 / (2 * sz * sz)));
+  /** A rounded dome: flat-topped, steepening towards its rim, zero beyond it. */
+  const dome = (x: number, z: number, cx: number, cz: number, rx: number, rz: number) => {
+    const t = ((x - cx) / rx) ** 2 + ((z - cz) / rz) ** 2;
+    return t >= 1 ? 0 : (1 - t ** 1.6) ** 0.6;
+  };
   // Allowed rise above nearby architecture: gentle beside walks, then cliff-steep.
-  const rise = (d: number) =>
-    d <= 8 ? 1.7 * d : d <= 14 ? 13.6 + 2.4 * (d - 8) : 28 + 2.8 * (d - 14);
-  const reach = 32,
+  const rise = (d: number) => (d <= 6 ? 2 * d : d <= 12 ? 12 + 4 * (d - 6) : 36 + 6 * (d - 12));
+  const reach = 28,
     open = ceiling.clearance(rise, reach),
     walks = ceiling.clearance(rise, 8);
-  const g = heightfield(
-    -200,
-    240,
-    -260,
-    130,
-    2,
-    (x, z) => {
-      const massif =
-        128 * bump(x, z, 55, -95, 95, 80) +
-        // The summit, right behind the white tower.
-        45 * bump(x, z, 62, -70, 32, 30) +
-        34 * bump(x, z, -70, -95, 55, 50) +
-        58 * bump(x, z, 150, -5, 48, 60) +
-        40 * bump(x, z, 10, -190, 120, 50) -
-        34 -
-        // The south-west stays open: the face sweeps forward only on the east.
-        1.3 * Math.max(0, z + 25 - Math.max(0, x) * 0.95);
-      const ridges = 1 - Math.abs(fbm(x / 34, z / 34, 4) * 2 - 1);
-      const detail = fbm(x / 9 + 40, z / 9, 3);
-      let h = massif + 22 * (ridges - 0.5) + 7 * (detail - 0.5);
-      if (h <= -29.9) return -30;
+  /** Above an enclosed route rock clears its vault, or else stays under its floor. */
+  const BURIED_VAULT = 6.5;
+  const enclose = (x: number, z: number, h: number) => {
+    const floor = ceiling.buried(x, z),
+      top = ceiling.buriedTop(x, z);
+    if (floor === Infinity || h <= floor - 2 || h >= top + BURIED_VAULT) return h;
+    // A tall stack (the return stair tower) stands in its own rock shell: the mountain
+    // stays under its lowest floor across the whole footprint. A single-level tunnel is
+    // roofed over instead. Mixing the two would slope rock through the interior.
+    const over = top + BURIED_VAULT;
+    return top - floor < 10 && over <= ceiling(x, z) - 2 ? over : floor - 2;
+  };
+  const g = heightfield(-150, 150, -140, 160, 2, massifHeight, GROUND_ROCK + 0.1, 3, enclose);
+  function massifHeight(x: number, z: number) {
+    {
+      // The sky city's rock: a central mountain under the plaza, a broad island under the
+      // cathedral, garden and beacon arc, and a lower shelf beneath Up Town. Wall, bridges
+      // and town stand clear of it on their own masonry, as in the reference's whitebox.
+      const core = 34 * dome(x, z, 0, 2, 34, 34);
+      const island = 42 * dome(x, z, 6, 74, 104, 62) + 10 * dome(x, z, 70, 58, 46, 52);
+      const shelf = 18 * dome(x, z, -60, -30, 46, 52);
+      const massif = Math.max(core, island, shelf) - 12;
+      const warpX = 9 * (noise(x / 35 + 3, z / 35 - 5) - 0.5),
+        warpZ = 9 * (noise(x / 35 - 11, z / 35 + 7) - 0.5),
+        u = x + warpX,
+        v = z + warpZ;
+      const bulges = noise(u / 18 + 3, v / 22 - 5),
+        ridges = 1 - Math.abs(noise(u / 9 - 7, v / 13 + 3) * 2 - 1),
+        detail = fbm(u / 5 + 40, v / 5, 3),
+        relief = 24 * (bulges - 0.5) + 22 * (ridges * ridges - 0.4) + 8 * (detail - 0.5);
+      let h = massif + Math.min(1, Math.max(0, (massif + 12) / 24)) * relief;
+      // Strata: each 9 m band of rock steps back at its top, so faces read as layered
+      // cliffs with ledges. This only lowers rock, so clearances below stay intact.
+      if (h > 0) {
+        const band = (h + 3) / 9 - Math.floor((h + 3) / 9);
+        h -= 3.4 * Math.max(0, (band - 0.62) / 0.38) ** 2 * Math.min(1, h / 20);
+      }
+      if (h <= GROUND_ROCK + 0.1) return GROUND_ROCK;
       // Deep architecture only holds rock off itself, like a shaft cut in the cliff;
       // low walks keep a narrow clearing before it closes in.
       h = Math.min(h, ceiling.deep(x, z) - 2);
@@ -268,12 +344,13 @@ export function buildCapitalMountain(ceiling: CapitalCeiling) {
       // Anything clear of all architecture within the reach skips the cone search.
       if (h <= ceiling(x, z, reach) - 2) return h;
       // Ridged noise only ever carves the cut faces down, so they break into crags.
-      const crag = 1 - Math.abs(fbm(x / 13 - 7, z / 13 + 3, 3) * 2 - 1);
-      h = Math.min(h, ceiling(x, z) - 2, open.high(x, z) - 2 - 14 * crag);
-      return Math.max(-30, h);
-    },
-    -29.9,
-  );
+      // Carry the same relief through the cut slopes. Only carving down keeps every
+      // crag inside the clearance envelope while breaking up the otherwise smooth cone.
+      const cleft = 26 * (1 - bulges) + 18 * (1 - ridges) ** 2;
+      h = Math.min(h, ceiling(x, z) - 2, open.high(x, z) - 2 - cleft);
+      return Math.max(GROUND_ROCK, h);
+    }
+  }
   // Large-scale colour the 4 m rock texture cannot carry: warm grey-brown stone with
   // ochre streaks running down the faces, darker in the clefts and paler on the heights.
   const position = g.getAttribute("position"),
@@ -319,14 +396,18 @@ export function buildCapitalPlain(
       const r = Math.hypot(x, z),
         t = Math.min(1, Math.max(0, (r - 200) / 160)),
         swell = (0.6 + 6 * t) * (fbm(x / 90, z / 90, 4) - 0.5) - 3 * t * t;
-      if (Math.abs(x) >= 200 || Math.abs(z) >= 200) return -0.5 + swell;
-      if (flush(x, z)) return Math.min(-0.03, ceiling(x, z) - 0.03);
+      if (Math.abs(x) >= 200 || Math.abs(z) >= 200) return PLAIN + swell;
+      // Flush ground meets the walk; only architecture standing in this very column
+      // (not the side margin) may press it lower, so the grass stays under the feet.
+      // The apron is walked on the ground itself, so it stays exactly underfoot. Walls,
+      // bastions and paving standing in it reach below and simply hide the ground there.
+      if (flush(x, z)) return GROUND + 0.47;
       const near = sunken(x, z)
         ? Math.min(ceiling(x, z), ceiling.deep(x, z), ceiling.low(x, z)) - 2
         : ceiling(x, z) - 0.5;
-      return Math.min(-0.5 + swell, near);
+      return Math.min(PLAIN + swell, near);
     },
-    -60,
+    PLAIN - 60,
   );
   // Farmland like the Pelennor's: a patchwork of fields radiating from the city, edged
   // by darker hedgerows, with the gate road running out south across them.
@@ -343,13 +424,9 @@ export function buildCapitalPlain(
         Math.min(v - Math.floor(v), Math.ceil(v) - v) * 40 * (r / 140),
       ),
       tone =
-        Math.abs(x) < 4.5 && z > 0
-          ? CAPITAL_ROAD
-          : edge < 2.4
-            ? CAPITAL_HEDGEROW
-            : CAPITAL_FIELDS[
-                Math.floor(hash(Math.floor(u), Math.floor(v)) * CAPITAL_FIELDS.length)
-              ],
+        edge < 2.4
+          ? CAPITAL_HEDGEROW
+          : CAPITAL_FIELDS[Math.floor(hash(Math.floor(u), Math.floor(v)) * CAPITAL_FIELDS.length)],
       shade = 0.9 + 0.2 * fbm(x / 9, z / 9, 2);
     for (let c = 0; c < 3; c++) colors[i * 3 + c] = tone[c] * shade;
   }
@@ -365,5 +442,4 @@ const CAPITAL_FIELDS = [
   [1.3, 1.08, 0.9],
   [1.0, 1.32, 0.76],
 ] as const;
-const CAPITAL_HEDGEROW = [0.62, 0.86, 0.5] as const,
-  CAPITAL_ROAD = [1.6, 1.55, 1.45] as const;
+const CAPITAL_HEDGEROW = [0.62, 0.86, 0.5] as const;

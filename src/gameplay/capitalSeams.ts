@@ -2,7 +2,12 @@ import * as THREE from "three";
 
 const EPSILON = 1e-5;
 const CELL = 8;
-type Vertex = { position: THREE.Vector3; normal: THREE.Vector3; uv: THREE.Vector2 };
+type Vertex = {
+  position: THREE.Vector3;
+  normal: THREE.Vector3;
+  uv: THREE.Vector2;
+  color: THREE.Vector3;
+};
 type Face = {
   points: THREE.Vector2[];
   normal: THREE.Vector3;
@@ -49,6 +54,7 @@ function subtract(polygon: Vertex[], face: Face, project: (v: THREE.Vector3) => 
           position: p.position.clone().lerp(q.position, t),
           normal: p.normal.clone().lerp(q.normal, t),
           uv: p.uv.clone().lerp(q.uv, t),
+          color: p.color.clone().lerp(q.color, t),
         };
         kept.push(intersection);
         cut.push(intersection);
@@ -76,6 +82,7 @@ export function sealCapitalSeams(meshes: THREE.Mesh[]) {
     const positions = source.getAttribute("position"),
       normals = source.getAttribute("normal"),
       uvs = source.getAttribute("uv");
+    const colors = source.getAttribute("color");
     const indices = source.index;
     const count = indices?.count ?? positions.count;
     const output: Vertex[] = [];
@@ -94,6 +101,9 @@ export function sealCapitalSeams(meshes: THREE.Mesh[]) {
             .fromBufferAttribute(normals, index)
             .applyMatrix3(normalMatrix),
           uv: new THREE.Vector2(uvs.getX(index), uvs.getY(index)),
+          color: colors
+            ? new THREE.Vector3().fromBufferAttribute(colors, index)
+            : new THREE.Vector3(1, 1, 1),
         };
       });
       const normal = vertices[1].position
@@ -192,6 +202,14 @@ export function sealCapitalSeams(meshes: THREE.Mesh[]) {
         2,
       ),
     );
+    if (colors)
+      geometry.setAttribute(
+        "color",
+        new THREE.Float32BufferAttribute(
+          output.flatMap((v) => v.color.toArray()),
+          3,
+        ),
+      );
     geometry.userData = { ...source.userData };
     mesh.geometry = geometry;
     geometries.push(geometry);

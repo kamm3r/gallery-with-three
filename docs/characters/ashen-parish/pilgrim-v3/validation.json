@@ -1,0 +1,16 @@
+{
+  "source_geometry": "PASS",
+  "packed_references": "PASS",
+  "normalized_skin_weights": "PASS",
+  "uv_bounds": "PASS",
+  "real_body_depth": "PASS",
+  "glb_round_trip": "PASS",
+  "basic_deformation_probes": "PASS",
+  "mesh_modules": 5,
+  "bones": 22,
+  "texture_images": 3,
+  "triangles": 7770,
+  "draw_primitives": 14,
+  "bytes": 4183324,
+  "scope": "Cathedral Pilgrim only. Surface transitions still need paint cleanup; no gameplay animations."
+}

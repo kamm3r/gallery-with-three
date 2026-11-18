@@ -22,7 +22,7 @@ import {
 import { useEcsRef } from "../hooks/useEcsRef";
 import { useReducedMotion } from "../hooks/useReducedMotion";
 import { sunlight } from "../gameplay/sunlight";
-import { useGame } from "../gameSettings";
+import { useGame } from "../hooks/useGame";
 
 function ParishLight({
   state,

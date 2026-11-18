@@ -1,0 +1,623 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Sacred Capital — gameplay enemy review</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: #292c2b;
+        color: #d2c9b7;
+        font:
+          14px Georgia,
+          serif;
+      }
+      header {
+        height: 96px;
+        padding: 24px 38px;
+        border-bottom: 1px solid #66635b;
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+      }
+      h1 {
+        font-size: 28px;
+        font-weight: 400;
+        margin: 0;
+        letter-spacing: 2px;
+      }
+      header span {
+        font-size: 13px;
+        letter-spacing: 2px;
+        color: #aaa696;
+      }
+      #views {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        height: 680px;
+      }
+      .card {
+        min-width: 0;
+        position: relative;
+        border-right: 1px solid #5e5d56;
+      }
+      .card canvas {
+        width: 100%;
+        height: 580px;
+        display: block;
+      }
+      .label {
+        padding: 15px 12px;
+        text-align: center;
+      }
+      h2 {
+        font-size: 16px;
+        font-weight: 400;
+        margin: 0 0 8px;
+        text-transform: uppercase;
+      }
+      .sub {
+        font: 11px monospace;
+        color: #a7aa9e;
+      }
+      .footer {
+        padding: 12px 38px;
+        letter-spacing: 1px;
+        color: #989c93;
+        font: 12px monospace;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>SACRED CAPITAL / ENEMIES</h1>
+      <span>ACTUAL GAME MESHES · SHARED GAMEPLAY POSES</span>
+    </header>
+    <main id="views"></main>
+    <div class="footer">PS2 MATERIAL ATLAS / ARTICULATED RIGS / LIVE THREE.JS RENDER</div>
+    <script type="module">
+      import * as THREE from "/node_modules/three/build/three.module.js";
+      import { createParishRig } from "/src/gameplay/parishModels.ts";
+      import { applyParishRigPose } from "/src/gameplay/parishRigPose.ts";
+      import { createParishEncounter, stepParishEncounter } from "/src/gameplay/parishEncounter.ts";
+      import { houndAttacks } from "/src/gameplay/houndAttacks.ts";
+      import { kilnAttacks } from "/src/gameplay/kilnAttacks.ts";
+      import { enemyAttackSpec } from "/src/gameplay/enemyAttacks.ts";
+      import { enemySpecs, newParishProgress, parishShrines } from "/src/gameplay/ashenParish.ts";
+      const params = new URLSearchParams(location.search),
+        phase = params.get("phase") ?? "idle";
+      const template = createParishEncounter(newParishProgress()).enemies[0];
+      template.houndAttack = params.get("move") in houndAttacks ? params.get("move") : "pounce";
+      template.kilnAttack = params.get("move") in kilnAttacks ? params.get("move") : "clamp";
+      const renders = [],
+        actors = [];
+      let startedAt = null,
+        exporting = false;
+      const selected = (params.get("kinds") ?? "").split(",").filter(Boolean);
+      const views = (params.get("views") ?? "").split(",").filter(Boolean);
+      const kinds =
+        views.length && selected.length === 1
+          ? views.map(() => selected[0])
+          : Object.keys(enemySpecs).filter((kind) => !selected.length || selected.includes(kind));
+      document.querySelector("#views").style.gridTemplateColumns = `repeat(${kinds.length},1fr)`;
+      const panelWidth = Math.floor(window.innerWidth / kinds.length);
+      for (const [viewIndex, kind] of kinds.entries()) {
+        const card = document.createElement("section");
+        card.className = "card";
+        document.querySelector("#views").append(card);
+        const renderer = new THREE.WebGLRenderer({ antialias: false, preserveDrawingBuffer: true });
+        renderer.setSize(panelWidth, 580);
+        renderer.setPixelRatio(1);
+        renderer.outputColorSpace = THREE.SRGBColorSpace;
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.35;
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        card.append(renderer.domElement);
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color("#343836");
+        const camera = new THREE.PerspectiveCamera(32, panelWidth / 580, 0.1, 40);
+        camera.position.set(kind === "hound" ? 3.8 : 2.7, 2.5, kind === "hound" ? 4.8 : 6.3);
+        camera.lookAt(0, 1.35, 0);
+        scene.add(new THREE.HemisphereLight("#b8c3c2", "#554734", 2));
+        const light = new THREE.DirectionalLight("#ffe4c1", 3.5);
+        light.position.set(-3, 7, 5);
+        light.castShadow = true;
+        light.shadow.mapSize.set(1024, 1024);
+        light.shadow.camera.left = -3;
+        light.shadow.camera.right = 3;
+        light.shadow.camera.top = 4;
+        light.shadow.camera.bottom = -3;
+        light.shadow.bias = -0.001;
+        scene.add(light);
+        const rim = new THREE.DirectionalLight("#9db7c8", 2);
+        rim.position.set(4, 4, -3);
+        scene.add(rim);
+        const ground = new THREE.Mesh(
+          new THREE.PlaneGeometry(20, 20),
+          new THREE.MeshStandardMaterial({ color: "#343632", roughness: 1 }),
+        );
+        ground.rotation.x = -Math.PI / 2;
+        ground.receiveShadow = true;
+        ground.position.y = -0.015;
+        scene.add(ground);
+        const rig = createParishRig(kind);
+        const viewYaw = views[viewIndex] === "side" ? Math.PI / 2 : 0;
+        rig.root.rotation.y = viewYaw;
+        scene.add(rig.root);
+        const e = {
+          ...template,
+          kind,
+          folded: kind === "clinger" && phase === "idle" ? 1 : 0,
+          phase,
+          timer:
+            phase === "strike"
+              ? enemyAttackSpec({
+                  kind,
+                  kilnAttack: template.kilnAttack,
+                  houndAttack: template.houndAttack,
+                }).contact
+              : phase === "windup"
+                ? enemyAttackSpec({
+                    kind,
+                    kilnAttack: template.kilnAttack,
+                    houndAttack: template.houndAttack,
+                  }).windup
+                : 0,
+          flash: 0,
+          guardFlash: 0,
+          flinch: 0,
+          deathTime: 0,
+          moveAmount: 0,
+        };
+        applyParishRigPose(rig, e, 0, true);
+        const bounds = new THREE.Box3().setFromObject(rig.root, true);
+        if (params.has("animate")) {
+          for (const posePhase of ["windup", "strike", "recovery"]) {
+            const peak = {
+              ...e,
+              phase: posePhase,
+              folded: 0,
+              timer:
+                posePhase === "windup"
+                  ? enemyAttackSpec({
+                      kind,
+                      kilnAttack: template.kilnAttack,
+                      houndAttack: template.houndAttack,
+                    }).windup
+                  : posePhase === "strike"
+                    ? enemyAttackSpec({
+                        kind,
+                        kilnAttack: template.kilnAttack,
+                        houndAttack: template.houndAttack,
+                      }).contact
+                    : 0,
+            };
+            applyParishRigPose(rig, peak, 0, true);
+            bounds.union(new THREE.Box3().setFromObject(rig.root, true));
+          }
+          applyParishRigPose(rig, e, 0, true);
+        }
+        const size = bounds.getSize(new THREE.Vector3());
+        const target = bounds.getCenter(new THREE.Vector3());
+        const direction = camera.position
+          .clone()
+          .sub(new THREE.Vector3(0, 1.35, 0))
+          .normalize();
+        const tangent = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+        const distance = Math.max(
+          6.8,
+          (size.y / (2 * tangent)) * 1.18,
+          (size.x / (2 * tangent * camera.aspect)) * 1.1,
+        );
+        camera.position.copy(direction.multiplyScalar(distance).add(target));
+        camera.lookAt(target);
+        const label = document.createElement("div");
+        label.className = "label";
+        label.innerHTML = `<h2>${enemySpecs[kind].name}</h2><div class="sub">${phase.toUpperCase()}</div>`;
+        card.append(label);
+        const mannequin =
+          kind === "hound" && params.has("moveset")
+            ? new THREE.Mesh(
+                new THREE.CapsuleGeometry(0.23, 1.34, 4, 10),
+                new THREE.MeshStandardMaterial({ color: 0x819da3, roughness: 1 }),
+              )
+            : null;
+        if (mannequin) {
+          mannequin.visible = false;
+          mannequin.castShadow = true;
+          scene.add(mannequin);
+        }
+        actors.push({
+          target: mannequin,
+          rig,
+          e,
+          label,
+          canvas: renderer.domElement,
+          viewYaw,
+          viewName: views[viewIndex] ?? "",
+        });
+        renders.push(() => renderer.render(scene, camera));
+      }
+      THREE.DefaultLoadingManager.onLoad = () => {
+        renders.forEach((f) => f());
+        document.body.dataset.ready = "true";
+      };
+      function animateHoundCombat(actor, move, elapsed, time) {
+        const distance = move === "pounce" ? 3.5 : move === "snap" ? 1.3 : 1.7;
+        let sample = actor.combatSample;
+        if (!sample || sample.move !== move || elapsed < sample.elapsed) {
+          const progress = newParishProgress();
+          const state = createParishEncounter(progress, {
+            campaign: true,
+            spawns: [{ id: "hound", kind: "hound", position: [0, 0, 0], area: "yard" }],
+            shrines: parishShrines,
+            floorHeight: () => 0,
+            blocked: () => false,
+            lineClear: () => true,
+          });
+          Object.assign(state.enemies[0], {
+            phase: "windup",
+            timer: 0,
+            houndAttack: move,
+            attackNumber: 3,
+            yaw: 0,
+          });
+          Object.assign(state.combat, { playerX: 0, playerZ: distance, playerY: 0 });
+          sample = actor.combatSample = { move, elapsed: 0, state, progress };
+        }
+        while (sample.elapsed < elapsed - 1e-7) {
+          const dt = Math.min(1 / 120, elapsed - sample.elapsed);
+          const enemy = sample.state.enemies[0];
+          if (["windup", "strike", "recovery"].includes(enemy.phase))
+            stepParishEncounter(sample.state, dt, sample.progress);
+          sample.elapsed += dt;
+        }
+        const enemy = sample.state.enemies[0],
+          yaw = actor.viewYaw ?? 0;
+        const forward = enemy.z - distance / 2;
+        actor.rig.root.position.set(Math.sin(yaw) * forward, 0, Math.cos(yaw) * forward);
+        actor.rig.root.rotation.y = yaw + enemy.yaw;
+        applyParishRigPose(actor.rig, enemy, time, false);
+        actor.target.visible = true;
+        actor.target.position.set(
+          (Math.sin(yaw) * distance) / 2,
+          0.9,
+          (Math.cos(yaw) * distance) / 2,
+        );
+        actor.target.material.color.setHex(sample.state.combat.health < 100 ? 0xbc6654 : 0x819da3);
+        actor.label.querySelector(".sub").textContent =
+          `${move.toUpperCase()} / ${enemy.phase.toUpperCase()} / TARGET HP ${sample.state.combat.health}`;
+      }
+      function animateAttackMoveset(actor, time) {
+        const hound = actor.e.kind === "hound";
+        const sequences = hound
+          ? [
+              ["pounce", false],
+              ["snap", true],
+              ["rake", false],
+            ]
+          : params.has("refinements")
+            ? [
+                ["sweep", false],
+                ["slam", false],
+                ["check", false],
+              ]
+            : [
+                ["clamp", false],
+                ["sweep", false],
+                ["slam", false],
+                ["check", false],
+                ["clamp", true],
+              ];
+        let t = Math.max(0, time - 5);
+        for (let index = 0; index < sequences.length; index++) {
+          const [move, combo] = sequences[index],
+            spec = hound ? houndAttacks[move] : kilnAttacks[move];
+          const attackElapsed = t;
+          const segments = [
+            ["windup", spec.windup, 0],
+            ["strike", spec.strike, 0],
+            ...(combo
+              ? [
+                  ["windup", hound ? spec.followupWindup : enemySpecs.kiln.followupWindup, 1],
+                  ["strike", spec.strike, 1],
+                ]
+              : []),
+            ["recovery", spec.recovery + 0.5, combo ? 1 : 0],
+          ];
+          for (const [phase, duration, step] of segments) {
+            if (t < duration || (index === sequences.length - 1 && phase === "recovery")) {
+              if (hound) {
+                animateHoundCombat(actor, move, attackElapsed, time);
+                return;
+              }
+              Object.assign(actor.e, {
+                ...(hound ? { houndAttack: move } : { kilnAttack: move }),
+                phase,
+                timer: Math.min(t, duration),
+                comboStep: step,
+                attackNumber: index * 2 + step + 1,
+                moveAmount: 0,
+                stride: 0,
+                deathTime: 0,
+                folded: 0,
+              });
+              actor.rig.root.rotation.y = actor.viewYaw ?? 0;
+              applyParishRigPose(actor.rig, actor.e, time, false);
+              actor.label.querySelector(".sub").textContent =
+                `${index + 1} / ${combo ? (hound ? "DOUBLE BITE" : "DOUBLE CLAMP") : move === "check" ? "SHOULDER CHECK" : move.toUpperCase()} / ${phase.toUpperCase()}${step ? " / FOLLOW-UP" : ""}`;
+              return;
+            }
+            t -= duration;
+          }
+        }
+      }
+      function animateActor(actor, time) {
+        if (params.has("moveset") && time >= 5) {
+          animateAttackMoveset(actor, time);
+          return;
+        }
+        if (actor.target) {
+          actor.target.visible = false;
+          actor.combatSample = null;
+          actor.rig.root.position.set(0, 0, 0);
+        }
+        const { e, rig, label } = actor,
+          spec = enemyAttackSpec(e);
+        e.timer = 0;
+        e.comboStep = 0;
+        e.moveAmount = 0;
+        e.deathTime = 0;
+        e.stride = 0;
+        e.folded = 0;
+        let chapter = "IDLE";
+        if (time < 2) {
+          e.phase = "idle";
+          e.folded = e.kind === "clinger" ? 1 : 0;
+        } else if (time < 5) {
+          e.phase = "pursue";
+          if (e.kind === "clinger") e.folded = 1 - Math.min(1, (time - 2) / 0.75);
+          e.stride = (time - 2) * spec.speed * 3;
+          e.moveAmount = 1;
+          chapter = "LOCOMOTION";
+        } else if (time < 18) {
+          const combo =
+            e.kind === "sentinel" ||
+            e.kind === "widow" ||
+            (e.kind === "kiln" && e.kilnAttack === "clamp" && params.has("followup"));
+          const cycle =
+            spec.windup +
+            spec.strike +
+            spec.recovery +
+            (combo ? spec.followupWindup + spec.strike : 0);
+          const count = Math.floor((time - 5) / cycle);
+          let t = (time - 5) % cycle;
+          e.attackNumber = count * 2 + 1;
+          const sequence = [
+            { phase: "windup", duration: spec.windup, combo: 0, number: count * 2 + 1 },
+            { phase: "strike", duration: spec.strike, combo: 0, number: count * 2 + 1 },
+            ...(combo
+              ? [
+                  {
+                    phase: "windup",
+                    duration: spec.followupWindup,
+                    combo: 1,
+                    number: count * 2 + 2,
+                  },
+                  { phase: "strike", duration: spec.strike, combo: 1, number: count * 2 + 2 },
+                ]
+              : []),
+            {
+              phase: "recovery",
+              duration: spec.recovery,
+              combo: combo ? 1 : 0,
+              number: count * 2 + (combo ? 2 : 1),
+            },
+          ];
+          for (const segment of sequence) {
+            if (t < segment.duration) {
+              e.phase = segment.phase;
+              e.timer = t;
+              e.comboStep = segment.combo;
+              e.attackNumber = segment.number;
+              break;
+            }
+            t -= segment.duration;
+          }
+          chapter =
+            (e.kind === "kiln" ? e.kilnAttack.toUpperCase() + " / " : "") +
+            e.phase.toUpperCase() +
+            (e.comboStep ? " / SECOND STRIKE" : "");
+        } else if (time < 20) {
+          e.phase = "stagger";
+          e.timer = (time - 18) % spec.stagger;
+          chapter = "STAGGER";
+        } else if (time < 22) {
+          e.phase = "idle";
+          chapter = "SILHOUETTE";
+        } else {
+          e.phase = "dead";
+          e.deathTime = Math.min(3.4, time - 22);
+          chapter = "DEATH";
+        }
+        rig.root.rotation.y =
+          (actor.viewYaw ?? 0) + (time >= 20 && time < 22 ? (time - 20) * Math.PI : 0);
+        if (params.has("attack"))
+          chapter =
+            e.phase === "windup"
+              ? "WINDUP / COMMITMENT TELL"
+              : e.phase === "recovery"
+                ? "RECOVERY / OPENING"
+                : e.timer >= spec.contact
+                  ? "CLAMP / CONTACT"
+                  : "FORWARD THRUST";
+        applyParishRigPose(rig, e, time, false);
+        label.querySelector(".sub").textContent = chapter;
+      }
+      function frame() {
+        if (exporting) {
+          requestAnimationFrame(frame);
+          return;
+        }
+        if (startedAt !== null) {
+          const time = Math.min(25.5, (performance.now() - startedAt) / 1000);
+          actors.forEach((a) => animateActor(a, time));
+          window.enemyReview.time = time;
+          window.enemyReview.done = time >= 25.5;
+        }
+        renders.forEach((f) => f());
+        requestAnimationFrame(frame);
+      }
+      frame();
+      window.enemyReview = {
+        renders,
+        time: 0,
+        done: false,
+        play() {
+          startedAt = performance.now();
+          this.done = false;
+        },
+        async exportVideo({ fps = 60, seconds = 26, start = 0 } = {}) {
+          startedAt = null;
+          exporting = true;
+          const state = {
+            frame: 0,
+            total: Math.round(seconds * fps),
+            fps,
+            done: false,
+            error: null,
+            bytes: null,
+          };
+          this.exportState = state;
+          const canvas = document.createElement("canvas");
+          canvas.width = 1920;
+          canvas.height = 880;
+          const context = canvas.getContext("2d", { alpha: false });
+          const chunks = [];
+          const encoder = new VideoEncoder({
+            output(chunk) {
+              const bytes = new Uint8Array(chunk.byteLength);
+              chunk.copyTo(bytes);
+              chunks.push(bytes);
+            },
+            error(error) {
+              state.error = String(error);
+            },
+          });
+          try {
+            encoder.configure({
+              codec: "avc1.42002a",
+              width: 1920,
+              height: 880,
+              bitrate: 12000000,
+              framerate: fps,
+              avc: { format: "annexb" },
+            });
+            for (let i = 0; i < state.total; i++) {
+              if (state.error) throw new Error(state.error);
+              const time = start + i / fps;
+              actors.forEach((actor) => animateActor(actor, time));
+              renders.forEach((render) => render());
+              context.fillStyle = "#292c2b";
+              context.fillRect(0, 0, 1920, 880);
+              context.fillStyle = "#d2c9b7";
+              context.font = "28px Georgia";
+              context.fillText(
+                actors[0]?.e.kind === "hound" && params.has("moveset")
+                  ? "OSSUARY HOUND / ATTACKS"
+                  : params.has("refinements")
+                    ? "KILN BOUND / REVISED ATTACKS"
+                    : params.has("moveset")
+                      ? "KILN BOUND / FULL MOVESET"
+                      : params.has("attack")
+                        ? "KILN BOUND / ATTACK PATTERN"
+                        : "SACRED CAPITAL / ENEMIES",
+                38,
+                58,
+              );
+              context.font = "12px monospace";
+              context.textAlign = "right";
+              context.fillText(`FIXED-STEP GAMEPLAY RIGS / ${fps} FPS`, 1882, 55);
+              context.textAlign = "left";
+              const width = 1920 / actors.length;
+              actors.forEach((actor, index) => {
+                const x = index * width;
+                context.drawImage(actor.canvas, x, 96, width, 580);
+                context.strokeStyle = "#5e5d56";
+                context.strokeRect(x, 96, width, 680);
+                context.fillStyle = "#d2c9b7";
+                context.font = "16px Georgia";
+                context.textAlign = "center";
+                context.fillText(
+                  enemySpecs[actor.e.kind].name.toUpperCase() +
+                    (actor.viewName ? ` / ${actor.viewName.toUpperCase()}` : ""),
+                  x + width / 2,
+                  710,
+                  width - 20,
+                );
+                context.fillStyle = "#a7aa9e";
+                context.font = "11px monospace";
+                context.fillText(
+                  actor.label.querySelector(".sub").textContent,
+                  x + width / 2,
+                  738,
+                  width - 20,
+                );
+              });
+              context.textAlign = "left";
+              context.font = "12px monospace";
+              context.fillStyle = "#989c93";
+              context.fillText(
+                actors[0]?.e.kind === "hound" && params.has("moveset")
+                  ? "COMMITTED POUNCE / DOUBLE BITE / LATERAL JAW RAKE — REAL SPEED"
+                  : params.has("refinements")
+                    ? "FAST SWEEP / FLIPPED GROUND SLAM + SHOCKWAVE / SHOULDER CHECK — REAL SPEED"
+                    : params.has("moveset")
+                      ? "CLAMP / WIDE SWEEP / OVERHEAD SLAM / CLOSE SHOULDER CHECK / DOUBLE CLAMP — REAL SPEED"
+                      : params.has("attack")
+                        ? "1.35s WINDUP > FORWARD THRUST + CLAMP > 1.70s RECOVERY / TWO CYCLES AT REAL SPEED"
+                        : "PS2 MATERIAL ATLAS / ARTICULATED RIGS / 60 DISTINCT SIMULATION STEPS PER SECOND",
+                38,
+                810,
+              );
+              const frame = new VideoFrame(canvas, {
+                timestamp: Math.round((i * 1000000) / fps),
+                duration: Math.round(1000000 / fps),
+              });
+              encoder.encode(frame, { keyFrame: i % (fps * 2) === 0 });
+              frame.close();
+              state.frame = i + 1;
+              if (encoder.encodeQueueSize > 6) await encoder.flush();
+              await new Promise((resolve) => setTimeout(resolve, 0));
+            }
+            await encoder.flush();
+            const length = chunks.reduce((sum, chunk) => sum + chunk.length, 0),
+              bytes = new Uint8Array(length);
+            let offset = 0;
+            for (const chunk of chunks) {
+              bytes.set(chunk, offset);
+              offset += chunk.length;
+            }
+            state.bytes = bytes;
+            state.done = true;
+          } catch (error) {
+            state.error = String(error);
+          } finally {
+            encoder.close();
+            exporting = false;
+          }
+          return { frame: state.frame, total: state.total, done: state.done, error: state.error };
+        },
+        reset() {
+          startedAt = null;
+          this.time = 0;
+          this.done = false;
+        },
+      };
+    </script>
+  </body>
+</html>

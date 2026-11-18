@@ -1,0 +1,39 @@
+{
+  "ual_bones": 65,
+  "missing_ual_bones": [],
+  "parent_mismatches": [],
+  "max_rest_rotation_difference_degrees": 0.0255,
+  "worst_bone": "thumb_01_r",
+  "triangles": {
+    "Pilgrim_Body": 6568,
+    "Pilgrim_Shield": 726,
+    "Pilgrim_Sword": 142
+  },
+  "total_triangles": 7436,
+  "materials": 1,
+  "images": 1,
+  "texture_size": [512, 512],
+  "influencing_bones": {
+    "Pilgrim_Body": 54,
+    "Pilgrim_Shield": 1,
+    "Pilgrim_Sword": 1
+  },
+  "animations": [
+    "Pilgrim_Guard_Pose",
+    "Idle_Shield_Loop",
+    "Sword_Regular_A",
+    "Sword_Regular_B",
+    "Sword_Regular_C",
+    "Sword_Regular_Combo",
+    "Sword_Heavy_Combo",
+    "Sword_Block",
+    "Sword_Dash",
+    "Shield_Dash",
+    "Shield_OneShot",
+    "Idle_Shield_Break",
+    "Hit_Knockback",
+    "Consume",
+    "Zombie_Walk_Fwd_Loop"
+  ],
+  "status": "PASS"
+}

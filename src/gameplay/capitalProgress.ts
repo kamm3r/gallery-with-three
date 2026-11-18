@@ -8,11 +8,11 @@ import {
   capitalShrines,
   capitalShortcut,
   capitalCathedralShortcut,
+  capitalGardenGate,
   type CapitalBossId,
   type CapitalLiftId,
 } from "./capitalLayout.ts";
 import { createEncounter } from "./bossEncounter.ts";
-import { combatTuning } from "./combatTuning.ts";
 import type { ParishProgress } from "./ashenParish.ts";
 import type { ParishEncounter } from "./parishEncounter.ts";
 
@@ -22,7 +22,11 @@ const liftStart = (id: CapitalLiftId) => {
     y = id === "town" ? lift.low : lift.high;
   return { y, target: y };
 };
-/** Ground lifts wait at the top until released from below; the town lift waits below. */
+/**
+ * Ground lifts wait at the top and the town lift below. The beacon lift is the way down
+ * once the fog lifts, so it answers at either landing. The arena lift is a return to the
+ * plaza and is released only from the colosseum.
+ */
 export const newCapitalLiftStates = () => ({
   beacon: liftStart("beacon"),
   arena: liftStart("arena"),
@@ -32,6 +36,11 @@ export type CapitalLiftsState = ReturnType<typeof newCapitalLiftStates>;
 export function stepCapitalLift(state: CapitalLiftState, delta: number) {
   const step = 3 * Math.max(0, Math.min(delta, 0.05));
   state.y += Math.sign(state.target - state.y) * Math.min(Math.abs(state.target - state.y), step);
+}
+/** Whether a still-locked lift can be released from the landing the player stands on. */
+export function capitalLiftReleasable(id: CapitalLiftId, atBottom: boolean, p: ParishProgress) {
+  if (id === "town") return atBottom && p.caches.includes("town-key");
+  return p.fogCleared && (atBottom || id === "beacon");
 }
 export function requestCapitalLift(
   id: CapitalLiftId,
@@ -46,8 +55,7 @@ export function requestCapitalLift(
   const key = id === "beacon" ? "beaconLift" : id === "arena" ? "arenaLift" : "townLift";
   const unlocked = progress[key];
   if (!unlocked) {
-    if (!atBottom || !(id === "town" ? progress.caches.includes("town-key") : progress.fogCleared))
-      return false;
+    if (!capitalLiftReleasable(id, atBottom, progress)) return false;
     progress[key] = true;
   }
   const here = atTop ? spec.high : spec.low;
@@ -63,7 +71,7 @@ export type CapitalInteraction =
   | { kind: "cache"; id: string; prompt: string; available: boolean }
   | { kind: "boss"; id: CapitalBossId; prompt: string; available: boolean }
   | { kind: "lift"; id: CapitalLiftId; prompt: string; available: boolean }
-  | { kind: "gate"; id: "refuge" | "court"; prompt: string; available: boolean };
+  | { kind: "gate"; id: "refuge" | "court" | "garden"; prompt: string; available: boolean };
 export function capitalInteraction(
   x: number,
   y: number,
@@ -88,7 +96,7 @@ export function capitalInteraction(
       kind: "town-lock",
       id: "town-key",
       available: false,
-      prompt: "Barred · the key lies in a house on the second tier",
+      prompt: "Barred · the key lies in the undercroft beneath the town street",
     };
   if (!p.court && near(capitalCathedralShortcut.position, 4)) {
     const { position, yaw } = capitalCathedralShortcut;
@@ -101,7 +109,21 @@ export function capitalInteraction(
         ? threatened || bossActive
           ? "Clear the cathedral watch"
           : "E · Unbar the cathedral return to the chapel"
-        : "Barred within · take the outside path along the cathedral's east side",
+        : "Barred within · take the outside path from the chapel's east door",
+    };
+  }
+  if (!p.garden && near(capitalGardenGate.position, 4)) {
+    const { position, yaw } = capitalGardenGate;
+    const inside = (x - position[0]) * Math.sin(yaw) + (z - position[2]) * Math.cos(yaw) > 0.25;
+    return {
+      kind: "gate",
+      id: "garden",
+      available: inside && !threatened && !bossActive,
+      prompt: inside
+        ? threatened || bossActive
+          ? "Clear the garden watch"
+          : "E · Unbar the garden door to the town below"
+        : "Barred from the garden above",
     };
   }
   for (const npc of capitalNpcs)
@@ -155,8 +177,7 @@ export function capitalInteraction(
         lift.id === "beacon" ? p.beaconLift : lift.id === "arena" ? p.arenaLift : p.townLift;
       const onLanding = Math.abs(y - lift.high) < 1.5 || Math.abs(y - lift.low) < 1.5;
       const canUnlock =
-        Math.abs(y - lift.low) < 1.5 &&
-        (lift.id === "town" ? p.caches.includes("town-key") : p.fogCleared);
+        onLanding && capitalLiftReleasable(lift.id, Math.abs(y - lift.low) < 1.5, p);
       return {
         kind: "lift",
         id: lift.id,
@@ -168,8 +189,10 @@ export function capitalInteraction(
             : canUnlock
               ? "E · Release the lift mechanism"
               : lift.id === "town"
-                ? "Locked · find the prow gate key on the second tier"
-                : "Mechanism locked below · find the other end",
+                ? "Locked · find the key in the undercroft beneath the town street"
+                : lift.id === "beacon"
+                  ? "The shaft is lost in fog · the lift will not move"
+                  : "Mechanism locked below · find the other end",
       };
     }
   }
@@ -216,8 +239,9 @@ export function beginCapitalBoss(
     arenaRadius: spec.radius,
     constrainToArena: true,
     verticalHitRange: 1.8,
-    bossX: spec.origin[0],
-    bossZ: spec.origin[2] - 7,
+    // The keeper waits seven metres beyond its circle's centre, away from the seal.
+    bossX: spec.origin[0] - Math.sin(spec.yaw) * 7,
+    bossZ: spec.origin[2] - Math.cos(spec.yaw) * 7,
     bossHealth: spec.health,
     playerX: spec.spawn[0],
     playerY: spec.spawn[1],
@@ -231,5 +255,15 @@ export function beginCapitalBoss(
 export function activateCapitalBeacon(progress: ParishProgress) {
   if (!progress.cathedralFelled || progress.fogCleared) return false;
   progress.fogCleared = true;
+  return true;
+}
+
+/** Idempotent even if an interaction is dispatched twice or resumed from a save. */
+export function claimCapitalCache(state: ParishEncounter, progress: ParishProgress, id: string) {
+  const cache = capitalCaches.find((entry) => entry.id === id);
+  if (!cache || progress.caches.includes(id)) return false;
+  progress.caches.push(id);
+  state.embers += cache.embers;
+  state.flasks = Math.min(3, state.flasks + 1);
   return true;
 }

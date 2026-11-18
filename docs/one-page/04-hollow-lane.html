@@ -1,0 +1,391 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>4 · Hollow Lane — one-page design</title>
+    <style>
+      @page {
+        size: 17in 11in;
+        margin: 0;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: #ddd8cf;
+        font:
+          14px/1.35 system-ui,
+          "Segoe UI",
+          sans-serif;
+        color: #2a2622;
+      }
+      .sheet {
+        width: 1632px;
+        height: 1056px;
+        margin: 0 auto;
+        background: #fbf8f2;
+        padding: 32px 40px;
+        display: grid;
+        grid-template: "head head head" auto "escape escape senses" auto "speed killer senses" minmax(
+            0,
+            1fr
+          ) / 1fr 1fr 470px;
+        gap: 20px 30px;
+      }
+      header {
+        grid-area: head;
+        display: flex;
+        align-items: baseline;
+        gap: 20px;
+        border-bottom: 3px solid #2a2622;
+        padding-bottom: 10px;
+      }
+      h1 {
+        font:
+          700 44px/1 Georgia,
+          serif;
+        margin: 0;
+      }
+      header .sub {
+        font-size: 18px;
+        color: #6b6158;
+        flex: 1;
+      }
+      header .meta {
+        font:
+          12px/1.3 ui-monospace,
+          monospace;
+        color: #6b6158;
+        text-align: right;
+      }
+      h2 {
+        font: 700 13px/1 system-ui;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        margin: 0 0 10px;
+        color: #8a5a2b;
+      }
+      .note {
+        font-size: 12px;
+        color: #6b6158;
+      }
+      .escape {
+        grid-area: escape;
+      }
+      .speed {
+        grid-area: speed;
+      }
+      .killer {
+        grid-area: killer;
+      }
+      .senses {
+        grid-area: senses;
+      }
+      .lane {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 12px;
+      }
+      .box {
+        border: 2px solid #2a2622;
+        border-radius: 8px;
+        padding: 8px 12px;
+        background: #fff;
+        font-size: 13px;
+        min-width: 110px;
+      }
+      .box b {
+        display: block;
+        font-size: 14px;
+      }
+      .box small {
+        color: #6b6158;
+      }
+      .box.goal {
+        background: #2f6b4f;
+        color: #fff;
+        border-color: #2f6b4f;
+      }
+      .box.goal small {
+        color: #d5eadf;
+      }
+      .box.loud {
+        border-color: #b5432f;
+      }
+      .arrow {
+        font-size: 22px;
+        color: #8a5a2b;
+      }
+      .tag {
+        font:
+          700 12px ui-monospace,
+          monospace;
+        writing-mode: vertical-rl;
+        transform: rotate(180deg);
+        color: #8a5a2b;
+        letter-spacing: 0.1em;
+      }
+      .rule {
+        border-left: 4px solid #c46a2b;
+        padding: 3px 0 3px 12px;
+        margin-bottom: 9px;
+        font-size: 13px;
+      }
+      .rule > b:first-child {
+        display: block;
+        font-size: 14px;
+      }
+      .big {
+        font:
+          italic 26px/1.25 Georgia,
+          serif;
+        margin: 0 0 14px;
+      }
+      .states {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+        margin-bottom: 12px;
+      }
+      .st {
+        border: 2px solid #2a2622;
+        border-radius: 8px;
+        padding: 6px 10px;
+        font-size: 12.5px;
+        background: #fff;
+      }
+      .st b {
+        display: block;
+        font-size: 14px;
+      }
+      .st.hot {
+        background: #2a2622;
+        color: #fbf8f2;
+      }
+      .st.hot small {
+        color: #f0b46b;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="sheet">
+      <header>
+        <h1>Hollow Lane</h1>
+        <div class="sub">
+          /seasons · One survivor, one killer, one night. Friday-the-13th style. He is relentless,
+          not fast.
+        </div>
+        <div class="meta">
+          PAGE 4 / 5 · SURVIVAL<br />hollowNight.ts (NIGHT, KILLER)<br />hollowLane.ts ·
+          tests/hollowNight.test.ts
+        </div>
+      </header>
+
+      <section class="escape">
+        <h2>Two ways out · parts are reshuffled every night, mostly inside houses</h2>
+        <div class="lane">
+          <div class="tag">BY CAR</div>
+          <div class="box"><b>Keys</b><small>search a container</small></div>
+          <span class="arrow">+</span>
+          <div class="box"><b>Gas can</b><small>search</small></div>
+          <span class="arrow">+</span>
+          <div class="box"><b>Battery</b><small>search</small></div>
+          <span class="arrow">→</span>
+          <div class="box loud"><b>Start the car</b><small>hold E for 5 s · loud</small></div>
+          <span class="arrow">→</span>
+          <div class="box goal"><b>Drive away</b><small>escaped</small></div>
+        </div>
+        <div class="lane">
+          <div class="tag">BY POLICE</div>
+          <div class="box"><b>Fuse</b><small>search</small></div>
+          <span class="arrow">→</span>
+          <div class="box loud">
+            <b>Fix the payphone</b><small>hold E for 3 s · noise 14 m</small>
+          </div>
+          <span class="arrow">→</span>
+          <div class="box loud"><b>Survive 75 s</b><small>hide, run, lock doors</small></div>
+          <span class="arrow">→</span>
+          <div class="box goal">
+            <b>Cruiser at the south end</b><small>reach it to escape</small>
+          </div>
+        </div>
+        <p class="note" style="margin: 0">
+          Only 2 containers per house (plus 3 outdoors) are live each night, and they glint. Bonus
+          finds: a med kit closes a wound; an energy drink refills stamina.
+        </p>
+      </section>
+
+      <section class="speed">
+        <h2>Speed · m/s</h2>
+        <svg id="spd" width="100%" height="300" font-family="system-ui" font-size="12"></svg>
+        <p class="big">“He wins by never stopping.”</p>
+        <p class="note">
+          The chase speed (4.3) stays below your walk (4.8). His only burst is the <b>shift</b>: 1 s
+          at 12 m/s, only after 6 s of chasing, with a 30 s cooldown. Sprinting drains 22 stamina/s
+          from 100. Once drained, you can't sprint again until stamina is back to 35.
+        </p>
+      </section>
+
+      <section class="killer">
+        <h2>The killer's mind</h2>
+        <div class="states">
+          <div class="st"><b>Asleep</b>20 s head start</div>
+          <div class="st"><b>Patrol</b>2.4 m/s</div>
+          <div class="st"><b>Investigate</b>3.6 m/s toward noise</div>
+          <div class="st hot"><b>Chase</b><small>4.3 m/s on sight</small></div>
+          <div class="st"><b>Search</b>3 m/s · checks hiding spots</div>
+          <div class="st hot"><b>Shift</b><small>burst · 12 m/s for 1 s</small></div>
+        </div>
+        <div class="rule">
+          <b>He loses you after 3 s out of sight</b>…but now and then he senses where you are.
+        </div>
+        <div class="rule">
+          <b>Doors don't stop him</b>He opens doors and breaks locked ones down. Locking still buys
+          time.
+        </div>
+        <div class="rule">
+          <b>Hiding is a gamble</b>If he drags you out, you get a 0.9 s windup to bolt (normally
+          0.55 s).
+        </div>
+        <div class="rule">
+          <b>You survive one stab</b>Two hits end the night. While injured, stamina caps at 70 and
+          regenerates more slowly.
+        </div>
+      </section>
+
+      <section class="senses">
+        <h2>What gives you away · radius in m, to scale</h2>
+        <svg viewBox="-40 -40 80 80" width="470" height="470" font-family="system-ui">
+          <circle r="30" fill="#f6e7c8" stroke="#c46a2b" stroke-width=".3" />
+          <text y="-30.8" text-anchor="middle" font-size="2.2" fill="#8a5a2b">
+            you in lamplight · 30
+          </text>
+          <circle r="22" fill="#efe2cf" stroke="#c46a2b" stroke-width=".3" />
+          <text y="-22.8" text-anchor="middle" font-size="2.2" fill="#8a5a2b">
+            flashlight on · 22
+          </text>
+          <circle r="18" fill="#e3dccf" stroke="#2a2622" stroke-width=".3" />
+          <text y="-18.8" text-anchor="middle" font-size="2.2">dark · 18</text>
+          <circle r="16" fill="none" stroke="#b5432f" stroke-width=".35" stroke-dasharray="1 .6" />
+          <circle cx="15.04" cy="5.47" r=".5" fill="#b5432f" />
+          <text
+            x="15.94"
+            y="6.17"
+            font-size="2"
+            fill="#b5432f"
+            font-weight="700"
+            text-anchor="start"
+            paint-order="stroke"
+            stroke="#fbf8f2"
+            stroke-width=".5"
+          >
+            sprint 16
+          </text>
+          <circle r="14" fill="none" stroke="#b5432f" stroke-width=".3" stroke-dasharray="1 .6" />
+          <circle cx="9.9" cy="9.9" r=".5" fill="#b5432f" />
+          <text
+            x="10.8"
+            y="10.6"
+            font-size="2"
+            fill="#b5432f"
+            font-weight="700"
+            text-anchor="start"
+            paint-order="stroke"
+            stroke="#fbf8f2"
+            stroke-width=".5"
+          >
+            phone 14
+          </text>
+          <circle r="12" fill="none" stroke="#b5432f" stroke-width=".3" stroke-dasharray="1 .6" />
+          <circle cx="4.1" cy="11.28" r=".5" fill="#b5432f" />
+          <text
+            x="5.0"
+            y="11.979999999999999"
+            font-size="2"
+            fill="#b5432f"
+            font-weight="700"
+            text-anchor="start"
+            paint-order="stroke"
+            stroke="#fbf8f2"
+            stroke-width=".5"
+          >
+            search 12
+          </text>
+          <circle r="11" fill="none" stroke="#b5432f" stroke-width=".3" stroke-dasharray="1 .6" />
+          <circle cx="-1.91" cy="10.83" r=".5" fill="#b5432f" />
+          <text
+            x="-2.81"
+            y="11.53"
+            font-size="2"
+            fill="#b5432f"
+            font-weight="700"
+            text-anchor="end"
+            paint-order="stroke"
+            stroke="#fbf8f2"
+            stroke-width=".5"
+          >
+            door 11
+          </text>
+          <circle r="3.5" fill="#2a2622" />
+          <text y="0.8" text-anchor="middle" font-size="2.2" fill="#fff">3.5</text>
+          <text y="7" text-anchor="middle" font-size="2" fill="#2a2622">always felt</text>
+          <text x="-38" y="35" font-size="2.2" fill="#6b6158">
+            Grey/orange: how far he sees you (field of view ≈ 140°).
+          </text>
+          <text x="-38" y="38" font-size="2.2" fill="#b5432f">
+            Red dashes: how far your noise carries.
+          </text>
+        </svg>
+        <div class="rule" style="border-color: #2f6b4f">
+          <b>One key does everything: E</b>Hold to search (2.2 s); press to pick up, hide or open.
+          Hold on a closed door from inside to lock it (1.1 s).
+        </div>
+        <div class="rule" style="border-color: #2f6b4f">
+          <b>Balance proof</b>Bots react with delay, see only the HUD and choose hiding spots
+          imperfectly. If a careful human can't escape, it's a bug.
+        </div>
+      </section>
+    </div>
+    <script>
+      const NS = "http://www.w3.org/2000/svg",
+        s = document.getElementById("spd");
+      const el = (t, a, x) => {
+        const n = document.createElementNS(NS, t);
+        for (const k in a) n.setAttribute(k, a[k]);
+        if (x != null) n.textContent = x;
+        s.appendChild(n);
+        return n;
+      };
+      const W = s.getBoundingClientRect().width,
+        L = 120,
+        X = (v) => L + (v / 12.5) * (W - L - 10);
+      const rows = [
+        ["Killer patrol", 2.4, "#a9a196"],
+        ["search", 3, "#a9a196"],
+        ["investigate", 3.6, "#c46a2b"],
+        ["chase", 4.3, "#b5432f"],
+        ["shift (1 s)", 12, "#2a2622"],
+        ["You: walk", 4.8, "#2f6b4f"],
+        ["You: sprint", 7.5, "#5f9e7d"],
+      ];
+      rows.forEach(([n, v, c], i) => {
+        const y = 10 + i * 38 + (i >= 5 ? 14 : 0);
+        el("text", { x: 0, y: y + 15, "font-weight": i >= 5 ? 700 : 400 }, n);
+        el("rect", { x: X(0), y, width: X(v) - X(0), height: 22, fill: c, rx: 3 });
+        el("text", { x: X(v) + 6, y: y + 15, "font-weight": 700 }, v);
+      });
+      el("line", {
+        x1: X(4.8),
+        x2: X(4.8),
+        y1: 0,
+        y2: 296,
+        stroke: "#2f6b4f",
+        "stroke-dasharray": "4 3",
+        "stroke-width": 1.5,
+      });
+      el("text", { x: X(4.8) + 4, y: 296, fill: "#2f6b4f", "font-size": 11 }, "your walk");
+    </script>
+  </body>
+</html>

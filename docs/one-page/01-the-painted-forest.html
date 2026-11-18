@@ -1,0 +1,417 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>1 · The Painted Forest — one-page design</title>
+    <style>
+      @page {
+        size: 17in 11in;
+        margin: 0;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: #ddd8cf;
+        font:
+          14px/1.35 system-ui,
+          "Segoe UI",
+          sans-serif;
+        color: #2a2622;
+      }
+      .sheet {
+        width: 1632px;
+        height: 1056px;
+        margin: 0 auto;
+        background: #fbf8f2;
+        padding: 32px 40px;
+        display: grid;
+        grid-template: "head head head" auto "map pillars rules" minmax(
+            0,
+            1fr
+          ) "worlds worlds worlds" auto / 560px 1fr 1fr;
+        gap: 22px 30px;
+      }
+      header {
+        grid-area: head;
+        display: flex;
+        align-items: baseline;
+        gap: 20px;
+        border-bottom: 3px solid #2a2622;
+        padding-bottom: 10px;
+      }
+      h1 {
+        font:
+          700 44px/1 Georgia,
+          serif;
+        margin: 0;
+      }
+      header .sub {
+        font-size: 18px;
+        color: #6b6158;
+        flex: 1;
+      }
+      header .meta {
+        font:
+          12px/1.3 ui-monospace,
+          monospace;
+        color: #6b6158;
+        text-align: right;
+      }
+      h2 {
+        font: 700 13px/1 system-ui;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        margin: 0 0 10px;
+        color: #8a5a2b;
+      }
+      .note {
+        font-size: 12px;
+        color: #6b6158;
+      }
+      .map {
+        grid-area: map;
+      }
+      .pillars {
+        grid-area: pillars;
+      }
+      .rules {
+        grid-area: rules;
+      }
+      .worlds {
+        grid-area: worlds;
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 14px;
+      }
+      .pillar {
+        display: grid;
+        grid-template-columns: 54px 1fr;
+        gap: 12px;
+        align-items: start;
+        margin-bottom: 16px;
+      }
+      .pillar .ico {
+        width: 54px;
+        height: 54px;
+        border-radius: 50%;
+        background: #2a2622;
+        color: #fbf8f2;
+        display: grid;
+        place-items: center;
+        font:
+          700 24px Georgia,
+          serif;
+      }
+      .pillar b {
+        font-size: 17px;
+        display: block;
+        margin-bottom: 2px;
+      }
+      .rule {
+        border-left: 4px solid #b5432f;
+        padding: 4px 0 4px 12px;
+        margin-bottom: 11px;
+      }
+      .rule > b:first-child {
+        display: block;
+        font-size: 15px;
+      }
+      .rule span {
+        font-size: 12.5px;
+        color: #6b6158;
+      }
+      .card {
+        border: 2px solid #2a2622;
+        border-radius: 10px;
+        padding: 12px 14px;
+        background: #fff;
+        position: relative;
+      }
+      .card .tag {
+        position: absolute;
+        top: -11px;
+        left: 12px;
+        background: #fbf8f2;
+        padding: 0 6px;
+        font:
+          700 11px ui-monospace,
+          monospace;
+      }
+      .card h3 {
+        font:
+          700 19px Georgia,
+          serif;
+        margin: 4px 0 2px;
+      }
+      .card .genre {
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #8a5a2b;
+        margin-bottom: 8px;
+      }
+      .card .loop {
+        font-size: 13px;
+      }
+      .card .loop i {
+        color: #6b6158;
+      }
+      .tagline {
+        font:
+          italic 22px/1.3 Georgia,
+          serif;
+        margin: 0 0 18px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="sheet">
+      <header>
+        <h1>The Painted Forest</h1>
+        <div class="sub">
+          A third-person browser game. Paintings in a forest are portals; each one is a different
+          genre, carried by the same character.
+        </div>
+        <div class="meta">
+          PAGE 1 / 5 · GAME AT A GLANCE<br />updated 2026-10-25<br />src/gameplay/hubPortals.ts
+        </div>
+      </header>
+
+      <section class="map">
+        <h2>The hub · portal positions to scale (m)</h2>
+        <svg viewBox="-130 -130 260 260" width="500" height="500" font-family="system-ui">
+          <defs>
+            <pattern id="g" width="20" height="20" patternUnits="userSpaceOnUse">
+              <path d="M20 0H0V20" fill="none" stroke="#e6dfd2" stroke-width=".5" />
+            </pattern>
+          </defs>
+          <rect
+            x="-120"
+            y="-120"
+            width="240"
+            height="240"
+            fill="url(#g)"
+            stroke="#2a2622"
+            stroke-width="1.2"
+            rx="4"
+          />
+          <text x="0" y="-123" text-anchor="middle" font-size="6" fill="#6b6158">N (−z)</text>
+          <text x="118" y="-112" text-anchor="end" font-size="5.5" fill="#6b6158">
+            240 m playable · river, bridge, two wadeable lakes
+          </text>
+          <polyline
+            points="0,6 -6,4 -15,-3 -24,-6 -31.5,-10"
+            fill="none"
+            stroke="#8a5a2b"
+            stroke-width="1.6"
+            stroke-dasharray="3 2"
+          />
+          <circle cx="0" cy="6" r="3.5" fill="#2a2622" />
+          <text x="5" y="12" font-size="6.5" font-weight="700">SPAWN</text>
+          <text x="5" y="19" font-size="5" fill="#6b6158">first path leads to the gallery</text>
+          <g font-size="7" font-weight="700">
+            <g transform="translate(-32 -14)">
+              <rect x="-5" y="-6" width="10" height="12" fill="#6f8f4e" stroke="#2a2622" />
+              <text x="8" y="-6">Woodland Gallery</text>
+              <text x="8" y="1" font-size="5" font-weight="400" fill="#6b6158">
+                /gallery · puzzle
+              </text>
+            </g>
+            <g transform="translate(-67 -69)">
+              <rect x="-5" y="-6" width="10" height="12" fill="#c46a2b" stroke="#2a2622" />
+              <text x="8" y="-2">Hollow Lane</text>
+              <text x="8" y="5" font-size="5" font-weight="400" fill="#6b6158">
+                /seasons · survival
+              </text>
+            </g>
+            <g transform="translate(88 -51)">
+              <rect x="-5" y="-6" width="10" height="12" fill="#d9cfbd" stroke="#2a2622" />
+              <text x="-8" y="-9" text-anchor="end">The Ash Warden</text>
+              <text x="-8" y="-2" text-anchor="end" font-size="5" font-weight="400" fill="#6b6158">
+                /boss · Souls-like capital
+              </text>
+            </g>
+            <g transform="translate(69 82)">
+              <rect x="-5" y="-6" width="10" height="12" fill="#a9a196" stroke="#2a2622" />
+              <text x="-8" y="-9" text-anchor="end">Training grounds</text>
+              <text x="-8" y="-2" text-anchor="end" font-size="5" font-weight="400" fill="#6b6158">
+                /playground · sandbox
+              </text>
+            </g>
+            <g transform="translate(-28 102)">
+              <ellipse rx="16" ry="9" fill="#bcd6dd" stroke="#4b7f8c" stroke-width=".8" />
+              <rect x="-6" y="-3" width="12" height="6" fill="#7b5aa6" stroke="#2a2622" />
+              <text x="19" y="-1">The Warp Room</text>
+              <text x="19" y="6" font-size="5" font-weight="400" fill="#6b6158">
+                /warp · platformer · painting lies flat on the island
+              </text>
+            </g>
+          </g>
+        </svg>
+        <p class="note">
+          Ghibli-like daylight meadow, 20-minute day/night cycle, volumetric clouds, grass that
+          parts around you. Rendering, collision and props share one height function. Jump into a
+          painting to travel.
+        </p>
+        <div
+          style="
+            margin-top: 14px;
+            border: 2px dashed #b5432f;
+            border-radius: 10px;
+            padding: 10px 14px;
+          "
+        >
+          <h2 style="color: #b5432f; margin-bottom: 6px">Open questions</h2>
+          <div
+            style="font-size: 13px; display: grid; grid-template-columns: 1fr 1fr; gap: 3px 22px"
+          >
+            <div>• What do embers buy? There is no shop yet.</div>
+            <div>• Should capital progress save, as the Warp Room's does?</div>
+            <div>• What thread ties the paintings and keepers together?</div>
+            <div>• How does the hub show what you have completed?</div>
+            <div>• Seasons are fixed to Halloween.</div>
+            <div>• Procedural trees are still in the lab.</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="pillars">
+        <h2>Pillars</h2>
+        <p class="tagline">“The forest is the frame. The paintings are the exhibits.”</p>
+        <div class="pillar">
+          <div class="ico">1</div>
+          <div>
+            <b>One body, many genres</b>The same character, controller and camera everywhere. Worlds
+            retune them; they never replace them.
+          </div>
+        </div>
+        <div class="pillar">
+          <div class="ico">2</div>
+          <div>
+            <b>Original and shareable</b>References shape silhouette and feel. Nothing is extracted,
+            ripped or imported from commercial games.
+          </div>
+        </div>
+        <div class="pillar">
+          <div class="ico">3</div>
+          <div>
+            <b>Finishable and fair</b>Every challenge can be beaten at walking pace with human
+            reactions, and bots prove it before it ships.
+          </div>
+        </div>
+        <div class="pillar">
+          <div class="ico">4</div>
+          <div>
+            <b>A solid world</b>If you can see a floor, you can stand on it. Rendering, physics,
+            navigation and the camera read one shared footprint.
+          </div>
+        </div>
+        <div class="pillar">
+          <div class="ico">5</div>
+          <div>
+            <b>Runs in a browser tab</b>Low to Ultra presets, no first-use shader stutter, no
+            per-frame allocation on hot paths.
+          </div>
+        </div>
+      </section>
+
+      <section class="rules">
+        <h2>Never break</h2>
+        <div class="rule">
+          <b>No extracted commercial data</b
+          ><span
+            >Check where a reference's timings, animations and meshes come from before building on
+            them.</span
+          >
+        </div>
+        <div class="rule">
+          <b>The capital is kit-only</b
+          ><span
+            >Every piece goes through the capitalKitLevel.ts builder. New shapes join the
+            /capital-kit catalogue.</span
+          >
+        </div>
+        <div class="rule">
+          <b>Bot-test every mechanic</b
+          ><span
+            >Bots get reaction delay, HUD-only information, timing noise and greed. Pursuers stay
+            slower than your walk.</span
+          >
+        </div>
+        <div class="rule">
+          <b>Say how it was verified</b
+          ><span
+            >Played by hand, simulated, or unit-tested. A draw-call count is not an FPS
+            figure.</span
+          >
+        </div>
+        <div class="rule">
+          <b>Performance changes must be clear wins</b
+          ><span>“Within noise” fails. Keep hot math inline and A/A-check the benchmark.</span>
+        </div>
+        <div class="rule">
+          <b>Pause freezes everything; reduced motion stills it</b
+          ><span>This covers the clock, platforms, wind, flames, clouds and particles.</span>
+        </div>
+        <div class="rule">
+          <b>Graphics settings never change gameplay</b
+          ><span>Enemies, damage, collision and telegraphs stay the same on Low.</span>
+        </div>
+        <div class="rule">
+          <b>Keep r3f-perf</b
+          ><span>Keep it and its diagnostics toggle, even though nothing imports it.</span>
+        </div>
+      </section>
+
+      <section class="worlds">
+        <div class="card">
+          <span class="tag">/gallery · no page yet</span>
+          <h3>Woodland Gallery</h3>
+          <div class="genre">Exploration puzzle</div>
+          <div class="loop">
+            Explore a walled museum on a 6 m grid. Find the verses, press the sigils in the keeper's
+            order. <i>A wrong press resets.</i>
+          </div>
+        </div>
+        <div class="card">
+          <span class="tag">/seasons · page 4</span>
+          <h3>Hollow Lane</h3>
+          <div class="genre">Slasher survival</div>
+          <div class="loop">
+            Search, hide and escape by car or police. The killer is relentless, not fast.
+            <i>You survive one stab.</i>
+          </div>
+        </div>
+        <div class="card">
+          <span class="tag">/boss · pages 2–3</span>
+          <h3>Fading Sacred Capital</h3>
+          <div class="genre">Souls-like</div>
+          <div class="loop">
+            Climb seven tiers, rest at shrines, open shortcuts and fell two keepers.
+            <i>Death keeps the world.</i>
+          </div>
+        </div>
+        <div class="card">
+          <span class="tag">/playground · tool</span>
+          <h3>Training grounds</h3>
+          <div class="genre">Controller sandbox</div>
+          <div class="loop">
+            Labelled lanes for every slope, step, platform and gap, plus the live tree lab.
+            <i>Walk every controller change here.</i>
+          </div>
+        </div>
+        <div class="card">
+          <span class="tag">/warp · page 5</span>
+          <h3>The Warp Room</h3>
+          <div class="genre">Crash-style platformer</div>
+          <div class="loop">
+            Five levels, each with crates, fruit, a crystal and a gem. Five crystals open Tiny Tusk.
+            <i>Progress is saved.</i>
+          </div>
+        </div>
+      </section>
+    </div>
+  </body>
+</html>

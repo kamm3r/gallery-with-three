@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useGame } from "../gameSettings";
+import { useGame } from "../hooks/useGame";
 
 export function useReducedMotion() {
   const { settings } = useGame();

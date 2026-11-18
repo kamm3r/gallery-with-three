@@ -1,4 +1,4 @@
-import { enemySpecs } from "./ashenParish.ts";
+import { enemyAttackSpec } from "./enemyAttacks.ts";
 import { parishWindupDuration } from "./parishEncounter.ts";
 import type { ParishEnemy } from "./parishEncounter.ts";
 
@@ -27,14 +27,14 @@ const blend = (a: CombatPose, b: CombatPose, progress: number): CombatPose => {
 };
 /** Shared key poses make phase boundaries continuous, including the damage frame. */
 export function parishEnemyPose(enemy: ParishEnemy, time: number, gentle = false) {
-  const spec = enemySpecs[enemy.kind];
+  const spec = enemyAttackSpec(enemy);
   const hound = enemy.kind === "hound",
     sentinel = enemy.kind === "sentinel";
   const ready: CombatPose = {
     lean: 0,
     twist: 0,
-    arm: -0.3,
-    shield: sentinel ? -0.9 : -0.3,
+    arm: 0,
+    shield: sentinel ? -0.6 : 0,
     bob: 0,
     jaw: 0,
   };
@@ -74,6 +74,76 @@ export function parishEnemyPose(enemy: ParishEnemy, time: number, gentle = false
     follow.arm = -1.3;
     follow.twist = -0.25;
   }
+  if (enemy.kind === "acolyte") {
+    ready.lean = -0.2;
+    raised.lean = -0.4;
+    contact.lean = -0.14;
+    follow.lean = -0.18;
+    ready.arm = 0.04;
+    raised.arm = -0.35;
+    contact.arm = -0.2;
+    follow.arm = -0.1;
+  } else if (enemy.kind === "kiln") {
+    ready.lean = 0.16;
+    raised.lean = -0.18;
+    contact.lean = 0.55;
+    follow.lean = 0.4;
+    raised.arm = -1.9;
+    contact.arm = -0.65;
+    follow.arm = -0.5;
+    raised.shield = -1.3;
+    contact.shield = -0.8;
+    follow.shield = -0.5;
+    raised.twist = 0.15;
+    contact.twist = -0.15;
+  } else if (enemy.kind === "widow") {
+    ready.lean = 0.12;
+    raised.lean = -0.12;
+    contact.lean = 0.24;
+    follow.lean = 0.15;
+    ready.arm = -0.15;
+    raised.arm = -0.2;
+    contact.arm = -0.2;
+    follow.arm = -0.15;
+    ready.shield = -0.1;
+    raised.shield = -2.5;
+    contact.shield = -0.85;
+    follow.shield = -0.7;
+    raised.twist = 0.25;
+    contact.twist = -0.2;
+  } else if (enemy.kind === "bearer") {
+    ready.lean = 0.36;
+    raised.lean = -0.12;
+    contact.lean = 1.35;
+    follow.lean = 1.16;
+    ready.arm = -0.35;
+    ready.shield = -0.35;
+    raised.arm = -0.8;
+    raised.shield = -0.8;
+    contact.arm = -1.4;
+    contact.shield = -1.4;
+    follow.arm = -1.1;
+    follow.shield = -1.1;
+    raised.twist = 0;
+    contact.twist = 0;
+    follow.twist = 0;
+  } else if (enemy.kind === "clinger") {
+    ready.lean = 0.85;
+    raised.lean = 0.15;
+    contact.lean = 1.1;
+    follow.lean = 0.95;
+    ready.arm = -0.5;
+    raised.arm = -1.3;
+    contact.arm = -1.6;
+    follow.arm = -0.7;
+    ready.shield = -0.5;
+    raised.shield = -1.3;
+    contact.shield = -1.6;
+    follow.shield = -0.7;
+    raised.twist = 0;
+    contact.twist = 0;
+    follow.twist = 0;
+  }
   const previousThrust = sentinel && (enemy.attackNumber - 1) % 3 === 2;
   const comboStart: CombatPose = {
     ...follow,
@@ -84,7 +154,7 @@ export function parishEnemyPose(enemy: ParishEnemy, time: number, gentle = false
   let pose = ready;
   if (enemy.phase === "windup")
     pose = blend(
-      enemy.comboStep > 0 ? comboStart : ready,
+      enemy.comboStep > 0 ? (sentinel ? comboStart : follow) : ready,
       raised,
       enemy.timer / parishWindupDuration(enemy),
     );
@@ -106,6 +176,7 @@ export function parishEnemyPose(enemy: ParishEnemy, time: number, gentle = false
       : 0;
   return {
     ...pose,
+    fold: enemy.kind === "clinger" ? enemy.folded : 0,
     lean: pose.lean - stagger * 0.35 - flinch * (enemy.phase === "strike" ? 0.035 : 0.08),
     arm: pose.arm + stagger * 0.45,
     head: -pose.lean * 0.4 + stagger * 0.2,
@@ -114,8 +185,8 @@ export function parishEnemyPose(enemy: ParishEnemy, time: number, gentle = false
       ? thrust
         ? 1.1 - Math.max(0, pose.lean)
         : 0.28 + Math.max(0, -pose.arm - 0.8) * 0.18
-      : 0.55 + Math.max(0, -pose.arm) * 0.2,
-    offElbow: sentinel ? 0.65 : 0.35,
+      : 0.08 + Math.max(0, -pose.arm) * 0.12,
+    offElbow: sentinel ? 0.5 : 0.08,
     kneeFL: 0.12 + Math.max(0, -stride) * 0.7 + coil * 0.55 + leap * 0.35,
     kneeFR: 0.12 + Math.max(0, stride) * 0.7 + coil * 0.55 + leap * 0.35,
     kneeBL: 0.3 + Math.max(0, stride) * 0.6 + coil * 0.7,

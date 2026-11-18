@@ -20,3 +20,20 @@ export function characterSweepAllowed(collider: SweepCollider, ridingHandle: num
     body?.handle !== ridingHandle || data?.rideBlockingColliders?.has(collider.handle) === true
   );
 }
+
+type Vector = { x: number; y: number; z: number };
+const toward: Vector = { x: 0, y: 0, z: 0 };
+
+/**
+ * Unit direction from the character toward an obstacle it swept into: up for
+ * a ceiling, down for the floor, into a wall. Rapier 0.21 reports `normal1`
+ * pointing back at the character (0.20 pointed at the obstacle);
+ * tests/characterCollision.test.ts pins the convention against real Rapier.
+ * The returned object is reused.
+ */
+export function towardObstacle(hit: { normal1: Vector }) {
+  toward.x = -hit.normal1.x;
+  toward.y = -hit.normal1.y;
+  toward.z = -hit.normal1.z;
+  return toward;
+}

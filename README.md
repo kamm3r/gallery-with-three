@@ -1,21 +1,19 @@
 # The painted forest
 
-A third-person WebGL experience built with Vite, React, React Three Fiber,
-Rapier, and Koota. Explore a forest clearing and jump through paintings
-to enter a gallery, a collision course, Halloween Hollow, a boss arena, or the
-Warp Room.
+The forest hub runs on Vite, TypeScript, Three.js, Rapier, and Koota. The
+other worlds and scene editor are unavailable in this build. Their source
+is retained for the remaining ports. See [migration status](docs/non-react-migration.md).
 
-The seasonal painting currently leads to a fixed Halloween world at `/seasons`,
-with jack-o'-lanterns, autumn and dead trees, gravestones, moonlight, and fog.
-It does not automatically rotate through the four seasons.
+The [essential tests](tests/README.md) cover gameplay and runtime behavior.
+The world descriptions below document the original game.
 
 ## Run locally
 
-Requires Node.js 20.19 or newer.
+Use Node.js 22.18+, 24.11+, or 26+ as supported by Vite+.
 
 ```bash
-npm install
-npm run dev
+vp install
+vp dev
 ```
 
 Open the local URL printed by Vite, usually `http://localhost:5173`.
@@ -37,13 +35,14 @@ Touch controls appear on small or touch-enabled screens.
 The pause menu freezes the player, moving platforms, animations, and portal
 transitions. Menu → Options → Display has Low, Medium, High and Ultra graphics
 presets, plus independent render scale, dynamic resolution (30/60 FPS target),
-shadows, ambient occlusion, bloom, world detail and decorative particles.
+shadows, bloom, world detail and decorative particles.
 Changing a graphics control selects Custom. New installations default to Medium;
 existing saved resolution and controls are preserved. Display also includes
 brightness and fullscreen. Game options include camera sensitivity,
 inverted vertical look, control hints, and
 reduced motion. Settings are saved in this browser. Returning to the forest
-from the menu resets progress in the current area.
+from the menu resets temporary progress in unsaved areas. The Sacred Capital
+(`/boss`) saves its campaign progress automatically in this browser.
 
 ## The Warp Room
 
@@ -149,8 +148,16 @@ you inside and seals the entrance. His custom knight rig now wears a shattered
 parish-bell crown and carries a chained censer; the five authored attacks and
 second phase remain. Death returns you to your chosen shrine with opened gates
 intact. Victory clears the remaining enemies and lets you explore or return to
-the forest. Progress lasts for this visit to the realm; it is not saved across
-reloads or leaving the route.
+the forest. The current `/boss` Sacred Capital campaign automatically saves the last shrine,
+opened shortcuts, collected offerings and keys, beacon and lift unlocks, both boss
+victories, and embers. Reloading or returning spawns you at the saved shrine with
+full health and three flasks; ordinary enemies return unless the final boss is
+already defeated. Death follows the same reset rules. Resting restores health and
+flasks and respawns ordinary enemies, while keeping collected rewards and unlocks.
+Temporary combat state, position, and lift motion are not saved. Use Menu → Return
+to the forest → **Start new Capital run · erase saved progress** to start over.
+Saves are versioned and validated; malformed data falls back to safe defaults.
+If browser storage is unavailable, the current in-memory run remains playable.
 
 Layout, encounters, models and animation sampling live in `ashenParish.ts`,
 `parishEncounter.ts`, `parishModels.ts` and `parishAnimation.ts` under
@@ -333,10 +340,9 @@ and without vegetation LOD/culling at the same camera pose. The slope and
 moving-platform scripts exercise the live controller in the proving grounds.
 
 ```bash
-npm run lint
-npm run typecheck
-npm test
-npm run build
+vp run lint
+vp run test
+vp run build
 ```
 
 The parish camera uses full vertical orbit and mouse-wheel distance adjustment

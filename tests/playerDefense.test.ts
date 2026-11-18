@@ -1,4 +1,4 @@
-import test from "node:test";
+import { test } from "vite-plus/test";
 import assert from "node:assert/strict";
 import { createEncounter, moveSpec, stepEncounter } from "../src/gameplay/bossEncounter.ts";
 import {
@@ -24,7 +24,7 @@ function defender(patch: Partial<ReturnType<typeof createEncounter>> = {}) {
 const ahead = { damage: 30, x: 0, z: 3, knockback: 5, parryable: true };
 const behind = { ...ahead, z: -3 };
 
-void test("a parry deflects frontal parryable blows inside its window only", () => {
+test("a parry deflects frontal parryable blows inside its window only", () => {
   const mid = (PARRY_WINDOW[0] + PARRY_WINDOW[1]) / 2;
   const d = defender({ parryTime: mid });
   assert.equal(receiveBlow(d, ahead), "parried");
@@ -35,7 +35,7 @@ void test("a parry deflects frontal parryable blows inside its window only", () 
   assert.equal(receiveBlow(defender({ invulnerable: true }), ahead), "dodged");
 });
 
-void test("a guard takes frontal blows on stamina with chip damage, and breaks when it runs out", () => {
+test("a guard takes frontal blows on stamina with chip damage, and breaks when it runs out", () => {
   const d = defender({ guarding: true, stamina: 100 });
   assert.equal(receiveBlow(d, ahead), "guarded");
   assert.ok(d.health > 90 && d.health < 100, `chip ${100 - d.health}`);
@@ -47,7 +47,7 @@ void test("a guard takes frontal blows on stamina with chip damage, and breaks w
   assert.equal(tired.guarding, false);
 });
 
-void test("hyper-armour takes the damage without the flinch, but not from very heavy blows", () => {
+test("hyper-armour takes the damage without the flinch, but not from very heavy blows", () => {
   const d = defender({ hyperArmor: true });
   assert.equal(receiveBlow(d, ahead), "armored");
   assert.equal(d.health, 70);
@@ -58,7 +58,7 @@ void test("hyper-armour takes the damage without the flinch, but not from very h
   );
 });
 
-void test("parrying the Warden's sweep staggers it, and the next blow is a riposte", () => {
+test("parrying the Warden's sweep staggers it, and the next blow is a riposte", () => {
   const s = createEncounter();
   Object.assign(s, { bossX: 0, bossZ: 3, bossYaw: Math.PI, playerX: 0, playerZ: 0, playerYaw: 0 });
   Object.assign(s, { phase: "windup", move: "sweep", timer: moveSpec("sweep").windup });
@@ -85,7 +85,7 @@ void test("parrying the Warden's sweep staggers it, and the next blow is a ripos
   assert.ok(slam.health < 100);
 });
 
-void test("a plunge lands on every enemy around it, not just the nearest", () => {
+test("a plunge lands on every enemy around it, not just the nearest", () => {
   const progress = newParishProgress(),
     state = createParishEncounter(progress),
     c = state.combat;
@@ -106,7 +106,7 @@ void test("a plunge lands on every enemy around it, not just the nearest", () =>
   assert.ok(healths[1] - b.health >= Math.min(healths[1], expected));
 });
 
-void test("parrying a sentinel’s cut staggers it open for a riposte", () => {
+test("parrying a sentinel’s cut staggers it open for a riposte", () => {
   const progress = newParishProgress(),
     state = createParishEncounter(progress),
     c = state.combat;

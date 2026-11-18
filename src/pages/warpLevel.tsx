@@ -1,11 +1,11 @@
 import { useEcsRef } from "../hooks/useEcsRef";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { Physics } from "@react-three/rapier";
-import { Navigate, useNavigate, useParams } from "react-router-dom";
+import { Navigate, useNavigate, useParams } from "../hooks/useRoute";
 import { GameCanvas } from "../components/GameCanvas";
 import { ExperienceHud } from "../components/ExperienceHud";
 import { WarpLevelWorld } from "../components/WarpLevelWorld";
-import { useGame } from "../gameSettings";
+import { useGame } from "../hooks/useGame";
 import { useGameTimeout } from "../hooks/useGameTimeout";
 import { useDocumentMetadata } from "../hooks/useDocumentMetadata";
 import { setResultScreenActive } from "../gameplay/resultScreen";

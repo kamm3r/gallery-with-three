@@ -1,9 +1,9 @@
 import { GameCanvas } from "../components/GameCanvas";
-import { useGame } from "../gameSettings";
+import { useGame } from "../hooks/useGame";
 import { useGameTimeout } from "../hooks/useGameTimeout";
 import { Physics } from "@react-three/rapier";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "../hooks/useRoute";
 import { ExperienceHud } from "../components/ExperienceHud";
 import { ForestWorld } from "../components/ForestWorld";
 import { FOREST_ATMOSPHERE } from "../components/AtmosphereEffect";

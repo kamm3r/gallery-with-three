@@ -1,23 +1,28 @@
-import {
-  Bloom,
-  EffectComposer,
-  N8AO,
-  Noise,
-  SMAA,
-  ToneMapping,
-  Vignette,
-} from "@react-three/postprocessing";
 import { useFrame, useThree } from "@react-three/fiber";
 import { folder, useControls } from "leva";
-import { BlendFunction, ToneMappingMode } from "postprocessing";
-import { useEffect, useMemo } from "react";
+import {
+  BlendFunction,
+  BloomEffect,
+  EffectComposer,
+  EffectPass,
+  NoiseEffect,
+  RenderPass,
+  SMAAEffect,
+  ToneMappingEffect,
+  ToneMappingMode,
+  VignetteEffect,
+  type Effect,
+} from "postprocessing";
+import { HalfFloatType, NoToneMapping, Vector2 } from "three";
+import { useLayoutEffect, useMemo, useRef } from "react";
 import { useReducedMotion } from "../hooks/useReducedMotion";
 import { AtmosphereEffect, FOREST_ATMOSPHERE, type AtmosphereSettings } from "./AtmosphereEffect";
 import { GradeEffect } from "./GradeEffect";
-import { useGame } from "../gameSettings";
+import { Ps2Effect } from "./Ps2Effect";
+import { useGame } from "../hooks/useGame";
 
 // Painted-cinematic grade (Ghibli backgrounds / Elden Ring / Tsushima refs):
-// contact AO grounds the foliage, levels with an atmosphere get height haze
+// Levels with an atmosphere get height haze
 // and volumetric sun shafts, a soft wide bloom lets light bleed into the
 // haze, AgX keeps bright skies from clipping, and a split-tone grade pushes
 // cool moss shadows against warm sunlit highlights. A whisper of grain and a
@@ -40,8 +45,6 @@ export type CinematicProfile = {
   shadowTint?: string;
   highlightTint?: string;
   bloomIntensity?: number;
-  aoIntensity?: number;
-  aoColor?: string;
   grain?: number;
   vignetteDarkness?: number;
 };
@@ -67,18 +70,6 @@ export function CinematicPost({
       label: "MSAA",
     },
     smaa: { value: true, label: "SMAA" },
-    Occlusion: folder({
-      ao: { value: true, label: "AO" },
-      aoRadius: { value: 1.6, min: 0.2, max: 6, step: 0.1, label: "AO radius" },
-      aoIntensity: {
-        value: profile?.aoIntensity ?? 2.2,
-        min: 0,
-        max: 8,
-        step: 0.1,
-        label: "AO intensity",
-      },
-      aoColor: { value: profile?.aoColor ?? "#17220f", label: "AO tint" },
-    }),
     Light: folder({
       toneMapping: { options: TONE_MAPPING, value: ToneMappingMode.AGX, label: "Tone map" },
       bloomIntensity: {
@@ -155,47 +146,87 @@ export function CinematicPost({
     },
   });
 
-  const atmosphereEffect = useMemo(() => new AtmosphereEffect(camera, scene), [camera, scene]);
-  const grade = useMemo(() => new GradeEffect(), []);
-  useEffect(() => () => atmosphereEffect.dispose(), [atmosphereEffect]);
-  useEffect(() => () => grade.dispose(), [grade]);
-  atmosphereEffect.configure({ ...air, shafts: settings.shadows === "off" ? 0 : air.shafts });
-  grade.configure(controls);
+  const gl = useThree((state) => state.gl);
+  const size = useMemo(() => new Vector2(), []);
+  const pipeline = useRef<{
+    composer: EffectComposer;
+    width: number;
+    height: number;
+    dpr: number;
+  } | null>(null);
+  const ps2 = settings.ps2Style;
+  const bloom = settings.bloom;
+  const shadows = settings.shadows;
 
-  const grain = reducedMotion ? 0 : controls.grain;
-  // The composer renders the scene itself; only draw directly without it, so
-  // the scene (and its shadow maps) is never rendered twice per frame.
-  useFrame(({ gl, scene, camera }) => {
-    if (!controls.enabled) gl.render(scene, camera);
+  useLayoutEffect(() => {
+    if (!controls.enabled) return;
+    const composer = new EffectComposer(gl, {
+      multisampling: ps2 ? 0 : controls.multisampling,
+      frameBufferType: HalfFloatType,
+    });
+    composer.addPass(new RenderPass(scene, camera));
+    const effects: Effect[] = [];
+    if (atmosphere) {
+      const effect = new AtmosphereEffect(camera, scene);
+      effect.configure({ ...air, shafts: shadows === "off" ? 0 : air.shafts });
+      effects.push(effect);
+    }
+    if (bloom) {
+      effects.push(
+        new BloomEffect({
+          intensity: controls.bloomIntensity,
+          luminanceThreshold: controls.luminanceThreshold,
+          luminanceSmoothing: controls.luminanceSmoothing,
+          mipmapBlur: true,
+          radius: controls.bloomRadius,
+        }),
+      );
+    }
+    const grade = new GradeEffect();
+    grade.configure(controls);
+    effects.push(
+      new ToneMappingEffect({ mode: controls.toneMapping }),
+      grade,
+      new VignetteEffect({ darkness: controls.vignetteDarkness, offset: controls.vignetteOffset }),
+    );
+    if (!reducedMotion && !ps2 && controls.grain > 0) {
+      const noise = new NoiseEffect({ blendFunction: BlendFunction.SOFT_LIGHT });
+      noise.blendMode.opacity.value = controls.grain;
+      effects.push(noise);
+    }
+    if (ps2) effects.push(new Ps2Effect());
+    if (controls.smaa && !ps2) effects.push(new SMAAEffect());
+    composer.addPass(new EffectPass(camera, ...effects));
+    pipeline.current = { composer, width: -1, height: -1, dpr: -1 };
+    return () => {
+      pipeline.current = null;
+      composer.dispose();
+    };
+  }, [gl, scene, camera, size, ps2, bloom, shadows, reducedMotion, atmosphere, air, controls]);
+
+  useFrame((_, delta) => {
+    const active = pipeline.current;
+    if (!active) {
+      gl.render(scene, camera);
+      return;
+    }
+    gl.getSize(size);
+    const dpr = gl.getPixelRatio();
+    if (active.width !== size.x || active.height !== size.y || active.dpr !== dpr) {
+      active.composer.setSize(size.x, size.y);
+      active.width = size.x;
+      active.height = size.y;
+      active.dpr = dpr;
+    }
+    const { autoClear, toneMapping } = gl;
+    gl.autoClear = true;
+    gl.toneMapping = NoToneMapping;
+    try {
+      active.composer.render(delta);
+    } finally {
+      gl.autoClear = autoClear;
+      gl.toneMapping = toneMapping;
+    }
   }, 1);
-
-  return (
-    <EffectComposer multisampling={controls.multisampling} enabled={controls.enabled}>
-      {controls.ao && settings.ambientOcclusion !== "off" && (
-        <N8AO
-          halfRes={settings.ambientOcclusion !== "high"}
-          quality={settings.ambientOcclusion === "low" ? "low" : settings.ambientOcclusion}
-          aoRadius={controls.aoRadius}
-          intensity={controls.aoIntensity}
-          distanceFalloff={1}
-          color={controls.aoColor}
-        />
-      )}
-      {atmosphere && <primitive object={atmosphereEffect} />}
-      {settings.bloom && (
-        <Bloom
-          intensity={controls.bloomIntensity}
-          luminanceThreshold={controls.luminanceThreshold}
-          luminanceSmoothing={controls.luminanceSmoothing}
-          mipmapBlur
-          radius={controls.bloomRadius}
-        />
-      )}
-      <ToneMapping mode={controls.toneMapping} />
-      <primitive object={grade} />
-      <Vignette darkness={controls.vignetteDarkness} offset={controls.vignetteOffset} />
-      {grain > 0 && <Noise opacity={grain} blendFunction={BlendFunction.SOFT_LIGHT} />}
-      {controls.smaa && <SMAA />}
-    </EffectComposer>
-  );
+  return null;
 }

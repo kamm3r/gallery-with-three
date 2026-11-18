@@ -1,11 +1,19 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
-import { useGame } from "../gameSettings";
-import { FREE_CAMERA_KEYS, FREE_CAMERA_SPEED, freeCameraMovement } from "../gameplay/freeCamera";
+import { useGame } from "../hooks/useGame";
+import { vec3 } from "math";
+import {
+  FREE_CAMERA_KEYS,
+  FREE_CAMERA_SPEED,
+  cameraViewFromSearch,
+  freeCameraMovement,
+} from "../gameplay/freeCamera";
 import { occlusionUniforms } from "../gameplay/occlusionDither";
 
 const readout = { position: [0, 0, 0], speed: FREE_CAMERA_SPEED };
+const movement = vec3.create();
+const step = new THREE.Vector3();
 const textInput = (target: EventTarget | null) =>
   target instanceof HTMLElement &&
   Boolean(target.closest('input, textarea, select, [contenteditable="true"]'));
@@ -31,6 +39,13 @@ export function FreeCamera() {
     state.position.copy(savedPosition);
     state.yaw = rotation.y;
     state.pitch = rotation.x;
+    // Dev inspection: ?camera=x,y,z&look=x,y,z opens the free camera on that view.
+    const view = import.meta.env.DEV ? cameraViewFromSearch(location.search) : null;
+    if (view) {
+      state.position.fromArray(view.position);
+      state.yaw = view.yaw;
+      state.pitch = view.pitch;
+    }
     state.previous = performance.now();
     state.keys.clear();
     readout.position = state.position.toArray();
@@ -131,12 +146,15 @@ export function FreeCamera() {
     const state = flight.current,
       now = performance.now();
     state.position.add(
-      freeCameraMovement(
-        state.keys,
-        state.yaw,
-        state.pitch,
-        state.speed,
-        (now - state.previous) / 1000,
+      step.fromArray(
+        freeCameraMovement(
+          state.keys,
+          state.yaw,
+          state.pitch,
+          state.speed,
+          (now - state.previous) / 1000,
+          movement,
+        ),
       ),
     );
     state.previous = now;
@@ -156,6 +174,17 @@ export function FreeCameraTools({ unavailable }: { unavailable: boolean }) {
   const setter = useRef(setFreeCamera);
   setter.current = setFreeCamera;
   useEffect(() => () => setter.current(false), []);
+  // Dev inspection links open straight into the free camera once the scene is ready.
+  const opened = useRef(false);
+  useEffect(() => {
+    if (opened.current || unavailable || !import.meta.env.DEV) return;
+    if (!cameraViewFromSearch(location.search)) return;
+    const timer = window.setTimeout(() => {
+      opened.current = true;
+      setFreeCamera(true);
+    }, 1500);
+    return () => window.clearTimeout(timer);
+  }, [unavailable, setFreeCamera]);
   useEffect(() => {
     const toggle = (event: KeyboardEvent) => {
       if (event.code !== "F8" || event.repeat || textInput(event.target) || paused || unavailable)

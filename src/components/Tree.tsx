@@ -2,7 +2,7 @@ import * as THREE from "three";
 import React, { useRef } from "react";
 import { useGLTF } from "@react-three/drei";
 import type { ThreeElements } from "@react-three/fiber";
-import { GLTF } from "three-stdlib";
+import type { GLTF } from "three/addons/loaders/GLTFLoader.js";
 
 type GLTFResult = GLTF & {
   nodes: {

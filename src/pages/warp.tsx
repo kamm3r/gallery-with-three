@@ -1,10 +1,10 @@
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { Physics } from "@react-three/rapier";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "../hooks/useRoute";
 import { GameCanvas } from "../components/GameCanvas";
 import { ExperienceHud } from "../components/ExperienceHud";
 import { WarpRoomWorld } from "../components/WarpRoomWorld";
-import { useGame } from "../gameSettings";
+import { useGame } from "../hooks/useGame";
 import { useGameTimeout } from "../hooks/useGameTimeout";
 import { useDocumentMetadata } from "../hooks/useDocumentMetadata";
 import { useReducedMotion } from "../hooks/useReducedMotion";

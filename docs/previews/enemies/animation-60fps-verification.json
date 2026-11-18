@@ -1,0 +1,26 @@
+{
+  "programs": [],
+  "stream_groups": [],
+  "streams": [
+    {
+      "codec_name": "h264",
+      "width": 1920,
+      "height": 880,
+      "r_frame_rate": "60/1",
+      "avg_frame_rate": "60/1",
+      "nb_read_frames": "3120"
+    }
+  ],
+  "format": {
+    "duration": "52.000000",
+    "size": "23843106"
+  },
+  "verification": {
+    "source_render_steps_per_second": 60,
+    "frames_per_section": 1560,
+    "output_frames": 3120,
+    "walk_sample_frames": 60,
+    "walk_sample_distinct_images": 60,
+    "method": "Fixed-step rendering with WebCodecs; no realtime screen capture or frame interpolation."
+  }
+}

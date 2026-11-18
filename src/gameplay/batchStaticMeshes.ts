@@ -1,8 +1,16 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 
-/** Batch immutable scenery by material and spatial cell, retaining frustum culling. */
-export function batchStaticMeshes(root: THREE.Group, cellSize = 32, recursive = true) {
+/**
+ * Batch immutable scenery by material and spatial cell, retaining frustum culling.
+ * `include` narrows which meshes may merge, for trees that also hold moving parts.
+ */
+export function batchStaticMeshes(
+  root: THREE.Group,
+  cellSize = 32,
+  recursive = true,
+  include?: (mesh: THREE.Mesh) => boolean,
+) {
   root.updateWorldMatrix(true, true);
   const inverse = root.matrixWorld.clone().invert();
   const buckets = new Map<string, THREE.Mesh[]>();
@@ -29,7 +37,8 @@ export function batchStaticMeshes(root: THREE.Group, cellSize = 32, recursive = 
       !(object instanceof THREE.Mesh) ||
       object instanceof THREE.InstancedMesh ||
       !(object.material instanceof THREE.MeshStandardMaterial) ||
-      !object.visible
+      !object.visible ||
+      (include && !include(object))
     )
       return;
     const local = object.matrixWorld.clone().premultiply(inverse);
@@ -41,6 +50,8 @@ export function batchStaticMeshes(root: THREE.Group, cellSize = 32, recursive = 
       object.receiveShadow,
       object.renderOrder,
       materialId(object.material),
+      // mergeGeometries needs matching attribute sets.
+      Object.keys(object.geometry.attributes).sort().join(),
     ]);
     const bucket = buckets.get(key) ?? [];
     bucket.push(object);

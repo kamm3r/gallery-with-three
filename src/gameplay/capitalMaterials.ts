@@ -1,5 +1,49 @@
 import * as THREE from "three";
 
+/** Metre-scale fractured relief across the whole rock face, beyond the tiled grain. */
+export function applyCapitalRockRelief(material: THREE.MeshStandardMaterial) {
+  const compile = material.onBeforeCompile.bind(material);
+  const cacheKey = material.customProgramCacheKey();
+  material.onBeforeCompile = (shader, renderer) => {
+    compile(shader, renderer);
+    shader.fragmentShader = shader.fragmentShader.replace(
+      "#include <common>",
+      `#include <common>
+      float capitalRockHash(vec3 p) {
+        return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453);
+      }
+      float capitalRockNoise(vec3 p) {
+        vec3 i = floor(p), f = fract(p);
+        f = f * f * (3.0 - 2.0 * f);
+        return mix(
+          mix(mix(capitalRockHash(i), capitalRockHash(i + vec3(1,0,0)), f.x),
+              mix(capitalRockHash(i + vec3(0,1,0)), capitalRockHash(i + vec3(1,1,0)), f.x), f.y),
+          mix(mix(capitalRockHash(i + vec3(0,0,1)), capitalRockHash(i + vec3(1,0,1)), f.x),
+              mix(capitalRockHash(i + vec3(0,1,1)), capitalRockHash(i + vec3(1,1,1)), f.x), f.y), f.z);
+      }`,
+    );
+    shader.fragmentShader = shader.fragmentShader.replace(
+      "#include <color_fragment>",
+      `#include <color_fragment>
+      float rockBroad = capitalRockNoise(vCapitalPosition * .075);
+      float rockFracture = abs(capitalRockNoise(vCapitalPosition * .22 + 17.0) * 2.0 - 1.0);
+      diffuseColor.rgb *= mix(vec3(.68,.66,.62), vec3(1.16,1.14,1.10), rockBroad);
+      diffuseColor.rgb *= .85 + .15 * smoothstep(.06, .22, rockFracture);`,
+    );
+    shader.fragmentShader = shader.fragmentShader.replace(
+      "#include <normal_fragment_maps>",
+      `#include <normal_fragment_maps>
+      float rockHeight = 2.8 * rockBroad + 1.2 * rockFracture;
+      vec3 rockDx = dFdx(-vViewPosition), rockDy = dFdy(-vViewPosition);
+      vec3 rockR1 = cross(rockDy, normal), rockR2 = cross(normal, rockDx);
+      float rockDet = dot(rockDx, rockR1);
+      vec3 rockGradient = sign(rockDet) * (dFdx(rockHeight) * rockR1 + dFdy(rockHeight) * rockR2);
+      normal = normalize(max(abs(rockDet), 1e-8) * normal - rockGradient);`,
+    );
+  };
+  material.customProgramCacheKey = () => `${cacheKey}:rock-relief-v1`;
+}
+
 /**
  * Finished surface textures for the capital, painted procedurally so the kit city reads
  * as the white stone city of the reference rather than a blockout. Each tile covers the
@@ -16,6 +60,7 @@ export type CapitalSurfaceKind =
   | "slate"
   | "iron"
   | "rock"
+  | "grass"
   | "earth";
 
 const SIZE = 512;
@@ -223,8 +268,8 @@ function painter(kind: CapitalSurfaceKind): Painter {
     case "slate": {
       // Overlapping slates in 0.33 m courses; each course's lower edge casts a lip.
       const rows = courses(12, 0.3, 0.5, 71),
-        slate = hex("#56606b"),
-        blue = hex("#3f4954");
+        slate = hex("#73746f"),
+        blue = hex("#50524f");
       return {
         pixel(x, y) {
           const course = SIZE / 12,
@@ -263,6 +308,18 @@ function painter(kind: CapitalSurfaceKind): Painter {
             moss = Math.max(0, fbm(x, y, 3, 99, 3) - 0.66) * 1.5;
           const c = mix(mix(dark, light, n), lichen, moss).map((v) => v * (1 - crack * 0.3));
           return [c[0], c[1], c[2], n * 0.8 + (1 - crack) * 0.2];
+        },
+      };
+    }
+    case "grass": {
+      const light = hex("#8b9d3e"),
+        dark = hex("#557526");
+      return {
+        pixel(x, y) {
+          const patch = fbm(x, y, 6, 111, 3),
+            blades = fbm(x * 2, y * 0.4, 80, 113, 2),
+            c = mix(light, dark, patch * 0.65 + blades * 0.25);
+          return [c[0], c[1], c[2], 0.45 + blades * 0.12];
         },
       };
     }
@@ -323,4 +380,74 @@ export function capitalSurfaceTextures(kind: CapitalSurfaceKind, bump = 2.5) {
     return t;
   };
   return { map: texture(color, true), normalMap: texture(normal, false) };
+}
+
+/** Texels per 4 m tile in PS2 style (32 per metre, like a 128² PS2 texture page). */
+export const PS2_TILE = 128;
+
+/**
+ * Pure PS2 conversion of one surface: box-downsample to `tile` texels, bake the normal
+ * map's relief into the colour under a fixed key light (no per-pixel lighting on the
+ * PS2), then posterise to 5 bits per channel with a 4×4 ordered dither.
+ */
+export function ps2SurfacePixels(
+  color: Uint8ClampedArray,
+  normal: Uint8ClampedArray,
+  size: number,
+  tile = PS2_TILE,
+) {
+  const out = new Uint8ClampedArray(tile * tile * 4),
+    step = size / tile,
+    light = [-0.42, 0.52, 0.74],
+    bayer = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+  for (let y = 0; y < tile; y++)
+    for (let x = 0; x < tile; x++) {
+      const sum = [0, 0, 0, 0, 0, 0];
+      for (let j = 0; j < step; j++)
+        for (let i = 0; i < step; i++) {
+          const k = ((y * step + j) * size + (x * step + i)) * 4;
+          for (let c = 0; c < 3; c++) {
+            sum[c] += color[k + c];
+            sum[3 + c] += normal[k + c] / 127.5 - 1;
+          }
+        }
+      const n = step * step,
+        nx = sum[3] / n,
+        ny = sum[4] / n,
+        nz = sum[5] / n,
+        len = Math.hypot(nx, ny, nz) || 1,
+        lambert = (nx * light[0] + ny * light[1] + nz * light[2]) / len,
+        shade = 0.62 + 0.5 * Math.max(0, lambert),
+        threshold = bayer[(y % 4) * 4 + (x % 4)] / 16,
+        o = (y * tile + x) * 4;
+      for (let c = 0; c < 3; c++) {
+        const v = Math.min(1, ((sum[c] / n) * shade) / 255);
+        out[o + c] = (Math.min(31, Math.floor(v * 31 + threshold)) / 31) * 255;
+      }
+      out[o + 3] = 255;
+    }
+  return out;
+}
+
+/** A PS2-style texture from a finished surface's colour and normal maps. */
+export function ps2SurfaceTexture(source: { map: THREE.Texture; normalMap: THREE.Texture }) {
+  const read = (t: THREE.Texture) => {
+    const canvas = t.image as HTMLCanvasElement;
+    return canvas.getContext("2d")!.getImageData(0, 0, canvas.width, canvas.height).data;
+  };
+  const size = (source.map.image as HTMLCanvasElement).width,
+    pixels = ps2SurfacePixels(read(source.map), read(source.normalMap), size);
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = PS2_TILE;
+  const ctx = canvas.getContext("2d")!,
+    image = ctx.createImageData(PS2_TILE, PS2_TILE);
+  image.data.set(pixels);
+  ctx.putImageData(image, 0, 0);
+  const t = new THREE.CanvasTexture(canvas);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.magFilter = THREE.NearestFilter;
+  t.minFilter = THREE.NearestMipmapLinearFilter;
+  t.anisotropy = 1;
+  return t;
 }

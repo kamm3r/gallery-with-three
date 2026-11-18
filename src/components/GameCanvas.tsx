@@ -1,7 +1,8 @@
+import { startFrameLoop } from "../runtime/frameLoop";
 import { Canvas, useThree, type CanvasProps } from "@react-three/fiber";
-import { lazy, Suspense, useLayoutEffect, useState } from "react";
+import { useLayoutEffect, useState } from "react";
 import { Leva, useControls } from "leva";
-import { useGame } from "../gameSettings";
+import { useGame } from "../hooks/useGame";
 import { WorldProvider } from "koota/react";
 import { runtimeWorld } from "../gameplay/ecs/world";
 import { RuntimeSystems } from "./RuntimeSystems";
@@ -21,6 +22,20 @@ import {
 import { GameplayState } from "../gameplay/ecs/stateBinding";
 import { setControlsPaused } from "../hooks/usePlayerControls";
 import { FreeCamera, FreeCameraTools } from "./FreeCamera";
+import { ps2PixelRatio } from "../gameplay/ps2Style";
+
+/** PS2 style renders a fixed number of lines, so the ratio follows the window height. */
+function usePs2PixelRatio(enabled: boolean) {
+  const [ratio, setRatio] = useState(() => ps2PixelRatio(window.innerHeight));
+  useLayoutEffect(() => {
+    if (!enabled) return;
+    const update = () => setRatio(ps2PixelRatio(window.innerHeight));
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, [enabled]);
+  return ratio;
+}
 
 function PauseRenderLoop({ preparing }: { preparing: boolean }) {
   const { paused, freeCamera } = useGame();
@@ -32,32 +47,20 @@ function PauseRenderLoop({ preparing }: { preparing: boolean }) {
     if (paused || preparing) return;
     // Drive the whole scene with game time. No frames or physics steps pass
     // during pause, and resuming never adds the time spent in the menu.
-    telemetry.current.previous = performance.now();
-    let frame: number;
-    const tick = (now: number) => {
-      const interval = now - telemetry.current.previous;
-      const delta = Math.min(interval / 1000, 0.05);
+    return startFrameLoop(({ now, interval, delta }) => {
       telemetry.current.previous = now;
-      frame = requestAnimationFrame(tick);
       gl.info.reset();
       const begin = performance.now();
       advance(clock.elapsedTime + (freeCamera ? 0 : delta));
       if (!document.hidden) recordFrame(telemetry.current, interval, performance.now() - begin);
-    };
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
+    });
   }, [advance, clock, gl, paused, preparing, freeCamera, telemetry]);
   return null;
 }
 
-// Dev only: the dynamic import keeps r3f-perf out of production bundles.
-const Perf = import.meta.env.DEV
-  ? lazy(() => import("r3f-perf").then((module) => ({ default: module.Perf })))
-  : () => null;
-
 function Diagnostics() {
   const { perf } = useControls("Diagnostics", {
-    perf: { value: false, label: "r3f-perf overlay" },
+    perf: { value: false, label: "Performance overlay" },
   });
   // Live root state for the dev-browser checks in scripts/.
   const state = useThree();
@@ -65,14 +68,14 @@ function Diagnostics() {
     (window as { __r3f?: typeof state }).__r3f = state;
     state.gl.info.autoReset = false;
     const host = window as typeof window & { __graphics?: unknown };
-    host.__graphics = {
+    const graphics = {
       summary: () => {
         const telemetry = runtimeWorld
           .query(GameplayState)
           .find((e) => e.get(GameplayState)!.domain === "frame-telemetry")
           ?.get(GameplayState)!.value as FrameTelemetry | undefined;
         return {
-          ...(telemetry ? summarizeFrames(telemetry) : {}),
+          ...summarizeFrames(telemetry ?? createFrameTelemetry()),
           dpr: state.gl.getPixelRatio(),
           calls: state.gl.info.render.calls,
           triangles: state.gl.info.render.triangles,
@@ -90,15 +93,27 @@ function Diagnostics() {
         }
       },
     };
+    host.__graphics = graphics;
+    const overlay = perf ? document.createElement("output") : null;
+    let timer: number | undefined;
+    if (overlay) {
+      overlay.style.cssText =
+        "position:fixed;top:8px;left:8px;z-index:20;pointer-events:none;background:#171717;color:white;padding:6px 8px;font:12px monospace";
+      document.body.append(overlay);
+      const update = () => {
+        const { fps, p95Ms, calls, triangles } = graphics.summary();
+        overlay.textContent = `${fps.toFixed(0)} FPS · p95 ${p95Ms.toFixed(1)} ms · ${calls} draws · ${triangles.toLocaleString()} triangles`;
+      };
+      update();
+      timer = window.setInterval(update, 500);
+    }
     return () => {
+      window.clearInterval(timer);
+      overlay?.remove();
       delete host.__graphics;
     };
-  }, [state]);
-  return perf ? (
-    <Suspense fallback={null}>
-      <Perf position="top-left" />
-    </Suspense>
-  ) : null;
+  }, [state, perf]);
+  return null;
 }
 
 export function GameCanvas({
@@ -123,6 +138,8 @@ export function GameCanvas({
   const { paused, freeCamera, settings } = useGame();
   const [renderScale, setRenderScale] = useState(settings.resolution);
   const [preparing, setPreparing] = useState(false);
+  const ps2 = settings.ps2Style;
+  const ps2Ratio = usePs2PixelRatio(ps2);
   useLayoutEffect(() => {
     setControlsPaused(paused || preparing || freeCamera);
     return () => setControlsPaused(paused || freeCamera);
@@ -130,7 +147,7 @@ export function GameCanvas({
   return (
     <>
       <div
-        className="game-viewport"
+        className={ps2 ? "game-viewport ps2-style" : "game-viewport"}
         tabIndex={-1}
         aria-label="Game view"
         inert={paused}
@@ -141,12 +158,12 @@ export function GameCanvas({
           shadows={settings.shadows === "off" ? false : (props.shadows ?? "percentage")}
           flat
           frameloop="never"
-          dpr={adaptiveResolution ? renderScale : settings.resolution}
+          dpr={ps2 ? ps2Ratio : adaptiveResolution ? renderScale : settings.resolution}
           gl={{ antialias: false, stencil: false, powerPreference: "high-performance" }}
         >
           <WorldProvider world={runtimeWorld}>
             <PauseRenderLoop preparing={preparing} />
-            {adaptiveResolution && (
+            {adaptiveResolution && !ps2 && (
               <AdaptiveResolution
                 maximum={settings.resolution}
                 enabled={settings.adaptiveResolution}

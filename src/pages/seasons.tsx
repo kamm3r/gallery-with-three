@@ -1,6 +1,6 @@
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { Physics } from "@react-three/rapier";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "../hooks/useRoute";
 import { GameCanvas } from "../components/GameCanvas";
 import { ThirdPersonPlayer } from "../components/ThirdPersonPlayer";
 import { PortalPainting } from "../components/PortalPainting";
@@ -9,7 +9,7 @@ import { ExperienceHud } from "../components/ExperienceHud";
 import { HollowLane, LANE_ATMOSPHERE, laneSignals } from "../components/HollowLane";
 import { nightFx } from "../components/halloweenProps";
 import { keyLabel } from "../gameplay/controlBindings";
-import { useGame } from "../gameSettings";
+import { useGame } from "../hooks/useGame";
 import { useGameTimeout } from "../hooks/useGameTimeout";
 import { setResultScreenActive } from "../gameplay/resultScreen";
 import { setMood } from "../gameplay/sound";

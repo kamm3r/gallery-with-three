@@ -1,8 +1,9 @@
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, useLocation } from "./hooks/useRoute";
 import { lazy, Suspense } from "react";
 import Custom404 from "./pages/404";
 import ForestHub from "./pages/index";
 import { GameProvider } from "./GameProvider";
+import { isPlaygroundEditor } from "./gameplay/editorMode";
 import { PauseMenu } from "./components/PauseMenu";
 
 const GalleryLevel = lazy(() => import("./pages/gallery"));
@@ -15,6 +16,21 @@ const WarpLevel = lazy(() => import("./pages/warpLevel"));
 const WarpBoss = lazy(() => import("./pages/warpBoss"));
 
 export function App() {
+  const location = useLocation();
+  const editor = import.meta.env.DEV && isPlaygroundEditor(location.pathname, location.search);
+  const views = {
+    forest: ForestHub,
+    gallery: GalleryLevel,
+    playground: PlaygroundLevel,
+    seasons: SeasonsLevel,
+    capitalKit: CapitalKit,
+    capital: RealmLevel,
+    warp: WarpRoom,
+    warpBoss: WarpBoss,
+    warpLevel: WarpLevel,
+    notFound: Custom404,
+  };
+  const View = location.route === "legacy" ? null : views[location.route];
   return (
     <GameProvider>
       <Suspense
@@ -24,21 +40,9 @@ export function App() {
           </main>
         }
       >
-        <Routes>
-          <Route path="/" element={<ForestHub />} />
-          <Route path="/gallery" element={<GalleryLevel />} />
-          <Route path="/playground" element={<PlaygroundLevel />} />
-          <Route path="/seasons" element={<SeasonsLevel />} />
-          <Route path="/capital-kit" element={<CapitalKit />} />
-          <Route path="/boss" element={<RealmLevel />} />
-          <Route path="/warp" element={<WarpRoom />} />
-          <Route path="/warp/boss" element={<WarpBoss />} />
-          <Route path="/warp/:levelId" element={<WarpLevel />} />
-          <Route path="/pageTwo" element={<Navigate to="/" replace />} />
-          <Route path="*" element={<Custom404 />} />
-        </Routes>
+        {View ? <View key={location.pathname} /> : <Navigate to="/" replace />}
       </Suspense>
-      <PauseMenu />
+      {!editor && <PauseMenu />}
     </GameProvider>
   );
 }

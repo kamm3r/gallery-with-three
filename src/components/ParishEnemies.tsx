@@ -1,3 +1,5 @@
+import { enemyAttackSpec } from "../gameplay/enemyAttacks";
+import { kilnSweepWindow } from "../gameplay/kilnAttacks";
 import { useEcsRef } from "../hooks/useEcsRef";
 import { useEffect, useMemo, useRef, type MutableRefObject } from "react";
 import { useFrame } from "@react-three/fiber";
@@ -6,8 +8,9 @@ import { CylinderCollider, RigidBody, type RapierRigidBody } from "@react-three/
 import * as THREE from "three";
 import { enemySpecs, parishEnemySpawns } from "../gameplay/ashenParish";
 import { createParishRig } from "../gameplay/parishModels";
-import { parishEnemyPose } from "../gameplay/parishAnimation";
-import type { ParishEncounter } from "../gameplay/parishEncounter";
+import { applyParishRigPose } from "../gameplay/parishRigPose";
+import type { ParishEncounter, ParishEnemy } from "../gameplay/parishEncounter";
+import { playSound } from "../gameplay/sound";
 import { useReducedMotion } from "../hooks/useReducedMotion";
 
 function ParishEnemyModel({
@@ -25,7 +28,7 @@ function ParishEnemyModel({
     const ember = new Set<THREE.MeshStandardMaterial>();
     rig.root.traverse((object) => {
       if (object instanceof THREE.Mesh && object.material instanceof THREE.MeshStandardMaterial) {
-        if (object.material.metalness > 0.5) metal.add(object.material);
+        if (object.material.name === "painted-ps2-enemy") metal.add(object.material);
         else if (object.material.emissiveIntensity > 0) ember.add(object.material);
       }
     });
@@ -33,6 +36,8 @@ function ParishEnemyModel({
   }, [rig]);
   const body = useRef<RapierRigidBody>(null);
   const bar = useRef<THREE.Mesh>(null);
+  const bellWave = useRef<THREE.Mesh>(null);
+  const lastContact = useRef<{ enemy: ParishEnemy; attack: number } | null>(null);
   const vitals = useRef<THREE.Group>(null);
   const rotation = useMemo(() => new THREE.Quaternion(), []);
   const up = useMemo(() => new THREE.Vector3(0, 1, 0), []);
@@ -73,66 +78,47 @@ function ParishEnemyModel({
     if (distance > 28 && visualTime.current < 1 / 20) return;
     const visualDelta = visualTime.current;
     visualTime.current = 0;
-    const p = parishEnemyPose(e, clock.elapsedTime, reduced);
+    if (
+      alive &&
+      distance < 28 &&
+      e.phase === "strike" &&
+      e.timer >=
+        (e.kind === "kiln" && e.kilnAttack === "sweep"
+          ? kilnSweepWindow.start
+          : enemyAttackSpec(e).contact) &&
+      (lastContact.current?.enemy !== e || lastContact.current?.attack !== e.attackNumber)
+    ) {
+      lastContact.current = { enemy: e, attack: e.attackNumber };
+      const intensity = Math.max(0.15, 1 - distance / 30);
+      if (e.kind === "widow") playSound("graveBell", { intensity });
+      else if (e.kind === "bearer") playSound("slam", { intensity });
+      else if (e.kind === "hound") playSound("houndBite", { intensity });
+      else if (e.kind === "kiln")
+        playSound(
+          e.kilnAttack === "slam" ? "slam" : e.kilnAttack === "check" ? "bossImpact" : "bossSwing",
+          { intensity },
+        );
+    }
+    if (bellWave.current) {
+      bellWave.current.visible = alive && e.kind === "widow" && e.phase === "strike";
+      bellWave.current.scale.setScalar(
+        enemySpecs.widow.reach * Math.min(1, e.timer / enemySpecs.widow.contact),
+      );
+      (bellWave.current.material as THREE.MeshBasicMaterial).opacity = Math.max(
+        0,
+        0.5 * (1 - e.timer / enemySpecs.widow.strike),
+      );
+    }
+    const p = applyParishRigPose(rig, e, clock.elapsedTime, reduced, visualDelta);
     body.current?.setNextKinematicTranslation({ x: e.x, y: e.y, z: e.z });
     body.current?.setNextKinematicRotation(rotation.setFromAxisAngle(up, e.yaw));
     // Dead bodies stop colliding, but their pose keeps resolving in world space.
     rig.root.visible = p.sink < 3;
-    const poseDelta = Math.min(visualDelta, 0.1);
-    rig.root.position.y = THREE.MathUtils.damp(
-      rig.root.position.y,
-      p.bob - p.sink - p.death * 0.6,
-      18,
-      poseDelta,
-    );
-    const j = rig.joints;
-    const response = e.phase === "strike" ? 40 : 18;
-    j.body.rotation.set(
-      THREE.MathUtils.damp(j.body.rotation.x, p.lean - p.death * 1.35, response, poseDelta),
-      THREE.MathUtils.damp(j.body.rotation.y, p.twist, response, poseDelta),
-      THREE.MathUtils.damp(
-        j.body.rotation.z,
-        p.roll + (e.kind === "hound" ? p.death * 1.4 : p.death * 0.15),
-        response,
-        poseDelta,
-      ),
-    );
-    if (j.armR)
-      j.armR.rotation.x = THREE.MathUtils.damp(
-        j.armR.rotation.x,
-        p.arm,
-        e.phase === "strike" ? 40 : 14,
-        Math.min(delta, 0.05),
-      );
-    if (j.armL)
-      j.armL.rotation.x = THREE.MathUtils.damp(
-        j.armL.rotation.x,
-        p.shield + p.stride * 0.12,
-        18,
-        Math.min(delta, 0.05),
-      );
-    if (j.head) j.head.rotation.set(p.head, -p.twist * 0.35, 0);
-    if (j.forearmR) j.forearmR.rotation.x = p.elbow;
-    if (j.forearmL) j.forearmL.rotation.x = p.offElbow;
-    j.legFL.rotation.x = p.legFL;
-    j.legFR.rotation.x = p.legFR;
-    if (j.legBL) j.legBL.rotation.x = p.legBL;
-    if (j.legBR) j.legBR.rotation.x = p.legBR;
-    for (const suffix of ["FL", "FR", "BL", "BR"] as const) {
-      const knee = j[`knee${suffix}`];
-      const foot = j[`foot${suffix}`];
-      if (knee) knee.rotation.x = p[`knee${suffix}`];
-      if (foot) foot.rotation.x = -p[`leg${suffix}`] - p[`knee${suffix}`] - p.lean;
-    }
-    if (j.jaw) j.jaw.rotation.x = p.jaw;
-    if (j.tail) j.tail.rotation.y = reduced ? 0 : Math.sin(clock.elapsedTime * 2.4) * 0.2;
-    if (j.cape) j.cape.rotation.set(-p.lean * 0.35, 0, reduced ? 0 : p.stride * 0.06);
-    if (j.lantern) j.lantern.rotation.x = -j.armR.rotation.x - p.elbow;
     for (const material of materials.metal) {
-      material.emissive.set(p.guardGlow > 0 ? "#d5b26d" : "#dc6839");
-      material.emissiveIntensity = Math.max(p.glow, p.guardGlow);
+      material.emissive.set(p.guardGlow > 0 ? "#d5b26d" : p.glow > 0 ? "#dc6839" : "#b8c7d1");
+      material.emissiveIntensity = Math.max(0.18, p.glow, p.guardGlow);
     }
-    for (const material of materials.ember) material.emissiveIntensity = 2.5 + p.castGlow * 2;
+    for (const material of materials.ember) material.emissiveIntensity = 1.8 + p.castGlow * 2;
     if (bar.current) {
       const ratio = e.health / enemySpecs[e.kind].health;
       bar.current.scale.x = ratio;
@@ -149,11 +135,34 @@ function ParishEnemyModel({
       position={spawn.position}
     >
       <CylinderCollider
-        args={[spawn.kind === "hound" ? 0.45 : 1.1, 0.4]}
-        position={[0, spawn.kind === "hound" ? 0.55 : 1.1, 0]}
+        args={[
+          spawn.kind === "hound" ? 0.55 : spawn.kind === "clinger" ? 0.6 : 1.1,
+          spawn.kind === "kiln" || spawn.kind === "bearer" ? 0.55 : 0.35,
+        ]}
+        position={[0, spawn.kind === "hound" ? 0.6 : spawn.kind === "clinger" ? 0.6 : 1.1, 0]}
       />
       <primitive object={rig.root} dispose={null} />
-      <group ref={vitals} position={[0, spawn.kind === "hound" ? 2.5 : 3.1, 0]}>
+      {spawn.kind === "widow" && (
+        <mesh
+          ref={bellWave}
+          rotation={[-Math.PI / 2, 0, 0]}
+          position={[0, 0.055, 0]}
+          visible={false}
+        >
+          <ringGeometry args={[0.94, 1, 48]} />
+          <meshBasicMaterial
+            color="#c9b88f"
+            transparent
+            opacity={0.45}
+            depthWrite={false}
+            side={THREE.DoubleSide}
+          />
+        </mesh>
+      )}
+      <group
+        ref={vitals}
+        position={[0, spawn.kind === "hound" ? 2 : spawn.kind === "bearer" ? 3.5 : 3.1, 0]}
+      >
         <Billboard>
           <mesh>
             <planeGeometry args={[1.3, 0.075]} />

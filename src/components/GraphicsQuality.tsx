@@ -1,9 +1,10 @@
 import { useCallback, useEffect } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
-import { useGame } from "../gameSettings";
+import { useGame } from "../hooks/useGame";
 import { useEcsRef } from "../hooks/useEcsRef";
 import { shadowSizes } from "../gameplay/graphicsSettings";
+import { ps2ShadowSize } from "../gameplay/ps2Style";
 
 /** Apply shadow resolution to authored lights, including scenes mounted asynchronously. */
 export function GraphicsQuality() {
@@ -15,7 +16,7 @@ export function GraphicsQuality() {
     shadows: [] as THREE.LightShadow[],
   }));
   const update = useCallback(() => {
-    const size = shadowSizes[settings.shadows];
+    const size = ps2ShadowSize(shadowSizes[settings.shadows], settings.ps2Style);
     if (!size) return;
     for (const shadow of cache.current.shadows) {
       if (shadow.mapSize.x === size && shadow.mapSize.y === size) continue;
@@ -26,7 +27,7 @@ export function GraphicsQuality() {
       shadow.mapPass = null;
       shadow.needsUpdate = gl.shadowMap.needsUpdate = true;
     }
-  }, [cache, gl, settings.shadows]);
+  }, [cache, gl, settings.shadows, settings.ps2Style]);
   useEffect(() => {
     update();
     cache.current.discover = 0;

@@ -1,6 +1,57 @@
 import { combatTuning } from "./combatTuning.ts";
 export const CHARACTER_MODEL =
   "/assets/quaternius/ultimate-animated-character/Casual_Male_gameplay.glb";
+
+/** A rigged character file carrying the gameplay clips (Idle, Walk, SwordSlash, ...). */
+export type CharacterModelSpec = {
+  path: string;
+  /** World metres per model unit at the default 1.84 m capsule. */
+  unitScale: number;
+  /** Bones the guard pose is laid over while the legs keep walking. */
+  upperBones: ReadonlySet<string>;
+  /** Where held items (the flashlight) mount; first match wins. */
+  mounts: readonly string[];
+  /** Mount offset and scale for the flashlight, in the mount's own units. */
+  torch: { offset: number; scale: number };
+  /** Wrist height in the LedgeHang pose, metres above the feet. */
+  ledgeHandHeight: number;
+};
+
+// glTF node names lose their dots on load ("UpperArm.L" becomes "UpperArmL").
+export const CASUAL_MODEL: CharacterModelSpec = {
+  path: CHARACTER_MODEL,
+  unitScale: 0.82,
+  upperBones: new Set(
+    ["Abdomen", "Torso", "Neck", "Head"].concat(
+      ...["L", "R"].map((s) => ["Shoulder", "UpperArm", "LowerArm", "Fist"].map((b) => b + s)),
+    ),
+  ),
+  mounts: ["FistR", "Fist.R"],
+  torch: { offset: 0.14, scale: 1.3 },
+  ledgeHandHeight: 2.16,
+};
+
+/**
+ * The PS2 Cathedral Pilgrim on the UAL2 skeleton, with every gameplay clip retargeted
+ * by scripts/retargetPilgrimGameplay.py (see gameplay-manifest.json for the measured values).
+ */
+export const PILGRIM_MODEL: CharacterModelSpec = {
+  path: "/assets/characters/ashen-parish/pilgrim-ps2/cathedral-pilgrim-ps2-gameplay.glb",
+  unitScale: 1.05,
+  upperBones: new Set(
+    ["spine_01", "spine_02", "spine_03", "neck_01", "Head"].concat(
+      ...["l", "r"].map((s) =>
+        ["clavicle", "upperarm", "lowerarm", "hand"].map((b) => `${b}_${s}`),
+      ),
+    ),
+  ),
+  mounts: ["SwordSocket"],
+  torch: { offset: 0, scale: (1.3 * 0.82) / 1.05 },
+  ledgeHandHeight: 1.855,
+};
+
+/** The model the player wears. */
+export const PLAYER_MODEL = PILGRIM_MODEL;
 export const CLIP_SECONDS: Record<string, number> = {
   LedgeGrab: 0.2,
   LedgeClimb: 1,
@@ -17,8 +68,8 @@ export const CLIP_SECONDS: Record<string, number> = {
   Parry: 0.7,
   GuardHit: 0.35,
 };
-// Measured wrist height in the authored LedgeHang pose, at player scale .82.
-export const LEDGE_HAND_HEIGHT = 2.16;
+// Measured wrist height in the player's authored LedgeHang pose.
+export const LEDGE_HAND_HEIGHT = PLAYER_MODEL.ledgeHandHeight;
 
 /**
  * The light attack chain: three swings, each with its own frame data. Times are

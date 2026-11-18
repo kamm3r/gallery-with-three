@@ -1,3 +1,4 @@
+import { editorFrameDelta } from "../dev/editorPlayback";
 import {
   COMBAT_CAMERA,
   autoRotateYaw,
@@ -8,7 +9,7 @@ import {
 import { createCombatInput, stepCombatInput } from "../gameplay/combatInput";
 import { useEcsRef } from "../hooks/useEcsRef";
 import { useFrame, useThree } from "@react-three/fiber";
-import { useGame } from "../gameSettings";
+import { useGame } from "../hooks/useGame";
 import { useRapier } from "@react-three/rapier";
 import {
   useCallback,
@@ -30,6 +31,7 @@ import {
   CLIP_SECONDS,
   JUMP_ATTACK,
   LEDGE_HAND_HEIGHT,
+  PLAYER_MODEL,
   PLUNGE_ATTACK,
   PLUNGE_HEIGHT,
   SWORD_MOVES,
@@ -349,8 +351,9 @@ function PlayerRuntime({
   }, [headingRef, reach]);
   const deflectSeenId = useRef(0);
 
-  useFrame((frame, rawDelta) => {
-    if (freeCamera) return;
+  useFrame((frame, incomingDelta) => {
+    const rawDelta = import.meta.env.DEV ? editorFrameDelta(incomingDelta) : incomingDelta;
+    if (freeCamera || rawDelta === 0) return;
     const player = controllerRef.current;
     const headingGroup = headingRef.current;
     if (!player || !player.body || !headingGroup) return;
@@ -1862,7 +1865,8 @@ export function ThirdPersonPlayer({
               upper={upper}
               hold={holdAnimation}
               rollDuration={ROLL_WEIGHTS[settings.rollWeight].duration}
-              scale={0.82 * (movementProfile ? movementProfile.height / 1.84 : 1)}
+              model={PLAYER_MODEL}
+              scale={PLAYER_MODEL.unitScale * (movementProfile ? movementProfile.height / 1.84 : 1)}
             />
           </group>
         </group>

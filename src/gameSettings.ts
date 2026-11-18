@@ -1,11 +1,12 @@
-import { createContext, useContext } from "react";
-import { defaultBindings, readBindings, readSprintKey } from "./gameplay/controlBindings";
-import { graphicsPresets, readGraphicsSettings } from "./gameplay/graphicsSettings";
-import type { RollWeight } from "./gameplay/playerRules";
+import { defaultBindings, readBindings, readSprintKey } from "./gameplay/controlBindings.ts";
+import { graphicsPresets, readGraphicsSettings } from "./gameplay/graphicsSettings.ts";
+import type { RollWeight } from "./gameplay/playerRules.ts";
 
 export const defaultSettings = {
   soundVolume: 60,
   brightness: 100,
+  /** 448-line, 15-bit dithered PS2 presentation. Independent of the quality preset. */
+  ps2Style: true,
   ...graphicsPresets.medium,
   sensitivity: 100,
   invertY: false,
@@ -34,6 +35,7 @@ export function readSettings(): GameSettings {
       "showHints",
       "reducedMotion",
       "adaptiveResolution",
+      "ps2Style",
     ] as const) {
       if (typeof saved?.[key] === "boolean") settings[key] = saved[key];
     }
@@ -55,24 +57,4 @@ export function readSettings(): GameSettings {
   } catch {
     return { ...defaultSettings };
   }
-}
-
-export const GameContext = createContext<{
-  paused: boolean;
-  setPaused: (paused: boolean) => void;
-  freeCamera: boolean;
-  setFreeCamera: (active: boolean) => void;
-  settings: GameSettings;
-  updateSettings: (patch: Partial<GameSettings>) => void;
-}>({
-  paused: false,
-  setPaused: () => {},
-  freeCamera: false,
-  setFreeCamera: () => {},
-  settings: defaultSettings,
-  updateSettings: () => {},
-});
-
-export function useGame() {
-  return useContext(GameContext);
 }

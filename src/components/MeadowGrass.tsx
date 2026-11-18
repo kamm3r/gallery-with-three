@@ -3,7 +3,7 @@ import { useWorld } from "koota/react";
 import { PlayerPosition } from "../gameplay/ecs/traits";
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
-import { useGame } from "../gameSettings";
+import { useGame } from "../hooks/useGame";
 import { useReducedMotion } from "../hooks/useReducedMotion";
 import { GRASS_CHUNK_SIZE } from "../gameplay/grass";
 import { sunlight } from "../gameplay/sunlight";

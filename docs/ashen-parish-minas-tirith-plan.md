@@ -1,88 +1,140 @@
-# The Fading Sacred Capital: seven-tier kit city
+# The Fading Sacred Capital: Bramasole's Minas Tirith
 
-The Souls-like portal at `/boss` is built entirely from the blockout kit catalogued at `/capital-kit`. Its form follows the [Minas Tirith model on Sketchfab](https://sketchfab.com/3d-models/minas-tirith-a18074508ce7437abb2c9de634a6d010), used only as a visual reference: Sketchfab lists it as not downloadable, under an Editorial licence, and the model is not imported. The city has seven half-ring tiers against a mountain, a sheer rock prow splitting them, a curtain wall with a great gate, and a citadel with a white tower. The districts, flows and metrics chart of [Bramasole's level-design article](https://medium.com/@bramasolejm030206/preface-ec08bc1459d0) map onto the tiers.
+The Souls-like boss world at `/boss` follows the level in [Bramasole's level-design article](https://medium.com/@bramasolejm030206/preface-ec08bc1459d0) ("Practice: Minas Tirith"). The sources were its area map, its two flowcharts, its 3D route diagrams and its whitebox and final renders, plus the author's [playthrough video](https://youtu.be/XhdRSTb7Tro). The article frames are in `references/minas-tirith/`.
 
-![Plan of the walkable floors coloured by height, with solids in red and masonry in grey (drawn before the row quarters were added)](previews/capital-tiers-plan.png)
+It is a floating sky city split from its ground half by fog. The player climbs from the City Wall to the cathedral and throws the switch. As in the article's flowchart, the sky city comes down onto the ground and the missing lower half of the city joins it. The route then descends to the colosseum.
 
-## Tiers and districts
+![The kit city's walkable plan (right) beside the article's area map (left), at the same scale](previews/capital-article-match/plan-vs-article.png)
 
-North is −Z; the city faces south. Tiers are 8 m apart (0 → 48); the cathedral galleries, backyard and beacon top are at 54; the plain lies at −20.
+![The plan laid over the area map](previews/capital-article-match/plan-overlay.png)
 
-| Tier | Radius              | Height   | District                                                                                                                                             |
-| ---- | ------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1    | 61–72 m             | 0        | City Wall: curtain wall with merlons, the great gate (barred return from the plain), the Break Wall breach and ledge, houses, the opening checkpoint |
-| 2    | 51–61 m             | 8        | Middle Level Town: houses, two of them with upper floors; the prow gate key; the town lift up to tier 3                                              |
-| 3    | 42–51 m             | 16       | Upper town: houses; the barred prow gate                                                                                                             |
-| 4–5  | 27–42 m             | 24, 32   | Up Town; Backyard Below arrives at tier 4's east end                                                                                                 |
-| 6    | 20–27 m             | 40       | Ultimate Plaza: statues of the keepers                                                                                                               |
-| 7    | Citadel             | 48       | Court, white tower, Oblivion Chapel (walkable roof), prow walk, arena lift landing                                                                   |
-| —    | North shelf         | 48 / 54  | Asylum Cathedral: barred front door, galleries, transept stairs, the keeper's apse and the switch; Church Outside Path; Royal Backyard               |
-| —    | West flank          | 54 → −20 | Beacon pathway and six kit half-turns around the beacon column; beacon lift                                                                          |
-| —    | Plain               | −20      | Grand Street, two houses, the great gate stairs, and the gate into the mountain                                                                      |
-| —    | Inside the mountain | −20      | Glory Colosseum and its lift to the citadel                                                                                                          |
+## Areas
 
-Each tier is crossed through a kit-hallway gate cut in the prow and climbed by a 12 m kit flight at alternating ends (tier 1 east, tier 2 west, and so on), like the switchbacks of the reference. The prow is a full-height keel out to the curtain wall, ending in a bow; the prow walk runs along its top from the citadel to the tip as a lookout.
+North is −Z and the Ultimate Plaza is the origin. One pixel of the 1000 px area map is half a metre.
 
-## Quarters, interiors and dressing
+| Area (article)      | Here                                                                                                                                                                                                                                                                                   | Height       |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
+| City Wall           | Two curtain arcs in the north-east (radius 95–108). The start bonfire is on the first arc. The Break Wall breach has a fallen beam and a courtyard below with a stair back up                                                                                                          | 12           |
+| Middle Level Town   | East ring. F2 is the street (39–46), where both long piered bridges land. F3 is the rooftop deck over the houses. F1 is the undercroft beneath the street, with the key room                                                                                                           | 9 / 15 / 3   |
+| Mountain Tunnel     | From F1's north end through the prow, then across Grand Street's spur as a covered bridge                                                                                                                                                                                              | 3            |
+| Up Town             | North-west quarter of house blocks, with inner, avenue and outer streets and radial lanes. It bulges to radius 100 on its west-north-west arc, wraps the north up to the prow, and reaches the great gate                                                                              | 6            |
+| Top-Left Road       | Stair from Up Town to the tip platform of the prow                                                                                                                                                                                                                                     | 6 → 16       |
+| Ultimate Plaza      | The blade walk climbs from the tip to the round plaza (radius 16), which has statues                                                                                                                                                                                                   | 16 → 24      |
+| Top-Right Road      | From F3, through the key gate, up a stair-bridge to the plaza's east wing                                                                                                                                                                                                              | 15 → 24      |
+| Oblivion Chapel     | South of the plaza: checkpoint, with doors to the plaza, the cathedral and the outside path. It has a walkable roof                                                                                                                                                                    | 24           |
+| Asylum Cathedral    | Narthex, transept and nave hall with apse. Galleries (F2) are reached from outside; rafters (F3) run on to the chapel roof. The keeper is in the hall and the switch in the apse                                                                                                       | 24 / 31 / 38 |
+| Church Outside Path | A ledge round the east flank, with stepping platforms up to the gallery door                                                                                                                                                                                                           | 24 → 31      |
+| Royal Backyard      | A garden island in the south-east with the blue pavilion, its outline traced from the area map, including the tail sweeping west to the apse. Backyard Below is a switchback stair tower down to the town's south end                                                                  | 28           |
+| Beacon Pathway      | West arc from the apse door down three flights to the beacon tower, sealed by fog until the switch is thrown                                                                                                                                                                           | 24 → 6       |
+| Grand Street        | Below the fog. A bar runs from the beacon tower's foot to a junction, then a full ring round the central mountain's foot: west, north through an arch in the prow's keel past the arena lift, and east beneath the town. A spur runs north to the colosseum gate, under Up Town's deck | −8           |
+| Glory Colosseum     | Under the plaza. Reached through the gate in the prow's keel; its lift rises to the blade                                                                                                                                                                                              | −18          |
 
-- **Row quarters.** Tiers 1–5 are packed with kit row buildings against each retaining face: 4.5 m storeys, windows, cornices, sealed doors, crenellated flat roofs, slate gables, chimneys, banners and the odd spired tower. The taller ones rise beside the next tier's parapet, giving the stacked roofscape of the reference. A deterministic generator places them, keeping at least 4.2 m of street along the parapet and staying clear of the prow gates, tier stairs, lift, gate square and the authored houses.
-- **Homes.** Every other broad house on tiers 1–3 is an enterable home (seven in all), furnished with a hearth and fire, logs, a table and benches, barrels, a shelf and a bed. Four hold keepsake offerings. The authored tier houses are furnished the same way and now have plaster walls, windows and slate gables.
-- **Districts.** The citadel court has the White Tree in a fountain. The chapel has an altar, candles, a banner and benches. The cathedral has banners on the nave pillars, a red runner, and candle stands around the apse outside the keeper's circle. The colosseum has banners above the stands and braziers. The royal garden has hedges in planters and a fountain under its pavilion.
+## The switch: the sky city comes down
 
-## Progression
+The flowchart's beat is: "the sky city falls down to the ground, and the missing pieces of city's bottom part reunion again".
 
-Tier 1 → east stair → tier 2 (key in a west house) → west stair → tier 3 (prow gate barred until the key) → tiers 4–6 → citadel (checkpoint) → outside path → cathedral galleries → apse: **Keeper of the Asylum** → switch → fog lifts → beacon pathway → spiral → plain → mountain gate → **The Ash Warden** → arena lift → citadel.
+- **Authoring.** Everything under the fog is authored as the ground city: Grand Street with its houses and swords, the colosseum and the plain (`b.groundLayer` in `capitalDistricts.ts`).
+- **Rendering.** It is batched as its own group (`environment.ground`).
+- **Before the switch.** The scene holds that group 240 m below its place, so the sky city floats alone on the cloud deck.
+- **When the switch is thrown.** The ground city rises into place beneath it over seven seconds, with a rumble and a camera shake. From the sky city this is what falling onto the ground looks like.
+- **Colliders** stay where they belong throughout; the ground is out of reach until the switch anyway.
+- **Reduced motion and saves** that are already past the switch show the city settled.
 
-Five NPCs: the Gatewarden by the opening shrine (the climb and the key), the Lamplighter on Up Town (the keepers and the fog), the Mourner on the plaza (how the Warden fights), the Sage in the court and the Fearful Knight on Grand Street. Thirty-one enemies watch the streets, the court, the cathedral and the plain, and fourteen offerings are spread across the city.
+![Before (top) and after (bottom) the switch, from the same camera](previews/capital-article-match/before-after-switch.png)
 
-Optional and return routes: the Break Wall offering; house upper floors; the town lift; the chapel roof; the prow walk lookout; the cathedral front door, barred from inside; Royal Backyard and Backyard Below; Grand Street houses; the great gate, unbarred from the stairs outside; the beacon and arena lifts, released from below.
+## How closely the plan matches the area map
 
-![Reference (left) and the kit city from a similar angle (right)](previews/capital-tiers-overview.jpg)
+The article publishes no dimensions, heights or project files, so the area map is the only measurable source. I segmented each district on it by its colour and compared it with this level's walkable plan, rendered at the same 0.5 m-per-pixel scale. The comparison scripts were scratch tools, not part of the repo.
+
+| District           | IoU  | Centroid offset (m) |
+| ------------------ | ---- | ------------------- |
+| Chapel and plaza   | 0.61 | 3.1                 |
+| Up Town            | 0.60 | 4.6                 |
+| Cathedral and path | 0.50 | 4.0                 |
+| Royal Backyard     | 0.48 | 4.5                 |
+| Middle Level Town  | 0.46 | 1.8                 |
+| Grand Street       | 0.42 | 2.9                 |
+| City Wall          | 0.37 | 6.6                 |
+| Beacon Pathway     | 0.14 | 5.8                 |
+| All districts      | 0.50 |                     |
+
+The beacon arc is a hairline on the map, so its overlap score is not meaningful. By angle round the plaza, though, its radius matches the map to within 1–3 m:
+
+| Angle (rad) | Map radius (m) | Here (m) |
+| ----------- | -------------- | -------- |
+| 3.4–3.6     | 101–111        | 101–110  |
+| 3.6–3.8     | 100–103        | 98–104   |
+| 3.8–4.0     | 97–99          | 94–100   |
+| 4.0–4.2     | 89–95          | 87–96    |
+| 4.2–4.4     | 83–87          | 76–88    |
+
+Every district's centre sits within 2–7 m of the map's. The IoU figures understate the match: the map's shading hides parts of the green and blue districts from the colour segmentation, and the City Wall district here includes the Break Wall courtyard from the playthrough video, which the map does not colour.
+
+![Per district: map only (red), this level only (blue), both (white)](previews/capital-article-match/district-difference.png)
+
+Heights are not on the map. They come from the playthrough video and the whitebox renders, keeping the article's order: wall, then town, then the climb to the plaza and cathedral, then the descent to the ground and the colosseum.
+
+## Flow
+
+This follows the article's critical path:
+
+1. City Wall, bridge, F2 street, F1 undercroft, Mountain Tunnel, Up Town, Top-Left Road, blade, plaza, Oblivion Chapel.
+2. Then the outside path, the galleries, down to the transept, and the Keeper of the Asylum.
+3. The switch lifts the fog.
+4. The beacon pathway leads down to the tower, past its watch. The lift waits at the top and answers there once the fog has lifted; it is the only way down to Grand Street.
+5. The court gate opens into the keel, and the corridor leads to The Ash Warden.
+
+Loops and shortcuts:
+
+- The cathedral front door, barred from the narthex, leads back to the chapel.
+- The rafters reach the chapel roof.
+- Backyard Below drops to the town street. Its garden door opens only from the garden, so the town has no back way to the cathedral: the first climb must reach the plaza and chapel. From the town the stair tower is a dead end with an offering on its upper landing.
+- The undercroft key opens the town lift (F2 to F3) and the Top-Right Road gate.
+- The great gate, unbarred from its stair, opens from Up Town's band onto the start wall. Grand Street reaches it through the beacon tower's lift and Up Town.
+- The arena lift goes from the colosseum, west of its corridor, to the blade. It is released only from below.
+
+### Flow against the article's method
+
+Walking distances over the real floors, gates and lifts (`tests/capitalFlow.test.ts`):
+
+| Route               | Before the shortcut | After | Shortcut       |
+| ------------------- | ------------------- | ----- | -------------- |
+| Start to chapel     | 318 m               | 184 m | Undercroft key |
+| Chapel to town      | 250 m               | 183 m | Garden door    |
+| Chapel to keeper    | 197 m               | 30 m  | Cathedral door |
+| Start to Up Town    | 205 m               | 139 m | Great gate     |
+| Chapel to colosseum | 456 m               | 153 m | Arena lift     |
+
+- **Convergence.** On a fresh run nothing behind the chapel is nearer than the chapel itself.
+- **Density.** Encounters follow the article's beat sheet. The plaza and chapel hold no enemies. The cathedral is the densest volume, with a watch on its floor, galleries and rafters. The descent to the last keeper is linear and holds under half the climb's enemies.
+- **Open point.** The first descent from the chapel to the colosseum is 456 m with no checkpoint until the arena lift is released beside the boss door.
 
 ## Implementation
 
-- `capitalKitLevel.ts` is the builder. Every primitive places catalogue kit pieces: wall, pillar, post, crate, corner wall, walkway, stairs, hallway, curved stairs, elevator, doorway, door, double door, fallen beam, scaffold, plank bridge, drum, debris, log pile and kit floor panels. The same call records the walkable surfaces (floor collision and navigation) and box solids (physics and AI blocking). Framed doorways lay a threshold through the wall so navigation passes through them. Kit treads sit half a riser below the continuous ramps the capsule walks.
-- `capitalDistricts.ts` generates the tiers (floors, masonry, parapets, prow gates, zig-zag stairs and houses in local frames) and authors the citadel, cathedral, backyard, beacon, plain and colosseum. `capitalLayout.ts` builds the level once and exports the gameplay API used by the encounter, progress, HUD and scene: areas, lifts, gates, seals, bosses, caches, NPCs, enemies, floor queries, line of sight and navigation.
-- `capitalEnvironment.ts` renders the pieces and panels with finished, procedurally painted surfaces from `capitalMaterials.ts`: limestone ashlar for masonry, plaster for houses, flagstones, dressed sandstone, smooth trim, timber, slate, iron, rock and earth. Each has a normal map derived from its own shading. The level merges every floor into one collider and batches the kit meshes into about 30 draw calls. Height fog hides the ground city until the switch is thrown.
-- `capitalCrag.ts` sculpts the mountain as one ridged heightfield that wraps the cathedral shelf and falls to the plain, with a rolling plain out to the horizon. Rock stays two metres beneath, and four beside, every walk and kit piece, and slopes up from that clearance, so cuts read as gorges rather than walls.
-- `capitalLayout.ts` buckets colliders and masses into a spatial grid, so line-of-sight and AI checks stay cheap with the added buildings.
-- Falling below −40 m is fatal; before the fog lifts, so is falling below the sky city.
-
-## Metrics
-
-From the chart: player 1.8 m (crouch 1.2), walk 2.5 m/s, sprint 4 m/s, 2 m roll, paths ≥ 1.5 m, streets ≥ 4 m, rooms ≥ 3 × 3 m, hallways ≥ 3 m, high halls ≥ 5 m, stair headroom ≥ 4 m, doors ≥ 2 × 3.5 m, high walls ≥ 5 m. Exterior main flights are street-wide; house stairs are 2.2 m.
+- `capitalDistricts.ts` authors every district with the kit builder (`capitalKitLevel.ts`), which records surfaces and colliders with each piece.
+- `capitalLayout.ts` holds the gameplay anchors: areas, lifts, gates, shrines, caches, bosses, NPCs and enemies.
+- `capitalCrag.ts` raises the rock: a central mountain under the plaza, an island under the cathedral and garden, and a shelf under Up Town. The wall, bridges and town stand on their own masonry piers.
+- The cloud-deck shader in `capitalEnvironment.ts` hides everything below y ≈ 1 until the switch.
+- A keeper now waits seven metres beyond its circle's centre, on the side away from the seal (`beginCapitalBoss`).
 
 ## Validation
 
-- `vp run test`: 301 tests pass, including 21 capital tests and 2 boss balance tests. The capital tests walk the real Rapier player capsule up the whole zig-zag climb, from the great gate through all six prow gates to the citadel. They also walk to the key, around the citadel, chapel roof and prow walk, along the outside path to the apse, from the nave to the court, down Backyard Below, down the beacon spiral to the colosseum, up the great gate stairs, to the town lift pad, the Break Wall and the street houses, and into every open home. Every walkable surface joins one navigation network. Anchors, open lift shafts, boss leash circles, metrics, gate sidedness, retries, lift release and disposal are also checked.
-- `tests/capitalBossBalance.test.ts` simulates (it was not hand-played) both capital bosses against bots with human limits: reaction delay, roll-timing noise, misread telegraphs and greed. An average bot beats the Keeper about 74% of the time and the Ash Warden about 61%; a careless one wins about 51% and 37%. The bots found a real bug: a Warden closing to exactly its stop distance could stall forever on rounding error, so standing still froze the boss. It now has a tolerance.
-- `node --experimental-strip-types scripts/auditCapitalMetrics.ts` passes: rendered-geometry headroom and width on 587 surfaces, 33 doors and 24 rooms.
-- `vp check` reports 0 errors; `vp run typecheck` and `vp run build` pass.
+- `vp run test` passes the whole suite.
+- `tests/capital.test.ts` checks the logic:
+  - the plan follows the article's area map;
+  - the ground city is authored apart from the sky city;
+  - anchors are on floors;
+  - lift shafts are clear and the boss leash circles are open floor;
+  - the metrics hold;
+  - one walkable network;
+  - gates, lifts, the fog seal and retries all behave.
+- `tests/capitalFlow.test.ts` measures the routes above and checks the encounter curve.
+- `tests/capitalRoutes.test.ts` builds the city and one Rapier world once. It walks the real player capsule along every route above, checks the blade's paving and parapets, and casts the boarding corridors of all six lift landings.
+- That routes file runs in about 5 s.
+- An earlier lift-landing check printed a Rapier hit object when it failed. That object references the whole physics world, and formatting it used several gigabytes. Assertions now compare primitives only.
 
-The views below are headless inspection-camera renders of the running game, not a played session: overview, front, the tiers from above, a tier street, the nave and the White Tree.
+The shots below are headless free-camera renders (`/boss?camera=x,y,z&look=x,y,z`), not played sessions: the overview from beyond the wall, the view from the start bonfire, and the cathedral's flank.
 
-![Views](previews/capital-tiers-views.jpg)
-
-Interiors and districts: the White Tree, a home, the nave, the colosseum (in fog before the switch), the royal garden and the chapel.
-
-![Interiors](previews/capital-interiors.jpg)
-
-### Lower city based on the RenderHub reference
-
-The lowest tier now reaches a radius of 96 m while the second tier remains at 61 m: a 35 m deep district, compared with the original 11 m and the first expansion's 23 m. The [Buncic reference overhead views](https://www.renderhub.com/buncic/minas-tirith) informed the deeper ground district, broad gate forecourt, and multiple streets between building clusters. This remains a kit-built interpretation rather than an import of that model.
-
-Eight detached blocks with varied widths, depths and heights separate an inner street from the outer curtain street. Cross streets join them through gaps between the blocks; the stair approach and west breach corridor remain open. A 16 m diameter space is reserved in the gate forecourt. The gate, arrival shrine, prow tip, stairs, lower road, street houses, keepsakes and affected characters follow the enlarged perimeter.
-
-Navigation considers alternate shared spans where a terrace seam crosses a doorway. Real player-capsule route checks cover both lower-city street loops, the full climb, breach, houses, and relocated gate stairs. The lower road retains clearance beneath the breach foundation.
-
-The current audits pass with 604 surfaces, 33 doors and 24 rooms. The dense scan checks 511,999 unobstructed points with no missing visible or collision floors. Earlier overview images above show the previous, narrower lowest tier.
-
-![Current lower-city plan generated from the authored floors and colliders](previews/capital-courtyard-plan.png)
-
-### Threshold and lift repairs
-
-The five threshold gaps identified in the geometry audit are visibly paved. Their shared material has a depth bias to avoid flicker against overlapping floors. Lift side walls have explicit colliders, including while the player is already riding the lift; the town deck follows its angled shaft. See [the current audit](audits/minas-tirith-integrity.md) for checks and limitations.
-
-### Centred entrance and visible roof thickness
-
-The great gate and its stairs now sit on the city's front centreline beneath the prow, with a longitudinal passage joining the first transverse passage. The prow stops at the curtain. Roof and masonry fascia now face outward for either outline direction, so their solid edges no longer disappear under backface culling. Wall infill height matches its collision boxes, and lift headers have continuous corner supports. See the current audit for the regression checks and remaining visual-inspection limitation.
+![Overview](previews/capital-article-match/overview.png)
+![From the start bonfire](previews/capital-article-match/start.png)
+![The cathedral](previews/capital-article-match/cathedral.png)

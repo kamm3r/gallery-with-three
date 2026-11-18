@@ -1,3 +1,4 @@
+import { capitalMountedPlacement } from "./generated/capitalStatuePlacement.ts";
 import type { ParishArea, ParishPoint } from "./ashenParish.ts";
 import type { CapitalKitModel } from "./capitalBuildingKit.ts";
 import {
@@ -9,124 +10,175 @@ import {
 } from "./capitalKitLevel.ts";
 
 /**
- * The Fading Sacred Capital, shaped after a seven-tier white city against a mountain:
- * concentric half-ring terraces facing south (+Z), each eight metres above the last, a
- * sheer rock prow splitting them down the middle, and a citadel with a white tower on
- * top. The climb zig-zags: each tier is crossed through a gate tunnel in the prow and
- * climbed by a stair at alternating ends. The district map and flow of the original
- * capital map onto the tiers; the ground city lies on the plain beneath the fog.
+ * The Fading Sacred Capital, rebuilt to Bramasole's "Minas Tirith" level: a round sky
+ * city split from its ground half by fog. The plan follows the article's area map
+ * (north is −Z, the Ultimate Plaza is the origin, one plan pixel of the 1000 px map is
+ * half a metre):
+ *
+ * - City Wall (north-east): two arcs of curtain wall with the Break Wall between them,
+ *   each sending a long radial bridge in to the Middle Level Town.
+ * - Middle Level Town (east ring): the street floor (F2) where the bridges land, the
+ *   rooftop floor (F3) over its houses, and the undercroft (F1) beneath the street.
+ * - Mountain Tunnel: from F1 through the prow to Up Town.
+ * - Up Town (north-west): a broad quarter of house blocks; its Top-Left Road climbs to
+ *   the tip of the prow, whose blade walk rises to the round Ultimate Plaza.
+ * - Oblivion Chapel south of the plaza: the checkpoint where four routes converge.
+ * - Asylum Cathedral behind it (narthex, transept, nave with galleries and rafters),
+ *   the Church Outside Path along its east flank and the Royal Backyard beyond.
+ * - Beacon Pathway (west arc) from the apse down to the beacon tower.
+ * - Below the fog: Grand Street around the foot of the central mountain, and the Glory
+ *   Colosseum beneath the plaza.
  *
  * Every piece is placed through the kit builder, which also records its walkable
  * surfaces and colliders.
  */
-export const TIER_R = [96, 61, 51, 42, 34, 27, 20] as const;
-export const TIER_H = [0, 8, 16, 24, 32, 40, 48] as const;
-export const Y = { plain: -20, citadel: 48, gallery: 54 } as const;
-const BEDROCK = -22;
-/** Half the angular span of each terrace either side of due south. */
-const SPAN = 1.75;
-const PROW = 4.5;
-/** Lift decks are 6 m square; floors stop 3.05 m from the shaft centre. */
-const SHAFT = 3.05;
-const TIER_AREAS: ParishArea[] = ["refuge", "foundry", "foundry", "toproad", "toproad", "yard"];
+export const Y = {
+  wall: 12,
+  bridge: 9,
+  f3: 15,
+  f2: 9,
+  f1: 3,
+  tunnel: 3,
+  upTown: 6,
+  tip: 16,
+  plaza: 24,
+  /** The chapel, plaza and cathedral floor. */
+  citadel: 24,
+  /** Cathedral galleries. */
+  gallery: 31,
+  rafter: 38,
+  garden: 28,
+  /** Grand Street and the ground beneath the fog. */
+  plain: -8,
+  arena: -18,
+} as const;
+/** The ground plain lies just under Grand Street; walls and piers stand on it. */
+export const GROUND = Y.plain - 0.5;
+/** The raised court before the colosseum gate, up broad steps from Grand Street. */
+const COURT_Y = Y.plain + 2;
 
-/** Polar point: angle from -Z towards +X, so π is due south. */
+/** Polar point: angle from −Z towards +X (clockwise seen from above), so π/2 is east. */
 export const polar = (r: number, a: number): XZ => [Math.sin(a) * r, -Math.cos(a) * r];
-export const bandMid = (k: number) => (TIER_R[k] + TIER_R[k + 1]) / 2;
-/** Angle of a point `d` metres along a band from the prow, east (+1) or west (-1). */
-export const along = (k: number, side: 1 | -1, d: number) => Math.PI - side * (d / bandMid(k));
-/** A point on band `k`, `d` metres from the prow at radius `r`. */
-export const onTier = (k: number, side: 1 | -1, d: number, r = bandMid(k)): ParishPoint => {
-  const [x, z] = polar(r, along(k, side, d));
-  return [x, TIER_H[k], z];
-};
+const radial = (a: number): XZ => [Math.sin(a), -Math.cos(a)];
+/** The yaw that turns a local +Z towards `d`. */
+const facing = (d: XZ) => Math.atan2(d[0], d[1]);
+const at3 = ([x, z]: XZ, y: number): ParishPoint => [x, y, z];
+const add = (p: XZ, d: XZ, s: number): XZ => [p[0] + d[0] * s, p[1] + d[1] * s];
 
-export const LOWER_STREET_X = -TIER_R[0] - 4;
-const GREAT_GATE_Z = TIER_R[0] + 0.6;
-/** The apron: an annular sector before the walls at the lowest tier's level. */
-export const CAPITAL_APRON = {
-  r0: TIER_R[0] + 1.25,
-  r1: 130,
-  aE: Math.PI - 0.8,
-  aW: Math.PI + 0.5,
+/** Plan rings and sectors, in metres and radians. */
+export const CAPITAL_RINGS = {
+  wall: { r0: 95, r1: 108, a: [0.22, 0.88] as const, b: [1.0, 1.4] as const },
+  bridges: [0.74, 1.25] as const,
+  mid: { a0: 0.3, a1: 1.95, f3: [30, 38.5] as const, street: [39, 46] as const },
+  f1: { a0: 0.4, a1: 1.85, r0: 39.5, r1: 45.5 },
+  upTown: { a0: 4.5, a1: 5.8, r0: 48, r1: 92 },
+  band: { a0: 5.8, a1: 6.55, r0: 68, r1: 92 },
+  street: { a0: 4.1, a1: 5.6, r0: 23, r1: 33 },
+  plaza: 16,
+  arena: 20,
+} as const;
+const W = CAPITAL_RINGS.wall,
+  MID = CAPITAL_RINGS.mid,
+  F1 = CAPITAL_RINGS.f1,
+  UP = CAPITAL_RINGS.upTown,
+  BAND = CAPITAL_RINGS.band,
+  GS = CAPITAL_RINGS.street;
+
+/** Half-width of the blade walk on the prow at `z` (it narrows to its tip at −64). */
+export const bladeHalfWidth = (z: number) => {
+  const table: Array<[number, number]> = [
+    [-64, 1.2],
+    [-58, 5],
+    [-50, 6.5],
+    [-44, 7.5],
+    [-34, 9],
+    [-28, 11],
+    [-12, 11],
+  ];
+  if (z <= table[0][0]) return table[0][1];
+  for (let i = 1; i < table.length; i++)
+    if (z <= table[i][0]) {
+      const [z0, h0] = table[i - 1],
+        [z1, h1] = table[i];
+      return h0 + ((h1 - h0) * (z - z0)) / (z1 - z0);
+    }
+  return 11;
 };
-/** The beacon's sunken court: the only place the plain drops to the road beneath it. */
-export const BEACON_COURT = { x0: -86, x1: -48, z0: -96, z1: -48 };
+export const CAPITAL_PROW = { tip: -64, gate: -58, halfWidth: 11 } as const;
+
+/** The town lift stands in a bay of the Middle Level Town's house row. */
+const TOWN_LIFT_A = 1.4,
+  TOWN_LIFT_R = 35.5;
+/** The tunnel runs due west at this depth, from F1 through the prow to Up Town. */
+const TUNNEL_Z = -39.1;
+const TUNNEL_EAST = polar(42.5, F1.a0)[0];
+const TUNNEL_WEST = -24;
+/** Grand Street's junction circle, where its bar from the beacon tower meets its ring. */
+const JUNCTION: XZ = [-31, 24.5];
+const BEACON_TOWER: XZ = [-77.5, 24.5];
+/** The cathedral plan. */
+export const CAPITAL_CATHEDRAL = {
+  chapel: { x0: -12, x1: 12, z0: 15.5, z1: 30 },
+  narthex: { x0: -9, x1: 9, z0: 32, z1: 38 },
+  transept: { x0: -28, x1: 28, z0: 40.5, z1: 56 },
+  hall: { x0: -18, x1: 18, z0: 56, z1: 104 },
+  apseTip: 116,
+};
 
 export const CAPITAL_SITES = {
-  start: [18, 0, TIER_R[0] - 8] as ParishPoint,
-  startSpawn: [14, 0, TIER_R[0] - 8.5] as ParishPoint,
-  courtyard: [26, 0, TIER_R[0] - 13] as ParishPoint,
-  exit: [27, 0, 60] as ParishPoint,
-  greatGate: [0, 0, GREAT_GATE_Z] as ParishPoint,
-  /** Before the barbican's mouth, on the apron at the level of the lowest tier. */
-  greatGateFoot: [0, 0, GREAT_GATE_Z + 31] as ParishPoint,
-  townLift: (() => {
-    const a = along(1, 1, 30),
-      [x, z] = polar(56.05, a);
-    return { a, center: [x, TIER_H[1], z] as ParishPoint };
-  })(),
-  tunnelGate: [-PROW - 0.3, TIER_H[2], bandMid(2)] as ParishPoint,
-  chapel: [-11, 48, -12] as ParishPoint,
-  whiteTower: [0, 48, 6] as ParishPoint,
-  cathedralDoor: [0, 48, -36] as ParishPoint,
-  apse: [0, 48, -92.93] as ParishPoint,
-  arenaLift: [0, 0, -30] as ParishPoint,
-  beaconTower: [-70, 0, -62] as ParishPoint,
-  beaconLift: [-57, 0, -58] as ParishPoint,
-  beaconSeal: [-16.9, 54, -58] as ParishPoint,
-  backyard: [46, 54, -62] as ParishPoint,
-  stairTower: [44, 0, -24] as ParishPoint,
-  colosseum: [0, -20, 0] as ParishPoint,
+  start: at3(polar(102, 0.42), Y.wall),
+  startSpawn: at3(polar(102, 0.47), Y.wall),
+  /** The Break Wall's courtyard below the curtain. */
+  courtyard: at3(polar(84.2, 0.955), Y.upTown),
+  greatGate: [24, Y.wall, -90.6] as ParishPoint,
+  townLift: {
+    a: TOWN_LIFT_A,
+    center: at3(polar(TOWN_LIFT_R, TOWN_LIFT_A), Y.f2),
+  },
+  /** The barred gate at the foot of the Top-Right Road. */
+  tunnelGate: [30.8, Y.f3, 0] as ParishPoint,
+  fountain: at3(polar(35, 0.95), Y.f2),
+  plaza: [0, Y.plaza, 0] as ParishPoint,
+  chapel: [0, Y.citadel, 24] as ParishPoint,
+  cathedralDoor: [0, Y.citadel, 31] as ParishPoint,
+  apse: [0, Y.citadel, 84] as ParishPoint,
+  switch: [0, Y.citadel, 109] as ParishPoint,
+  beaconSeal: [0, Y.citadel, 118.4] as ParishPoint,
+  arenaLift: [-6.5, Y.arena, -24] as ParishPoint,
+  beaconTower: at3(BEACON_TOWER, Y.plain),
+  beaconLift: at3(BEACON_TOWER, Y.plain),
+  backyard: [76, Y.garden, 62] as ParishPoint,
+  pavilion: [80, Y.garden, 70] as ParishPoint,
+  /** The door in the garden wall at the head of Backyard Below's last flight. */
+  gardenGate: [58.5, Y.garden, 30.5] as ParishPoint,
+  junction: at3(JUNCTION, Y.plain),
+  colosseumGate: [0, Y.plain + 2, -61] as ParishPoint,
+  colosseum: [0, Y.arena, 0] as ParishPoint,
+  tipPlatform: [0, Y.tip, -67] as ParishPoint,
 };
 
 /**
- * Inter-tier stairs alternate: tier 1 climbs at its east end, tier 2 at its west, and so
- * on. Each 12 m flight runs along the next tier's retaining face as a chord, and its
- * landing crosses that tier's parapet.
+ * Interior volumes, as oriented boxes: the undercroft, key room, tunnel, homes, chapel,
+ * cathedral and colosseum. The surface shader keeps them dark, lit by braziers, as in the
+ * reference's interiors. `yaw` turns the box's local +Z as a three.js yaw does.
  */
-/** Enterable homes among the row quarters, each with a clear spot inside its door. */
+export const CAPITAL_INTERIORS: Array<{ center: ParishPoint; half: ParishPoint; yaw: number }> = [];
+const interior = (x0: number, y0: number, z0: number, x1: number, y1: number, z1: number) =>
+  CAPITAL_INTERIORS.push({
+    center: [(x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2],
+    half: [(x1 - x0) / 2, (y1 - y0) / 2, (z1 - z0) / 2],
+    yaw: 0,
+  });
+
+/** Enterable homes, each with a clear spot inside its door. */
 export const CAPITAL_HOMES: Array<{
   id: string;
-  k: number;
+  area: ParishArea;
   spot: ParishPoint;
   /** Just outside the door, on the street, and just inside it. */
   approach: [ParishPoint, ParishPoint];
 }> = [];
 
-export const TIER_STAIRS = Array.from({ length: 6 }, (_, k) => {
-  const side = (k % 2 === 0 ? 1 : -1) as 1 | -1,
-    inner = TIER_R[k + 1],
-    rs = inner + (k >= 4 ? 3.3 : 3),
-    end = Math.PI - side * SPAN,
-    aTop = end + side * (6 / rs),
-    aLow = aTop + side * 2 * Math.asin(6 / rs);
-  const T = polar(rs, aTop),
-    L = polar(rs, aLow),
-    dir: XZ = [(T[0] - L[0]) / 12, (T[1] - L[1]) / 12];
-  let n: XZ = [-dir[1], dir[0]];
-  if (n[0] * T[0] + n[1] * T[1] < 0) n = [-n[0], -n[1]];
-  const depthIn = rs - inner + 1.6;
-  const corner = (s: number, q: number): XZ => [
-    T[0] + dir[0] * s + n[0] * q,
-    T[1] + dir[1] * s + n[1] * q,
-  ];
-  const mid = corner(2, -2);
-  return {
-    k,
-    side,
-    low: [L[0], TIER_H[k], L[1]] as ParishPoint,
-    top: [T[0], TIER_H[k + 1], T[1]] as ParishPoint,
-    dir,
-    /** A point on the landing, over the upper tier's outer edge. */
-    arrival: [corner(2, -3.6)[0], TIER_H[k + 1], corner(2, -3.6)[1]] as ParishPoint,
-    landing: [corner(0, 2), corner(0, -depthIn), corner(4, -depthIn), corner(4, 2)],
-    gapAngle: (Math.atan2(mid[0], -mid[1]) + 2 * Math.PI) % (2 * Math.PI),
-  };
-});
-
-type Side = "n" | "e" | "s" | "w";
-type HouseDoor = { side: Side; c: number; level?: number; width?: number; height?: number };
 type Frame = ReturnType<typeof frame>;
 
 /** Builder calls in a local frame: origin `o`, local +Z turned to `yaw` (three.js). */
@@ -142,7 +194,7 @@ function frame(b: CapitalBuilder, ox: number, oz: number, yaw: number) {
   };
   return {
     P,
-    /** A kit piece standing at local (x, z), turned `turn` from the frame. */
+    yaw,
     piece: (
       model: CapitalKitModel,
       size: ParishPoint,
@@ -154,7 +206,6 @@ function frame(b: CapitalBuilder, ox: number, oz: number, yaw: number) {
       const [px, pz] = P([x, z]);
       b.piece(model, size, [px, bottom, pz], yaw + (o.turn ?? 0), material, o.thickness, o.leaves);
     },
-    /** A kit piece with its footprint as a collider. */
     prop: (
       model: CapitalKitModel,
       size: ParishPoint,
@@ -201,111 +252,104 @@ function frame(b: CapitalBuilder, ox: number, oz: number, yaw: number) {
   };
 }
 
-/** Keep the part of a convex polygon on one side of the line z = edge. */
-function clip(poly: XZ[], edge: number, keep: -1 | 1): XZ[] {
-  const inside = (p: XZ) => (keep < 0 ? p[1] <= edge : p[1] >= edge);
-  const out: XZ[] = [];
-  poly.forEach((p, i) => {
-    const q = poly[(i + 1) % poly.length];
-    if (inside(p)) out.push(p);
-    if (inside(p) !== inside(q)) {
-      const t = (edge - p[1]) / (q[1] - p[1]);
-      out.push([p[0] + (q[0] - p[0]) * t, edge]);
-    }
-  });
-  return out;
+/** The convex hull of a point set, wound consistently (Andrew's monotone chain). */
+function convexHull(points: XZ[]): XZ[] {
+  const pts = [...points].sort((p, q) => p[0] - q[0] || p[1] - q[1]);
+  const cross = (o: XZ, a: XZ, b: XZ) =>
+    (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lower: XZ[] = [],
+    upper: XZ[] = [];
+  for (const p of pts) {
+    while (lower.length >= 2 && cross(lower.at(-2)!, lower.at(-1)!, p) <= 0) lower.pop();
+    lower.push(p);
+  }
+  for (const p of [...pts].reverse()) {
+    while (upper.length >= 2 && cross(upper.at(-2)!, upper.at(-1)!, p) <= 0) upper.pop();
+    upper.push(p);
+  }
+  return [...lower.slice(0, -1), ...upper.slice(0, -1)];
 }
 
-export function authorCapitalDistricts(b: CapitalBuilder) {
-  const lanterns: ParishPoint[] = [];
-  const lantern = (x: number, y: number, z: number) => lanterns.push([x, y, z]);
-  const parapet = (a: XZ, c: XZ, y: number, openings?: CapitalOpening[]) =>
-    b.wall(a, c, y, y + 1.1, { thickness: 0.4, material: "trim", openings });
-  const gap = (at: number, width: number, y: number): CapitalOpening => ({
-    at,
-    width,
-    bottom: y,
-    height: 1.1,
-    frame: "none",
-  });
+function scatter(seed: number) {
+  return () => {
+    seed = (seed * 16807) % 2147483647;
+    return (seed - 1) / 2147483646;
+  };
+}
 
-  /** A flat-roofed kit house in a local frame; local +Z (its "s" side) faces the street. */
-  function house(
-    t: Frame,
-    o: {
-      id: string;
-      area: ParishArea;
-      x0: number;
-      z0: number;
-      x1: number;
-      z1: number;
-      base: number;
-      storeys: 1 | 2;
-      doors: HouseDoor[];
-      material?: CapitalMaterial;
-    },
-  ) {
-    const storey = 5,
-      top = o.base + storey * o.storeys,
-      th = 0.6;
-    const corners: XZ[] = [
-      [o.x0, o.z0],
-      [o.x1, o.z0],
-      [o.x1, o.z1],
-      [o.x0, o.z1],
-    ];
-    const sides: Side[] = ["n", "e", "s", "w"];
-    const openings: Record<number, CapitalOpening[]> = {};
-    for (const d of o.doors) {
-      const at =
-        d.side === "n"
-          ? d.c - o.x0
-          : d.side === "e"
-            ? d.c - o.z0
-            : d.side === "s"
-              ? o.x1 - d.c
-              : o.z1 - d.c;
-      (openings[sides.indexOf(d.side)] ??= []).push({
-        at,
-        width: d.width ?? 2.4,
-        height: d.height ?? 3.6,
-        bottom: o.base + (d.level ?? 0) * storey,
-        id: `${o.id}:${d.side}${d.level ?? 0}`,
-        area: o.area,
-      });
-    }
-    t.enclosure(corners, o.base, top - 0.6, {
-      openings,
-      material: o.material ?? "house",
-      thickness: th,
+type Side = "n" | "e" | "s" | "w";
+type HouseDoor = { side: Side; c: number; width?: number; height?: number };
+
+/**
+ * A furnished single-storey home in a local frame; local +Z (its "s" side) faces the
+ * street. Hearth and fire, logs, a table with benches, barrels, a shelf and a bed.
+ */
+function house(
+  t: Frame,
+  o: {
+    id: string;
+    area: ParishArea;
+    x0: number;
+    z0: number;
+    x1: number;
+    z1: number;
+    base: number;
+    height?: number;
+    doors: HouseDoor[];
+    roof?: boolean;
+  },
+) {
+  const height = o.height ?? 5,
+    top = o.base + height,
+    th = 0.6;
+  const corners: XZ[] = [
+    [o.x0, o.z0],
+    [o.x1, o.z0],
+    [o.x1, o.z1],
+    [o.x0, o.z1],
+  ];
+  const sides: Side[] = ["n", "e", "s", "w"];
+  const openings: Record<number, CapitalOpening[]> = {};
+  for (const d of o.doors) {
+    const along =
+      d.side === "n"
+        ? d.c - o.x0
+        : d.side === "e"
+          ? d.c - o.z0
+          : d.side === "s"
+            ? o.x1 - d.c
+            : o.z1 - d.c;
+    (openings[sides.indexOf(d.side)] ??= []).push({
+      at: along,
+      width: d.width ?? 2.4,
+      height: d.height ?? 3.6,
+      bottom: o.base,
+      id: `${o.id}:${d.side}`,
+      area: o.area,
     });
-    const inner = { x0: o.x0 + th / 2, x1: o.x1 - th / 2, z0: o.z0 + th / 2, z1: o.z1 - th / 2 };
-    if (o.storeys === 2) {
-      // A stair along the back wall; the landing column runs the full depth upstairs.
-      const y = o.base + storey,
-        sz0 = inner.z0,
-        sz1 = inner.z0 + 2.2;
-      const high = t.flight(
-        `${o.id}:stair`,
-        o.area,
-        [inner.x0 + 0.6, o.base, (sz0 + sz1) / 2],
-        [1, 0],
-        storey,
-        2.2,
-        { fill: o.base },
-      );
-      t.rect(`${o.id}:landing`, o.area, high[0], sz0, inner.x1, inner.z1, y);
-      t.rect(`${o.id}:upper`, o.area, inner.x0, sz1, high[0], inner.z1, y);
-    }
-    furnish(t, inner, o.base, o.storeys === 2);
-    t.rooms.push({
-      id: o.id,
-      width: inner.x1 - inner.x0,
-      depth: inner.z1 - inner.z0,
-      height: storey - 0.6,
-    });
-    t.mass(corners, top - 0.6, top, "trim");
-    // A slate gable over the street front, and windows either side of the door.
+  }
+  t.enclosure(corners, o.base, top - 0.6, { openings, material: "house", thickness: th });
+  const inner = { x0: o.x0 + th / 2, x1: o.x1 - th / 2, z0: o.z0 + th / 2, z1: o.z1 - th / 2 };
+  t.rect(`${o.id}:floor`, o.area, inner.x0, inner.z0, inner.x1, inner.z1, o.base, {
+    thickness: 0.3,
+  });
+  furnish(t, inner, o.base);
+  CAPITAL_INTERIORS.push({
+    center: t.world(
+      [(inner.x0 + inner.x1) / 2, (inner.z0 + inner.z1) / 2],
+      o.base + (height - 0.6) / 2,
+    ),
+    half: [(inner.x1 - inner.x0) / 2, (height - 0.6) / 2, (inner.z1 - inner.z0) / 2],
+    yaw: t.yaw,
+  });
+  t.rooms.push({
+    id: o.id,
+    width: inner.x1 - inner.x0,
+    depth: inner.z1 - inner.z0,
+    height: height - 0.6,
+  });
+  t.mass(corners, top - 0.6, top, "trim");
+  if (o.roof ?? true)
     t.piece(
       "roof",
       [o.x1 - o.x0, Math.min(3, (o.z1 - o.z0) * 0.55), o.z1 - o.z0],
@@ -314,1439 +358,2551 @@ export function authorCapitalDistricts(b: CapitalBuilder) {
       "roof",
       { thickness: 0.35 },
     );
-    for (let level = 0; level < o.storeys; level++)
-      for (const x of [o.x0 + (o.x1 - o.x0) * 0.2, o.x1 - (o.x1 - o.x0) * 0.2]) {
-        if (
-          o.doors.some((d) => d.side === "s" && (d.level ?? 0) === level && Math.abs(d.c - x) < 2.4)
-        )
-          continue;
-        const y = o.base + level * storey + 1.4;
-        t.piece("window", [1.1, 1.8, 0.2], [x, o.z1 + 0.38], y, "trim", { thickness: 0.16 });
-        t.box([x, o.z1 + 0.31], y + 0.05, [0.85, 1.7, 0.04], "shadow", false);
-      }
-  }
-
-  /**
-   * Furnishes a single-storey house interior: hearth and logs on one side, a table with
-   * benches, barrels and a bed, leaving the door, the middle and `keep` clear.
-   */
-  function furnish(
-    t: Frame,
-    inner: { x0: number; x1: number; z0: number; z1: number },
-    y: number,
-    upstairs: boolean,
-  ) {
-    const w = inner.x1 - inner.x0,
-      d = inner.z1 - inner.z0,
-      // Upstairs houses keep the strip along the back wall for their stair.
-      mid = upstairs ? inner.z0 + 2.2 + (d - 2.2) / 2 : inner.z0 + d * 0.45;
-    // The hearth, its fire and a log pile beside it.
-    t.box([inner.x0 + 0.45, mid], y, [0.9, 1.2, 1.6], "wall");
-    t.box([inner.x0 + 0.62, mid], y + 0.15, [0.5, 0.45, 1], "glow", false);
-    t.box([inner.x0 + 0.45, mid], y + 1.2, [0.7, 2.6, 0.9], "wall");
-    if (!upstairs) t.prop("log-pile", [1, 0.45, 1], [inner.x0 + 0.65, mid + 1.5], y, "timber");
-    // A table with two benches.
-    // Kept at least 1.7 m off the door's centre line, so the way in stays open.
-    const tx = Math.max(1.7, inner.x1 - w * 0.32);
-    t.prop("crate", [1.6, 0.8, 0.9], [tx, mid], y, "timber");
-    for (const s of [-1, 1]) t.prop("crate", [1.4, 0.45, 0.35], [tx, mid + s * 0.8], y, "timber");
-    // Barrels in the back corner, a bed by the front wall.
-    if (!upstairs) {
-      t.prop("drum", [0.6, 0.9, 0.6], [inner.x1 - 0.5, inner.z0 + 0.5], y, "timber");
-      t.prop("drum", [0.6, 0.9, 0.6], [inner.x1 - 1.2, inner.z0 + 0.45], y, "timber");
-      t.prop("wall", [2.2, 2.2, 0.4], [inner.x0 + w * 0.42, inner.z0 + 0.25], y, "timber");
-      t.prop(
-        "crate",
-        [0.6, 0.45, 0.35],
-        [inner.x0 + w * 0.42 - 0.5, inner.z0 + 0.25],
-        y + 2.2,
-        "timber",
-        { collide: false },
-      );
-    }
-    if (d >= 3.4) {
-      t.prop("crate", [0.95, 0.5, 1.9], [inner.x1 - 0.55, inner.z1 - 1.05], y, "timber");
-      t.box([inner.x1 - 0.55, inner.z1 - 0.35], y + 0.5, [0.8, 0.18, 0.45], "cloth", false);
-    }
-  }
-
-  /** A house against the inner retaining face of band `k`, facing out over the tier below. */
-  function tierHouse(
-    k: number,
-    side: 1 | -1,
-    d: number,
-    id: string,
-    o: { width?: number; storeys?: 1 | 2 } = {},
-  ) {
-    const inner = TIER_R[k + 1],
-      a = along(k, side, d),
-      [ox, oz] = polar(inner + 0.4, a),
-      depth = Math.min(7, TIER_R[k] - inner - 4.4),
-      w = o.width ?? (o.storeys === 2 ? 12 : 9);
-    const half = ((w / 2) * bandMid(k)) / (inner + 0.4) + 1.5;
-    reserve(k, side, d - half, d + half);
-    house(frame(b, ox, oz, Math.atan2(Math.sin(a), -Math.cos(a))), {
-      id,
-      area: TIER_AREAS[k],
-      x0: -w / 2,
-      z0: 0,
-      x1: w / 2,
-      z1: depth,
-      base: TIER_H[k],
-      storeys: o.storeys ?? 1,
-      doors: [{ side: "s", c: 0 }],
+  for (const x of [o.x0 + (o.x1 - o.x0) * 0.2, o.x1 - (o.x1 - o.x0) * 0.2]) {
+    if (o.doors.some((d) => d.side === "s" && Math.abs(d.c - x) < 2.4)) continue;
+    t.piece("window", [1.1, 1.8, 0.2], [x, o.z1 + 0.38], o.base + 1.4, "trim", {
+      thickness: 0.16,
     });
+    t.box([x, o.z1 + 0.31], o.base + 1.45, [0.85, 1.7, 0.04], "shadow", false);
   }
+}
 
-  /** Stretches of each tier's inner face kept clear of row buildings, in metres from the prow. */
-  const reserved = new Map<string, Array<[number, number]>>();
-  const reserve = (k: number, side: 1 | -1, d0: number, d1: number) => {
-    const key = `${k}:${side}`;
-    reserved.set(key, [...(reserved.get(key) ?? []), [d0, d1]]);
-  };
+/** Hearth and logs on one side, a table with benches, barrels and a bed. */
+function furnish(t: Frame, inner: { x0: number; x1: number; z0: number; z1: number }, y: number) {
+  const w = inner.x1 - inner.x0,
+    d = inner.z1 - inner.z0,
+    mid = inner.z0 + d * 0.45;
+  t.box([inner.x0 + 0.45, mid], y, [0.9, 1.2, 1.6], "wall");
+  t.box([inner.x0 + 0.62, mid], y + 0.15, [0.5, 0.45, 1], "glow", false);
+  t.box([inner.x0 + 0.45, mid], y + 1.2, [0.7, 2.6, 0.9], "wall");
+  t.prop("log-pile", [1, 0.45, 1], [inner.x0 + 0.65, mid + 1.5], y, "timber");
+  // Kept at least 1.7 m off the door's centre line, so the way in stays open.
+  const tx = Math.max(1.7, inner.x1 - w * 0.32);
+  t.prop("crate", [1.6, 0.8, 0.9], [tx, mid], y, "timber");
+  for (const s of [-1, 1]) t.prop("crate", [1.4, 0.45, 0.35], [tx, mid + s * 0.8], y, "timber");
+  t.prop("drum", [0.6, 0.9, 0.6], [inner.x1 - 0.5, inner.z0 + 0.5], y, "timber");
+  t.prop("drum", [0.6, 0.9, 0.6], [inner.x1 - 1.2, inner.z0 + 0.45], y, "timber");
+  t.prop("wall", [2.2, 2.2, 0.4], [inner.x0 + w * 0.42, inner.z0 + 0.25], y, "timber");
+  if (d >= 3.4) {
+    t.prop("crate", [0.95, 0.5, 1.9], [inner.x1 - 0.55, inner.z1 - 1.05], y, "timber");
+    t.box([inner.x1 - 0.55, inner.z1 - 0.35], y + 0.5, [0.8, 0.18, 0.45], "cloth", false);
+  }
+}
 
-  // ------------------------------------------------------------------ The tiers
-  const parapetGaps: number[][] = TIER_R.map(() => []);
-  for (const st of TIER_STAIRS) parapetGaps[st.k + 1].push(st.gapAngle);
-  const stairs = TIER_STAIRS;
-  const town = CAPITAL_SITES.townLift;
-  parapetGaps[2].push(town.a);
-
-  const tunnelZ: number[] = [];
-  for (let k = 0; k < 6; k++) {
-    const inner = TIER_R[k + 1],
-      outer = TIER_R[k],
-      h = TIER_H[k],
-      area = TIER_AREAS[k],
-      delta = Math.asin(PROW / bandMid(k)),
-      bottom = k >= 5 ? -2 : -12;
-    tunnelZ.push(bandMid(k));
-    for (const side of [1, -1] as const) {
-      const a0 = Math.PI - side * delta,
-        a1 = Math.PI - side * SPAN,
-        count = Math.ceil(((SPAN - delta) * outer) / 8);
-      const holes =
-        k === 1 && side === 1
-          ? [{ a: town.a, w: SHAFT / (56.05 - SHAFT), r0: 56.05 - SHAFT, r1: 56.05 + SHAFT }]
-          : [];
-      // Segment boundaries; a lift hole gets its own segment.
-      const cuts = Array.from({ length: count + 1 }, (_, i) => a0 + ((a1 - a0) * i) / count);
-      for (const hole of holes) {
-        const lo = hole.a - hole.w,
-          hi = hole.a + hole.w;
-        for (let i = cuts.length - 1; i >= 0; i--)
-          if (cuts[i] > lo - 0.02 && cuts[i] < hi + 0.02) cuts.splice(i, 1);
-        cuts.push(lo, hi);
+/**
+ * A closed house block in a local frame (+Z is its street front): plinth, cornices,
+ * bays of windows and a door, then a flat crenellated roof, a gable, a spire or a dome.
+ * `roofed: false` leaves the top flat, for rows under a deck.
+ */
+function block(
+  t: Frame,
+  o: {
+    x: number;
+    z: number;
+    w: number;
+    depth: number;
+    y: number;
+    storeys: number;
+    storey?: number;
+    tower?: boolean;
+    roofed?: boolean;
+    rand: () => number;
+  },
+) {
+  const storey = o.storey ?? 4.5,
+    height = o.storeys * storey,
+    { w, depth, y, rand } = o,
+    cz = o.z + depth / 2,
+    front = o.z + depth;
+  t.box([o.x, cz], y, [w, height, depth], "house", true);
+  t.box([o.x, cz], y, [w + 0.2, 0.6, depth + 0.2], "trim", false);
+  for (let i = 1; i <= o.storeys; i++)
+    t.box([o.x, cz], y + i * storey - 0.3, [w + 0.3, 0.3, depth + 0.3], "trim", false);
+  // Heavy corner quoins give the plaster houses a framed silhouette at low resolution.
+  for (const side of [-1, 1])
+    t.box(
+      [o.x + side * (w / 2 - 0.14), front + 0.08],
+      y + 0.6,
+      [0.28, height - 0.6, 0.28],
+      "trim",
+      false,
+    );
+  const bays = Math.max(1, Math.floor(w / 2.4)),
+    pitch = w / bays,
+    door = Math.floor(rand() * bays);
+  for (let i = 0; i < o.storeys; i++)
+    for (let j = 0; j < bays; j++) {
+      const x = o.x - w / 2 + pitch * (j + 0.5),
+        bottom = y + i * storey;
+      if (i === 0 && j === door) {
+        t.piece("door", [1.9, 3, 0.2], [x, front + 0.05], bottom + 0.6, "timber", {
+          thickness: 0.3,
+          leaves: true,
+        });
+        continue;
       }
-      cuts.sort((p, q) => side * (q - p));
-      for (let i = 0; i < cuts.length - 1; i++) {
-        const s0 = cuts[i],
-          s1 = cuts[i + 1],
-          id = `tier-${k + 1}-${side > 0 ? "east" : "west"}:${i}`;
-        // The prow is straight, so its terrace boundary must be x = ±PROW at
-        // both radii. A shared polar angle left a widening, fall-through wedge
-        // beside the wall, particularly on the broad lowest terrace.
-        const start = (r: number): XZ =>
-          i === 0 ? [side * PROW, Math.sqrt(r * r - PROW * PROW)] : polar(r, s0);
-        const quad = (r0: number, r1: number): XZ[] => [
-          start(r0),
-          start(r1),
-          polar(r1, s1),
-          polar(r0, s1),
-        ];
-        const hole = holes.find((q) => Math.abs((s0 + s1) / 2 - q.a) < 1e-6);
-        if (hole) {
-          b.floor(`${id}:in`, area, quad(inner, hole.r0), h, { thickness: 1 });
-          b.floor(`${id}:out`, area, quad(hole.r1, outer), h, { thickness: 1 });
-        } else b.floor(id, area, quad(inner, outer), h, { thickness: 1 });
-        b.mass(quad(inner, outer), bottom, h - 1, "wall");
-        // The plinth, open where the colosseum gate passage runs beneath the west tiers.
-        if (k < 5) {
-          const plinth = quad(inner, outer),
-            zs = plinth.map((p) => p[1]);
-          if (!(side < 0 && Math.min(...zs) < 3.4 && Math.max(...zs) > -3.4))
-            b.mass(plinth, BEDROCK, bottom);
-          else {
-            for (const [keep, edge] of [
-              [-1, -3.4],
-              [1, 3.4],
-            ] as const) {
-              const part = clip(plinth, edge, keep);
-              if (part.length >= 3) b.mass(part, BEDROCK, bottom);
-            }
-            b.mass(plinth, -14.6, bottom);
-          }
+      const wh = i === 0 ? 1.8 : 2.3;
+      t.box([x, front + 0.2], bottom + 1.17, [1.4, 0.18, 0.42], "trim", false);
+      t.box([x, front + 0.16], bottom + 1.38, [0.09, wh - 0.25, 0.13], "timber", false);
+      if ((j + i + Math.floor(Math.abs(o.x))) % 3 === 0)
+        for (const side of [-1, 1]) {
+          t.box(
+            [x + side * 0.74, front + 0.17],
+            bottom + 1.4,
+            [0.34, wh * 0.85, 0.13],
+            "timber",
+            false,
+          );
+          t.box([x + side * 0.74, front + 0.26], bottom + 1.75, [0.4, 0.12, 0.08], "iron", false);
         }
-        // Parapets on the outer edge; the lowest tier has the city wall instead.
-        if (k > 0 && !parapetGaps[k].some((g) => (g - s0) * (g - s1) <= 0))
-          parapet(polar(outer + 0.2, s0), polar(outer + 0.2, s1), h);
-      }
-      // The terraces end against the mountain; Backyard Below enters Up Town's east end.
-      b.wall(polar(inner, a1), polar(outer, a1), h, h + 5, {
-        openings:
-          k === 3 && side === 1
-            ? [
-                {
-                  at: (outer - inner) / 2 + 0.5,
-                  width: 4,
-                  height: 3.6,
-                  bottom: h,
-                  id: "backyard-below-door",
-                  visibleThreshold: true,
-                  area,
-                },
-              ]
-            : [],
+      t.piece("arch-panel", [0.85, wh - 0.1, 0.06], [x, front + 0.04], bottom + 1.35, "shadow");
+      t.piece("arch-window", [1.1, wh, 0.2], [x, front + 0.12], bottom + 1.3, "trim", {
+        thickness: 0.16,
       });
     }
-    // The prow stops at the second tier's face; the lowest tier runs straight across.
-    if (k > 0)
-      b.hallway(
-        `prow-gate-${k + 1}`,
-        k === 2 ? "tunnel" : area,
-        [-PROW - 1.5, tunnelZ[k]],
-        [PROW + 1.5, tunnelZ[k]],
-        h,
-        4.6,
-        4.6,
-      );
-    else {
-      const zIn = Math.sqrt(inner * inner - PROW * PROW),
-        zOut = Math.sqrt(outer * outer - PROW * PROW),
-        strip: XZ[] = [
-          [-PROW, zIn],
-          [-PROW, zOut],
-          [PROW, zOut],
-          [PROW, zIn],
-        ];
-      b.floor("tier-1-front", area, strip, h, { thickness: 1 });
-      b.mass(strip, BEDROCK, h - 1, "wall");
-      continue;
-    }
-    lantern(-PROW - 2.5, h, tunnelZ[k] + 3);
-    lantern(PROW + 2.5, h, tunnelZ[k] + 3);
-  }
-  // The prow: a sheer blade of rock from the mountain, cut by the gates. As in the
-  // reference it keeps the citadel's height all the way out and ends in a sheer face
-  // over the second tier, barely reaching the lowest tier.
-  const PROW_WALK_END = TIER_R[1] - 0.5;
-  {
-    const top = Y.citadel - 1;
-    const zs = [TIER_R[6], ...tunnelZ.slice(1).flatMap((z) => [z - 2.4, z + 2.4]), TIER_R[1]].sort(
-      (p, q) => p - q,
-    );
-    for (let i = 0; i < zs.length - 1; i++) {
-      const z0 = zs[i],
-        z1 = zs[i + 1],
-        k = tunnelZ.findIndex((z) => Math.abs((z0 + z1) / 2 - z) < 0.01),
-        box: XZ[] = [
-          [-PROW, z0],
-          [-PROW, z1],
-          [PROW, z1],
-          [PROW, z0],
-        ];
-      if (k < 1) b.mass(box, BEDROCK, top, "rock");
-      else {
-        b.mass(box, BEDROCK, TIER_H[k] - 0.2, "rock");
-        b.mass(box, TIER_H[k] + 4.6, top, "rock");
+  // Side elevations are exposed on stepped streets; repeat two recessed bays there.
+  for (const side of [-1, 1]) {
+    const x = o.x + side * (w / 2 + 0.09),
+      turn = (side * Math.PI) / 2;
+    t.box([x, cz], y + 0.6, [0.26, height - 0.6, 0.3], "trim", false);
+    for (let i = 0; i < o.storeys; i++)
+      for (const fraction of [0.24, 0.76]) {
+        const z = o.z + depth * fraction,
+          bottom = y + i * storey + 1.35;
+        t.piece("arch-panel", [0.85, 2.1, 0.06], [x, z], bottom, "shadow", { turn });
+        t.piece("arch-window", [1.1, 2.2, 0.2], [x + side * 0.05, z], bottom - 0.05, "trim", {
+          turn,
+          thickness: 0.16,
+        });
+        t.box([x + side * 0.1, z], bottom - 0.18, [0.42, 0.18, 1.4], "trim", false);
       }
-    }
-    const end = PROW_WALK_END;
-    b.rect("prow-walk", "kiln", -PROW, TIER_R[6] - 1, PROW, end, Y.citadel, { thickness: 1 });
-    parapet([-PROW - 0.2, end], [-PROW - 0.2, TIER_R[6]], Y.citadel);
-    parapet([PROW + 0.2, TIER_R[6]], [PROW + 0.2, end], Y.citadel);
-    parapet([-PROW, end + 0.2], [PROW, end + 0.2], Y.citadel);
-    lantern(0, Y.citadel, end - 2);
-    // Four green beds on the terrace before the white tower, as in the reference.
-    for (const x of [-2.2, 2.2])
-      for (const z of [25, 29.4]) b.piece("drum", [3.8, 0.14, 3.8], [x, Y.citadel, z], 0, "hedge");
   }
-  for (const s of stairs) {
-    b.flight(`tier-stair-${s.k + 1}`, TIER_AREAS[s.k], s.low, s.dir, 8, 4, { fill: TIER_H[s.k] });
-    b.floor(
-      `tier-landing-${s.k + 1}`,
-      s.k === 5 ? "kiln" : TIER_AREAS[s.k + 1],
-      s.landing,
-      TIER_H[s.k + 1],
-      { thickness: 8 },
-    );
-  }
-
-  // ------------------------------------------------------------ Tier 1: City Wall
-  {
-    const y = TIER_H[0],
-      outer = TIER_R[0];
-    // The great gate: a tall gatehouse between two towers on the centreline.
-    b.wall([-PROW, GREAT_GATE_Z], [PROW, GREAT_GATE_Z], y, y + 12, {
-      thickness: 1.2,
-      openings: [
-        {
-          at: PROW,
-          width: 6,
-          height: 7,
-          bottom: y,
-          frame: "double-door",
-          id: "great-gate",
-          visibleThreshold: true,
-          area: "refuge",
-        },
-      ],
-    });
-    // The curtain: kit wall runs with merlons.
-    for (const side of [1, -1] as const) {
-      const a0 = Math.PI - side * Math.asin(PROW / outer),
-        a1 = Math.PI - side * SPAN,
-        count = Math.ceil(((SPAN - Math.asin(PROW / outer)) * outer) / 8);
-      const cuts = Array.from({ length: count + 1 }, (_, i) => a0 + ((a1 - a0) * i) / count);
-      for (let i = 0; i < cuts.length - 1; i++) {
-        const s0 = cuts[i],
-          s1 = cuts[i + 1],
-          p = polar(outer + 0.6, s0),
-          q = polar(outer + 0.6, s1);
-        const curtain = [
-          polar(outer, s0),
-          polar(outer + 1.2, s0),
-          polar(outer + 1.2, s1),
-          polar(outer, s1),
-        ];
-        const zs = curtain.map((c) => c[1]);
-        if (side < 0 && Math.min(...zs) < 3.4 && Math.max(...zs) > -3.4) {
-          // The colosseum gate passage pierces the curtain's foot.
-          for (const [keep, edge] of [
-            [-1, -3.4],
-            [1, 3.4],
-          ] as const) {
-            const part = clip(curtain, edge, keep);
-            if (part.length >= 3) b.mass(part, BEDROCK, -1, "wall");
-          }
-          b.mass(curtain, -14.6, -1, "wall");
-        } else b.mass(curtain, BEDROCK, -1, "wall");
-        b.wall(p, q, y, y + 7, { thickness: 1.2 });
-        // Merlons follow the wall's line and sit within its thickness.
-        for (const t of [0.2, 0.5, 0.8])
-          b.box(
-            p[0] + (q[0] - p[0]) * t,
-            p[1] + (q[1] - p[1]) * t,
-            y + 7,
-            [1.4, 1.1, 1.1],
-            Math.atan2(-(q[1] - p[1]), q[0] - p[0]),
+  if (o.roofed === false) return;
+  const top = y + height;
+  if (o.tower) {
+    if (rand() < 0.6) {
+      t.box([o.x, cz], top, [w + 0.5, 0.4, depth + 0.5], "trim", false);
+      for (const sx of [-1, 1])
+        for (const sz of [-1, 1])
+          t.piece(
+            "pillar",
+            [0.45, 3.2, 0.45],
+            [o.x + sx * w * 0.32, cz + sz * depth * 0.32],
+            top + 0.4,
             "trim",
           );
-      }
-    }
-    // The apron: the plain itself before the walls, walkable at the lowest tier's level
-    // so the gate opens straight onto it. Only the road out of the barbican's mouth is
-    // paved; the rest shows the plain, and an unseen edge keeps the walk within it.
-    {
-      const { r0, r1, aW, aE } = CAPITAL_APRON,
-        count = Math.ceil(((aW - aE) * r1) / 8),
-        rings = [r0, r0 + 8, r1],
-        edge = (p: XZ, q: XZ) =>
-          b.solid(
-            [(p[0] + q[0]) / 2, y, (p[1] + q[1]) / 2],
-            [Math.hypot(q[0] - p[0], q[1] - p[1]), 3, 0.4],
-            Math.atan2(-(q[1] - p[1]), q[0] - p[0]),
-          );
-      for (let i = 0; i < count; i++) {
-        const s0 = aE + ((aW - aE) * i) / count,
-          s1 = aE + ((aW - aE) * (i + 1)) / count,
-          road = Math.abs((s0 + s1) / 2 - Math.PI) * r1 < 7;
-        for (let k = 0; k < 2; k++) {
-          const quad = [polar(rings[k], s0), polar(rings[k + 1], s0)];
-          quad.push(polar(rings[k + 1], s1), polar(rings[k], s1));
-          b.floor(`apron:${i}:${k}`, "refuge", quad, y, {
-            thickness: 1,
-            render: road,
-          });
-        }
-        edge(polar(r1 + 0.2, s0), polar(r1 + 0.2, s1));
-      }
-      edge(polar(r0, aE), polar(r1, aE));
-      edge(polar(r0, aW), polar(r1, aW));
-    }
-    // Bastions stand out from the curtain like the reference's, corbelled above the
-    // ground-city street so its headroom stays clear, each with a crenellated top.
-    for (const a of [-1.3, -0.95, -0.62, -0.32, 0.32, 0.98, 1.32]) {
-      const [cx, cz] = polar(outer + 3.4, Math.PI + a);
-      b.mass(octagon(cx, cz, 2.6), -10, -6, "wall");
-      b.mass(octagon(cx, cz, 4.4), -6, y + 7.6, "wall");
-      b.mass(octagon(cx, cz, 4.8), y + 7.6, y + 8.2, "trim");
-      octagon(cx, cz, 4.3).forEach(([mx, mz], i) =>
-        b.box(mx, mz, y + 8.2, [1.3, 1.1, 0.9], ((i + 0.5) * Math.PI) / 4, "trim", false),
-      );
-    }
-    // Gate towers flank the gatehouse, and the barbican's two walls run out from them
-    // onto the apron, each ending in a smaller tower.
-    const crown = (cx: number, cz: number, r: number, top: number) => {
-      b.mass(octagon(cx, cz, r + 0.4), top, top + 0.6, "trim");
-      octagon(cx, cz, r).forEach(([mx, mz], i) =>
-        b.box(mx, mz, top + 0.6, [1.3, 1.1, 0.9], ((i + 0.5) * Math.PI) / 4, "trim", false),
-      );
-    };
-    for (const side of [-1, 1]) {
-      b.mass(octagon(side * 9, GREAT_GATE_Z + 3, 4.6), BEDROCK, y + 15, "wall");
-      crown(side * 9, GREAT_GATE_Z + 3, 4.4, y + 15);
-      b.wall([side * 7, GREAT_GATE_Z + 7], [side * 7, GREAT_GATE_Z + 24], y, y + 8, {
-        thickness: 1.4,
+      t.box([o.x, cz], top + 3.6, [w + 0.4, 0.4, depth + 0.4], "trim", false);
+      t.piece("dome", [w + 0.4, w * 0.4, depth + 0.4], [o.x, cz], top + 4, "roof");
+    } else t.piece("spire", [w + 0.6, 6, depth + 0.6], [o.x, cz], top, "roof");
+    return;
+  }
+  if (rand() < 0.45) {
+    t.box([o.x, front - 0.2], top, [w, 0.6, 0.4], "trim", false);
+    t.box([o.x, o.z + 0.2], top, [w, 0.6, 0.4], "trim", false);
+    for (const sx of [-1, 1])
+      t.box([o.x + (sx * (w - 0.4)) / 2, cz], top, [0.4, 0.6, depth], "trim", false);
+    for (let x = o.x - w / 2 + 0.6; x < o.x + w / 2 - 0.3; x += 1.4)
+      t.box([x, front - 0.2], top + 0.6, [0.6, 0.6, 0.4], "trim", false);
+  } else
+    t.piece("roof", [w, Math.min(3, depth * 0.6), depth], [o.x, cz], top, "roof", {
+      thickness: 0.3,
+    });
+  if (rand() < 0.5) t.box([o.x + w / 2 - 1.2, o.z + depth * 0.35], top, [0.8, 2.4, 0.8], "trim");
+}
+
+export function authorCapitalDistricts(b: CapitalBuilder) {
+  /** Where the outside path's last flight lands in the garden's tail. */
+  let gardenTailZ = 95;
+  const lanterns: ParishPoint[] = [];
+  const lantern = (p: XZ, y: number) => lanterns.push([p[0], y, p[1]]);
+  const rand = scatter(5023);
+
+  // ---------------------------------------------------------------- ring helpers
+  const segments = (a0: number, a1: number, r: number, size = 4) =>
+    Math.max(1, Math.ceil((Math.abs(a1 - a0) * r) / size));
+  const ringFloor = (
+    id: string,
+    area: ParishArea,
+    r0: number,
+    r1: number,
+    a0: number,
+    a1: number,
+    y: number,
+    material: CapitalMaterial = "floor",
+    cx = 0,
+    cz = 0,
+  ) => b.arc(id, area, cx, cz, r0, r1, a0, a1, y, segments(a0, a1, r1), material);
+  /** Solid angular spans of [a0, a1] once gaps (centre angle, width in metres) are cut. */
+  const spans = (r: number, a0: number, a1: number, gaps: Array<[number, number]> = []) => {
+    let out: Array<[number, number]> = [[a0, a1]];
+    for (const [g, width] of gaps) {
+      const h = width / 2 / r;
+      out = out.flatMap(([s0, s1]): Array<[number, number]> => {
+        if (g + h <= s0 || g - h >= s1) return [[s0, s1]];
+        return [
+          [s0, g - h],
+          [g + h, s1],
+        ].filter(([p, q]) => q - p > 1e-4) as Array<[number, number]>;
       });
-      for (let z = GREAT_GATE_Z + 9; z < GREAT_GATE_Z + 24; z += 3)
-        b.box(side * 7, z, y + 8, [1.4, 1.1, 1.3], 0, "trim");
-      b.mass(octagon(side * 7, GREAT_GATE_Z + 26, 3.2), BEDROCK, y + 11, "wall");
-      crown(side * 7, GREAT_GATE_Z + 26, 3, y + 11);
     }
-    b.box(0, GREAT_GATE_Z, y + 12, [2 * PROW + 2, 0.6, 2], 0, "trim");
-    // A beam fallen from the breach lies against the face of the second tier.
-    const beamA = along(0, -1, 54),
-      [fx, fz] = polar(TIER_R[1] + 1.2, beamA);
-    b.prop(
+    return out;
+  };
+  /** Chord walls along a circle, broken by gaps. */
+  const ringWall = (
+    r: number,
+    a0: number,
+    a1: number,
+    bottom: number,
+    top: number,
+    o: {
+      thickness?: number;
+      material?: CapitalMaterial;
+      gaps?: Array<[number, number]>;
+      cx?: number;
+      cz?: number;
+    } = {},
+  ) => {
+    const cx = o.cx ?? 0,
+      cz = o.cz ?? 0;
+    for (const [s0, s1] of spans(r, a0, a1, o.gaps)) {
+      const n = segments(s0, s1, r, 5);
+      for (let i = 0; i < n; i++) {
+        const p = polar(r, s0 + ((s1 - s0) * i) / n),
+          q = polar(r, s0 + ((s1 - s0) * (i + 1)) / n);
+        b.wall([cx + p[0], cz + p[1]], [cx + q[0], cz + q[1]], bottom, top, {
+          thickness: o.thickness,
+          material: o.material,
+        });
+      }
+    }
+  };
+  const parapet = (r: number, a0: number, a1: number, y: number, gaps?: Array<[number, number]>) =>
+    ringWall(r, a0, a1, y, y + 1.1, { thickness: 0.4, material: "trim", gaps });
+  /** Closed masonry under a ring sector. */
+  const ringMass = (
+    r0: number,
+    r1: number,
+    a0: number,
+    a1: number,
+    bottom: number,
+    top: number,
+    material: CapitalMaterial = "wall",
+  ) => {
+    const n = segments(a0, a1, r1, 6);
+    for (let i = 0; i < n; i++) {
+      const s0 = a0 + ((a1 - a0) * i) / n,
+        s1 = a0 + ((a1 - a0) * (i + 1)) / n;
+      b.mass([polar(r0, s0), polar(r1, s0), polar(r1, s1), polar(r0, s1)], bottom, top, material);
+    }
+  };
+  const merlons = (
+    r: number,
+    a0: number,
+    a1: number,
+    y: number,
+    gaps?: Array<[number, number]>,
+  ) => {
+    for (const [s0, s1] of spans(r, a0, a1, gaps))
+      for (let s = s0 + 1.2 / r; s < s1 - 0.6 / r; s += 2.4 / r) {
+        const [x, z] = polar(r, s);
+        b.box(x, z, y + 1.1, [1.2, 0.9, 0.5], -s, "trim", false);
+      }
+  };
+  /** A straight parapet beside a walk from `p` to `q`. */
+  const rail = (p: XZ, q: XZ, y: number) =>
+    b.wall(p, q, y, y + 1.1, { thickness: 0.4, material: "trim" });
+  /** A square pier of masonry standing on the ground. */
+  const pier = (p: XZ, top: number, side = 2.2, bottom = GROUND) => {
+    const h = side / 2;
+    b.mass(
+      [
+        [p[0] - h, p[1] - h],
+        [p[0] + h, p[1] - h],
+        [p[0] + h, p[1] + h],
+        [p[0] - h, p[1] + h],
+      ],
+      bottom,
+      top,
+      "wall",
+    );
+  };
+  /** A straight walkway between two points with masonry piers beneath every `spacing`. */
+  const span = (
+    id: string,
+    area: ParishArea,
+    p: XZ,
+    q: XZ,
+    y: number,
+    width: number,
+    o: { kind?: "walkway" | "slab"; piers?: number; base?: number } = {},
+  ) => {
+    b.bridge(id, area, p, q, y, width, { kind: o.kind ?? "slab" });
+    if (o.piers) {
+      const length = Math.hypot(q[0] - p[0], q[1] - p[1]),
+        n = Math.max(1, Math.floor(length / o.piers));
+      for (let i = 1; i < n; i++) {
+        const t = i / n;
+        pier([p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t], y - 0.9, 2, o.base ?? GROUND);
+      }
+    }
+  };
+  /** A straight kit flight from a high point down along `d` to `rise` lower. */
+  const descend = (
+    id: string,
+    area: ParishArea,
+    high: ParishPoint,
+    d: XZ,
+    rise: number,
+    width: number,
+    fill?: number,
+  ) => {
+    const run = Math.round(rise / 0.2) * 0.3,
+      low: ParishPoint = [high[0] + d[0] * run, high[1] - rise, high[2] + d[1] * run];
+    b.flight(id, area, low, [-d[0], -d[1]], rise, width, { fill });
+    return low;
+  };
+  /** A giant sword stuck point-down in the city, as in the reference. */
+  const sword = (p: XZ, y: number, yaw: number, scale = 1) => {
+    const s = scale;
+    b.piece("greatsword", [7 * s, 22.2 * s, 0.6 * s], [p[0], y, p[1]], yaw + Math.PI / 2, "iron");
+    b.prop("drum", [0.56 * s, 4 * s, 0.56 * s], [p[0], y + 17 * s, p[1]], 0, {
+      material: "timber",
+      collide: false,
+    });
+    b.solid([p[0], y, p[1]], [0.6 * s, 4, 2.4 * s], yaw);
+  };
+  const statue = (p: XZ, y: number, yaw: number, scale = 1) => {
+    b.box(p[0], p[1], y, [1.6 * scale, 0.8, 1.6 * scale], yaw, "trim");
+    b.piece(
+      "sentinel-statue",
+      [2 * scale, 4 * scale, 1.65 * scale],
+      [p[0], y + 0.8, p[1]],
+      yaw,
+      "trim",
+    );
+    // The body blocks the pedestal; the shield and sword overhang it decoratively.
+    b.solid([p[0], y + 0.8, p[1]], [1.2 * scale, 4 * scale, 1 * scale], yaw);
+  };
+  const brazier = (p: XZ, y: number) => {
+    b.piece("cage-brazier", [0.9, 1.5, 0.9], [p[0], y, p[1]], 0, "iron");
+    b.piece("flame", [0.55, 0.65, 0.55], [p[0], y + 1.12, p[1]], 0, "glow");
+  };
+
+  cityWall();
+  bridges();
+  midTown();
+  mountainTunnel();
+  upTown();
+  bladeAndPlaza();
+  chapel();
+  cathedral();
+  outsidePath();
+  royalBackyard();
+  beaconPathway();
+  // The ground city: hidden below the fog, it rises to meet the sky city at the switch.
+  b.groundLayer(() => {
+    grandStreet();
+    colosseum();
+  });
+  return lanterns;
+
+  // ---------------------------------------------------------------- City Wall
+  function cityWall() {
+    const { r0, r1 } = W,
+      mid = (r0 + r1) / 2,
+      bridgeGaps: Array<[number, number]> = CAPITAL_RINGS.bridges.map((a) => [a, 5]);
+    const returnStair = 0.83,
+      gate = Math.asin(24 / r0);
+    for (const [id, [a0, a1]] of [
+      ["wall-a", W.a],
+      ["wall-b", W.b],
+    ] as const) {
+      ringFloor(`${id}:walk`, "refuge", r0, r1, a0, a1, Y.wall);
+      ringMass(r0, r1, a0, a1, GROUND, Y.wall - 1);
+      // Merlons on the outer face, a parapet on the inner one with gaps at its stairs.
+      merlons(r1 - 0.3, a0, a1, Y.wall);
+      ringWall(r1 - 0.3, a0, a1, Y.wall, Y.wall + 1.1, { thickness: 0.6, material: "trim" });
+      const gaps: Array<[number, number]> = [...bridgeGaps];
+      if (id === "wall-a") gaps.push([returnStair, 5], [gate, 5.4]);
+      // The Break Wall: the curtain's inner parapet has fallen at wall A's east end.
+      const end = id === "wall-a" ? a1 - 0.05 : a1;
+      parapet(r0 + 0.2, a0, end, Y.wall, gaps);
+      // Square towers at each end of each arc, and a string course down the outer face.
+      if (id === "wall-a")
+        // The broken end: rubble instead of a tower.
+        for (let i = 0; i < 6; i++) {
+          const [dx, dz] = polar(mid + (rand() - 0.5) * 6, a1 - 0.01 - rand() * 0.03);
+          b.piece("debris", [2 + rand() * 2, 0.8, 2 + rand() * 2], [dx, Y.wall, dz], rand() * 3);
+        }
+      for (const a of id === "wall-a" ? [a0 - 0.05] : [a1 + 0.05]) {
+        const [x, z] = polar(mid, a),
+          yaw = -a;
+        const h = 5;
+        b.mass(
+          [
+            [x - Math.cos(yaw) * h - Math.sin(yaw) * h, z + Math.sin(yaw) * h - Math.cos(yaw) * h],
+            [x + Math.cos(yaw) * h - Math.sin(yaw) * h, z - Math.sin(yaw) * h - Math.cos(yaw) * h],
+            [x + Math.cos(yaw) * h + Math.sin(yaw) * h, z - Math.sin(yaw) * h + Math.cos(yaw) * h],
+            [x - Math.cos(yaw) * h + Math.sin(yaw) * h, z + Math.sin(yaw) * h + Math.cos(yaw) * h],
+          ],
+          GROUND,
+          Y.wall + 8.1,
+        );
+        b.box(x, z, Y.wall + 8.1, [11, 0.6, 11], yaw, "trim", false);
+        for (const s of [-1, 1])
+          for (const t of [-1, 1])
+            b.box(
+              x + Math.cos(yaw) * s * 4.6 + Math.sin(yaw) * t * 4.6,
+              z - Math.sin(yaw) * s * 4.6 + Math.cos(yaw) * t * 4.6,
+              Y.wall + 8.7,
+              [1.2, 1.2, 1.2],
+              yaw,
+              "trim",
+              false,
+            );
+      }
+      for (let a = a0 + 0.06; a < a1 - 0.02; a += 0.12) {
+        const [x, z] = polar(r1 + 0.05, a);
+        b.piece("banner", [1.6, 6, 0.06], [x, Y.wall - 7, z], Math.PI - a, "cloth");
+      }
+      for (let a = a0 + 0.03; a < a1; a += 0.09) lantern(polar(r0 + 0.9, a), Y.wall);
+    }
+    // The Break Wall: a fallen beam spans the breach to wall B.
+    const p = polar(102, W.a[1] - 0.012),
+      q = polar(102, W.b[0] + 0.012);
+    b.bridge("break-wall", "refuge", p, q, Y.wall, 2.2, {
+      kind: "wooden-bridge",
+      base: Y.wall - 4,
+    });
+    b.piece(
       "fallen-beam",
-      [0.6, 0.55, 3.4],
-      [fx, y, fz],
-      Math.atan2(Math.cos(beamA), Math.sin(beamA)),
+      [0.9, 0.9, Math.hypot(q[0] - p[0], q[1] - p[1])],
+      [(p[0] + q[0]) / 2 + 2, Y.wall - 0.6, (p[1] + q[1]) / 2 - 1],
+      facing([q[0] - p[0], q[1] - p[1]]),
+      "timber",
+    );
+    // The courtyard below the breach: a roof to drop on, a chest and the stair back up.
+    const c0 = 0.8,
+      c1 = 0.97,
+      cr0 = 82,
+      cr1 = W.r0 - 0.4;
+    ringFloor("break-court", "refuge", cr0, cr1, c0, c1, Y.upTown);
+    ringMass(cr0, cr1, c0, c1, GROUND, Y.upTown - 1);
+    parapet(cr0 + 0.2, c0, c1, Y.upTown);
+    for (const a of [c0, c1]) rail(polar(cr0, a), polar(cr1, a), Y.upTown);
+    // The roof the breach drops onto, three metres above the court.
+    {
+      const t = frame(b, ...polar(91.5, 0.9), facing(radial(0.9 + Math.PI)));
+      t.box([0, 0], Y.upTown, [9, 3, 5], "house");
+      b.floor(
+        "break-roof",
+        "refuge",
+        [polar(89.03, 0.875), polar(94, 0.875), polar(94, 0.925), polar(89.03, 0.925)],
+        Y.bridge,
+        { material: "roof", thickness: 0.4 },
+      );
+    }
+    b.flight(
+      "break-roof-stair",
+      "refuge",
+      at3(polar(84.5, 0.9), Y.upTown),
+      radial(0.9),
+      Y.bridge - Y.upTown,
+      2.4,
       {
-        material: "timber",
+        fill: Y.upTown,
       },
     );
-    tierHouse(0, 1, 30, "lower-house-east-1");
-    tierHouse(0, 1, 46, "lower-house-east-2");
-    tierHouse(0, -1, 26, "lower-house-west-1");
-    tierHouse(0, -1, 42, "lower-house-west-2");
-    const [shx, , shz] = CAPITAL_SITES.start;
-    b.prop("crate", [1.25, 0.6, 0.9], [shx + 1, y, shz + 3.5], 0.3, { material: "timber" });
-    b.prop("log-pile", [2.2, 0.5, 2.2], [shx - 9, y, shz - 1], 0, { material: "timber" });
-    for (const d of [10, 60, 90])
-      for (const side of [1, -1] as const) {
-        // East of the prow, the first lantern stands clear of the great gate.
-        const [x, , z] = onTier(0, side, side > 0 && d === 10 ? 20 : d, TIER_R[0] - 2);
-        lantern(x, y, z);
-      }
+    b.flight(
+      "break-court-stair",
+      "refuge",
+      at3(polar(r0 - 9, returnStair), Y.upTown),
+      radial(returnStair),
+      Y.wall - Y.upTown,
+      4,
+      { fill: Y.upTown },
+    );
+    // The great gate: an arch over the door the stair from Up Town reaches.
+    for (const x of [20.6, 27.4]) b.box(x, -90.6, Y.wall, [1.2, 6, 1.2], 0, "trim");
+    b.box(24, -90.6, Y.wall + 5, [8, 1.4, 1.4], 0, "trim", false);
+    b.piece("banner", [3, 4.4, 0.06], [24, Y.wall + 0.6, -91.4], 0, "cloth");
   }
 
-  // ----------------------------------------------------- Tiers 2–3: Mid Town
-  {
-    tierHouse(1, 1, 18, "town-east-1", { storeys: 2 });
-    tierHouse(1, 1, 46, "town-east-2");
-    tierHouse(1, -1, 18, "town-west-1", { storeys: 2 });
-    tierHouse(1, -1, 34, "town-west-2");
-    tierHouse(2, 1, 16, "upper-town-east-1");
-    tierHouse(2, 1, 36, "upper-town-east-2");
-    tierHouse(2, -1, 22, "upper-town-west-1");
-    // The town lift rises from tier 2 to a pad on tier 3 inside a kit elevator frame.
-    const [lx, , lz] = town.center,
-      w = 3 / 50.7;
+  // ---------------------------------------------------------------- bridges
+  function bridges() {
+    CAPITAL_RINGS.bridges.forEach((a, i) => {
+      const inner = polar(MID.street[1] - 0.6, a),
+        foot = polar(W.r0 - 4.5, a);
+      b.bridge(`bridge-${i + 1}`, "refuge", inner, foot, Y.bridge, 4.6, { kind: "walkway" });
+      b.flight(`bridge-${i + 1}-stair`, "refuge", at3(foot, Y.bridge), radial(a), 3, 4.6, {
+        fill: GROUND,
+      });
+      // Tall piers carry the long bridges over the void, as in the whitebox.
+      for (let r = MID.street[1] + 8; r < W.r0 - 6; r += 10) {
+        pier(polar(r, a), Y.bridge - 0.3, 2.4);
+        b.box(...polar(r, a), Y.bridge - 1.1, [3.2, 0.5, 4.6], -a, "trim", false);
+        if (r + 10 < W.r0 - 6) {
+          const [x, z] = polar(r + 5, a);
+          b.piece("bridge-arch", [10, 7, 3.8], [x, Y.bridge - 7.3, z], -a, "wall", 0.8);
+        }
+      }
+      for (let r = MID.street[1] + 4; r < W.r0 - 4; r += 10)
+        lantern(polar(r, a + 1.6 / r), Y.bridge);
+    });
+  }
+
+  // ---------------------------------------------------------------- Middle Level Town
+  function midTown() {
+    const [f30, f31] = MID.f3,
+      [s0, s1] = MID.street,
+      lift = { a: TOWN_LIFT_A, h: 3.4 / TOWN_LIFT_R },
+      fountainA = 0.95,
+      f1Stair = 0.56,
+      f1Door = 0.66;
+    // F2: the street, with the bridges arriving through its outer parapet.
+    ringFloor("mid-f2", "foundry", s0, s1, MID.a0, MID.a1, Y.f2);
+    // The parapet stops where the street opens onto Backyard Below.
+    parapet(s1 - 0.2, MID.a0, MID.a1 - 0.1, Y.f2, [
+      ...CAPITAL_RINGS.bridges.map((a): [number, number] => [a, 5]),
+      [f1Stair, 4.6],
+    ]);
+    b.wall(polar(s0 - 8.5, MID.a0), polar(s1, MID.a0), Y.f2, Y.f2 + 4.5);
+    // F1: the undercroft beneath the street, enclosed and lamp-lit.
+    ringFloor("mid-f1", "foundry", F1.r0, F1.r1, F1.a0, F1.a1, Y.f1);
+    ringMass(F1.r0 - 0.3, F1.r1 + 0.3, F1.a0, F1.a1, GROUND, Y.f1 - 1);
+    ringWall(F1.r0 - 0.3, F1.a0, F1.a1, Y.f1, Y.f2 - 1, { thickness: 0.6 });
+    const keyRoom = CAPITAL_RINGS.bridges[1];
+    ringWall(F1.r1 + 0.3, F1.a0, F1.a1, Y.f1, Y.f2 - 1, {
+      thickness: 0.6,
+      gaps: [
+        [f1Door, 3.6],
+        [keyRoom, 6.6],
+      ],
+    });
+    b.wall(polar(F1.r0 - 0.3, F1.a1), polar(F1.r1 + 0.3, F1.a1), Y.f1, Y.f2 - 1, {
+      thickness: 0.6,
+    });
+    // The north end opens into the Mountain Tunnel.
+    b.wall(polar(F1.r0 - 0.3, F1.a0), polar(F1.r1 + 0.3, F1.a0), Y.f1, Y.f2 - 1, {
+      thickness: 0.6,
+      openings: [{ at: 3, width: 3.6, bottom: Y.f1, height: 4, frame: "doorway", id: "f1-tunnel" }],
+    });
+    for (let a = F1.a0 + 0.08; a < F1.a1; a += 0.16) lantern(polar(F1.r0 + 0.6, a), Y.f1);
+    // The undercroft as a chain of boxes following its ring.
+    for (let a = F1.a0; a < F1.a1 - 1e-3; a += 0.12) {
+      const a1 = Math.min(F1.a1, a + 0.12),
+        mid = (a + a1) / 2,
+        r = (F1.r0 + F1.r1) / 2;
+      CAPITAL_INTERIORS.push({
+        center: at3(polar(r, mid), Y.f1 + 2.5),
+        half: [((a1 - a) * F1.r1) / 2 + 0.05, 2.5, (F1.r1 - F1.r0) / 2],
+        yaw: facing(radial(mid)),
+      });
+    }
+    // The undercroft key room beneath the second bridge.
+    {
+      const t = frame(b, ...polar(F1.r1 + 0.3, keyRoom), facing(radial(keyRoom + Math.PI)));
+      t.rect("f1-key-room", "foundry", -3, -6.5, 3, 0.2, Y.f1);
+      t.enclosure(
+        [
+          [-3.3, -6.8],
+          [3.3, -6.8],
+          [3.3, 0],
+          [-3.3, 0],
+        ],
+        Y.f1,
+        Y.f2 - 1,
+        {
+          thickness: 0.6,
+          openings: {
+            2: [
+              { at: 3.3, width: 3.6, bottom: Y.f1, height: 4, area: "foundry", id: "f1-key-door" },
+            ],
+          },
+        },
+      );
+      t.mass(
+        [
+          [-3.6, -7.1],
+          [3.6, -7.1],
+          [3.6, 0],
+          [-3.6, 0],
+        ],
+        Y.f2 - 1,
+        Y.f2 - 0.2,
+        "wall",
+      );
+      t.mass(
+        [
+          [-3.6, -7.1],
+          [3.6, -7.1],
+          [3.6, 0],
+          [-3.6, 0],
+        ],
+        GROUND,
+        Y.f1 - 0.6,
+        "wall",
+      );
+      t.rooms.push({ id: "f1-key-room", width: 6, depth: 6.4, height: 5 });
+      CAPITAL_INTERIORS.push({
+        center: t.world([0, -3.4], Y.f1 + 2.5),
+        half: [3, 2.5, 3.1],
+        yaw: t.yaw,
+      });
+      t.prop("crate", [1.2, 0.8, 1.2], [2, -5.5], Y.f1, "timber");
+      t.prop("drum", [0.7, 0.9, 0.7], [-2.2, -5.8], Y.f1, "timber");
+    }
+    // The stair tower from F2 down to F1, outside the drum.
+    {
+      const top = polar(s1 - 0.15, f1Stair),
+        low = descend(
+          "mid-f1-stair",
+          "foundry",
+          at3(top, Y.f2),
+          radial(f1Stair),
+          Y.f2 - Y.f1,
+          4,
+          GROUND,
+        );
+      const lowXZ: XZ = [low[0], low[2]];
+      const landing = [
+        polar(Math.hypot(...lowXZ) - 0.1, f1Stair - 0.045),
+        polar(Math.hypot(...lowXZ) + 4, f1Stair - 0.045),
+        polar(Math.hypot(...lowXZ) + 4, f1Door + 0.04),
+        polar(Math.hypot(...lowXZ) - 0.1, f1Door + 0.04),
+      ];
+      b.floor("mid-f1-landing", "foundry", landing, Y.f1);
+      b.mass(landing, GROUND, Y.f1 - 0.6);
+      const r = Math.hypot(...lowXZ);
+      b.bridge(
+        "mid-f1-passage",
+        "foundry",
+        polar(F1.r1 + 0.6, f1Door),
+        polar(r, f1Door),
+        Y.f1,
+        3.4,
+        {
+          kind: "slab",
+        },
+      );
+      b.mass(
+        [
+          polar(F1.r1 + 0.6, f1Door - 0.04),
+          polar(r, f1Door - 0.035),
+          polar(r, f1Door + 0.035),
+          polar(F1.r1 + 0.6, f1Door + 0.04),
+        ],
+        GROUND,
+        Y.f1 - 0.8,
+      );
+      b.floor(
+        "mid-f1-door",
+        "foundry",
+        [
+          polar(F1.r1 - 0.2, f1Door - 0.04),
+          polar(F1.r1 + 0.8, f1Door - 0.04),
+          polar(F1.r1 + 0.8, f1Door + 0.04),
+          polar(F1.r1 - 0.2, f1Door + 0.04),
+        ],
+        Y.f1,
+        { thickness: 0.1, threshold: true, render: false },
+      );
+      rail(polar(r + 4, f1Stair - 0.045), polar(r + 4, f1Door + 0.04), Y.f1);
+    }
+    // F3: the rooftop floor over the house row, with the town lift's bay cut through it.
+    ringFloor("mid-f3-north", "foundry", f30, f31, MID.a0 + 0.05, lift.a - lift.h - 0.005, Y.f3);
+    ringFloor("mid-f3-south", "foundry", f30, f31, lift.a + lift.h + 0.005, MID.a1 - 0.1, Y.f3);
+    ringFloor(
+      "mid-f3-bay",
+      "foundry",
+      f30,
+      TOWN_LIFT_R - 3.05,
+      lift.a - lift.h - 0.006,
+      lift.a + lift.h + 0.006,
+      Y.f3,
+    );
+    parapet(f30 + 0.2, MID.a0 + 0.05, MID.a1 - 0.1, Y.f3, [[Math.PI / 2, 5]]);
+    parapet(f31 - 0.2, MID.a0 + 0.05, MID.a1 - 0.1, Y.f3, [[lift.a, 6.4]]);
+    for (const a of [MID.a0 + 0.05, MID.a1 - 0.1]) rail(polar(f30, a), polar(f31, a), Y.f3);
+    // The inner retaining face of the drum, down to the ground beside Grand Street.
+    ringMass(f30, f30 + 1.4, MID.a0 + 0.05, MID.a1 - 0.1, GROUND, Y.f3 - 1);
+    ringMass(f30 + 1.4, s0, MID.a0 + 0.05, MID.a1 - 0.1, GROUND, Y.f2 - 1);
+    // The Mountain Tunnel leaves the undercroft's north end beneath this stretch.
+    ringMass(s0, s1, MID.a0, F1.a0, GROUND, Y.tunnel - 1);
+    ringMass(s0, s1, MID.a0, F1.a0, Y.tunnel + 4.8, Y.f2 - 1);
+    ringMass(s0, s1, F1.a1, MID.a1, GROUND, Y.f2 - 1);
+    // The lift bay: a floor at street level around the shaft.
     b.floor(
-      "town-lift-pad",
+      "mid-lift-bay",
       "foundry",
       [
-        polar(48.5, town.a - w),
-        polar(56.05 - SHAFT, town.a - w),
-        polar(56.05 - SHAFT, town.a + w),
-        polar(48.5, town.a + w),
+        polar(TOWN_LIFT_R + 3.05, lift.a - lift.h),
+        polar(s0 + 0.2, lift.a - lift.h),
+        polar(s0 + 0.2, lift.a + lift.h),
+        polar(TOWN_LIFT_R + 3.05, lift.a + lift.h),
       ],
-      TIER_H[2],
-      { thickness: 1 },
+      Y.f2,
     );
+    for (const s of [-1, 1])
+      b.wall(
+        polar(f30 + 1.4, lift.a + s * (lift.h + 0.012)),
+        polar(s0, lift.a + s * (lift.h + 0.012)),
+        Y.f2,
+        Y.f3 - 1,
+        {
+          thickness: 0.4,
+        },
+      );
     b.piece(
       "elevator",
-      [7.4, TIER_H[2] + 5.6 - (TIER_H[1] - 4), 7.4],
-      [lx, TIER_H[1] - 4, lz],
-      Math.atan2(Math.sin(town.a), -Math.cos(town.a)),
-      "trim",
-      0.6,
+      [6.6, Y.f3 - Y.f2 + 3.2, 6.6],
+      at3(polar(TOWN_LIFT_R, lift.a), Y.f2 - 0.3),
+      Math.PI - lift.a,
+      "iron",
+      0.3,
     );
-    for (const s of [-1, 1]) {
-      const [x, z] = polar(56.05, town.a + (s * 4.4) / 56.05);
-      lantern(x, TIER_H[1], z);
+    // The house row under F3: closed blocks facing the street, with enterable homes
+    // and the Sage's fountain court between the bridges.
+    const rowBack = f30 + 1.4,
+      depth = s0 - 0.4 - rowBack,
+      reserved: Array<[number, number]> = [
+        [lift.a - lift.h - 0.03, lift.a + lift.h + 0.03],
+        [fountainA - 0.09, fountainA + 0.09],
+      ];
+    let homes = 0;
+    for (let a = MID.a0 + 0.08; a < MID.a1 - 0.12;) {
+      const w = 5.5 + rand() * 3,
+        da = w / (rowBack + depth / 2);
+      if (a + da > MID.a1 - 0.12) break;
+      const mid = a + da / 2;
+      if (reserved.some(([p, q]) => a + da > p && a < q)) {
+        a += 0.02;
+        continue;
+      }
+      const t = frame(b, ...polar(rowBack, mid), facing(radial(mid)));
+      const homeSpot =
+        (mid > 0.45 && mid < 0.72) || (mid > 1.05 && mid < 1.25) || (mid > 1.5 && mid < 1.8);
+      if (
+        homes < 3 &&
+        w > 6.5 &&
+        homeSpot &&
+        !CAPITAL_HOMES.some(
+          (h) =>
+            h.id.startsWith("home-mid") && Math.abs(Math.atan2(h.spot[0], -h.spot[2]) - mid) < 0.25,
+        )
+      ) {
+        const id = `home-mid-${homes++}`;
+        house(t, {
+          id,
+          area: "foundry",
+          x0: -w / 2,
+          z0: 0,
+          x1: w / 2,
+          z1: depth,
+          base: Y.f2,
+          height: Y.f3 - 1 - Y.f2,
+          doors: [{ side: "s", c: 0 }],
+          roof: false,
+        });
+        t.rect(`${id}:apron`, "foundry", -1.8, depth + 0.1, 1.8, depth + 2.4, Y.f2, {
+          render: false,
+          thickness: 0.1,
+        });
+        CAPITAL_HOMES.push({
+          id,
+          area: "foundry",
+          spot: t.world([0, depth * 0.55], Y.f2),
+          approach: [t.world([0, depth + 2], Y.f2), t.world([0, depth - 1], Y.f2)],
+        });
+      } else
+        block(t, {
+          x: 0,
+          z: 0,
+          w: w - 0.3,
+          depth,
+          y: Y.f2,
+          storeys: 1,
+          storey: Y.f3 - 1 - Y.f2,
+          roofed: false,
+          rand,
+        });
+      a += da + 0.004;
+    }
+    // The Sage's fountain court.
+    {
+      ringFloor(
+        "mid-fountain-court",
+        "foundry",
+        rowBack,
+        s0 + 0.5,
+        fountainA - 0.088,
+        fountainA + 0.088,
+        Y.f2,
+      );
+      const [x, z] = polar(35, fountainA);
+      b.prop("drum", [3.2, 0.8, 3.2], [x, Y.f2, z], 0, { material: "trim" });
+      b.piece("drum", [2.7, 0.05, 2.7], [x, Y.f2 + 0.75, z], 0, "water");
+      b.box(x, z, Y.f2 + 0.8, [0.5, 1.6, 0.5], 0, "trim", false);
+      for (const s of [-1, 1])
+        b.wall(
+          polar(rowBack, fountainA + s * 0.09),
+          polar(s0 - 0.4, fountainA + s * 0.09),
+          Y.f2,
+          Y.f3 - 1,
+          { thickness: 0.5 },
+        );
+      b.wall(polar(rowBack, fountainA - 0.09), polar(rowBack, fountainA + 0.09), Y.f2, Y.f3 - 1, {
+        thickness: 0.5,
+      });
+    }
+    for (let a = MID.a0 + 0.06; a < MID.a1; a += 0.11) lantern(polar(s1 - 0.8, a), Y.f2);
+    // An arcade along the street's open edge closes it in, as the reference's town is;
+    // statues and an arched gateway mark each bridge's arrival.
+    {
+      const r = s1 - 0.15,
+        step = 4.6 / r,
+        open = [...CAPITAL_RINGS.bridges, f1Stair],
+        clear = (a: number) => open.every((g) => Math.abs(a - g) * r > 3.6);
+      let previous: number | null = null;
+      for (let a = MID.a0 + 0.04; a < MID.a1 - 0.12; a += step) {
+        if (!clear(a)) {
+          previous = null;
+          continue;
+        }
+        b.pillar(...polar(r, a), Y.f2, 5.2, 0.7, "trim");
+        if (previous !== null) {
+          const m = (a + previous) / 2;
+          b.piece(
+            "arch-window",
+            [4.4, 5, 0.3],
+            at3(polar(r, m), Y.f2),
+            facing(radial(m)),
+            "trim",
+            0.35,
+          );
+          b.box(...polar(r, m), Y.f2 + 5.2, [4.9, 0.5, 0.8], -m, "trim", false);
+        }
+        previous = a;
+      }
+      for (const a of CAPITAL_RINGS.bridges) {
+        b.piece(
+          "doorway",
+          [6, 6.4, 0.7],
+          at3(polar(s1 + 0.2, a), Y.f2),
+          facing(radial(a)),
+          "timber",
+          0.7,
+        );
+        for (const t of [-1, 1]) statue(polar(44.2, a + (t * 3.6) / 44.2), Y.f2, Math.PI - a, 1.25);
+      }
+    }
+    for (let a = MID.a0 + 0.12; a < MID.a1 - 0.1; a += 0.14)
+      if (Math.abs(a - lift.a) > 0.12 && Math.abs(a - Math.PI / 2) > 0.08)
+        lantern(polar(f30 + 0.9, a), Y.f3);
+    // The Top-Right Road: from F3 over the moat up to the plaza's east wing.
+    b.flight("top-right-road", "toproad", [f30, Y.f3, 0], [-1, 0], Y.plaza - Y.f3, 4.6);
+    for (const z of [-2.5, 2.5])
+      b.wall([f30, z], [f30 - 13.5, z], Y.f3, Y.plaza + 1.1, { thickness: 0.4, material: "trim" });
+    // A tall bell-tower stands at the town's south end, above the stair down to the garden.
+    {
+      const [x, z] = polar(34.5, MID.a1 - 0.04);
+      b.box(x, z, Y.f2, [5, 24, 5], -(MID.a1 - 0.04), "wall", true);
+      b.piece("spire", [6, 8, 6], [x, Y.f2 + 24, z], -(MID.a1 - 0.04), "roof");
     }
   }
 
-  // ---------------------------------------------------- Tiers 4–5: Up Town
-  {
-    tierHouse(3, 1, 14, "uptown-east-1");
-    tierHouse(3, -1, 14, "uptown-west-1");
-    tierHouse(3, -1, 30, "uptown-west-2");
-    for (const [k, side, d] of [
-      [4, 1, 12],
-      [4, -1, 18],
-      [3, 1, 30],
-    ] as const) {
-      b.prop("crate", [1.3, 0.4, 0.94], onTier(k, side, d, TIER_R[k] - 3), d, {
-        material: "timber",
-      });
-      const [x, , z] = onTier(k, side, d + 4, TIER_R[k] - 1.2);
-      lantern(x, TIER_H[k], z);
+  // ---------------------------------------------------------------- Mountain Tunnel
+  function mountainTunnel() {
+    const z = TUNNEL_Z;
+    interior(TUNNEL_WEST, Y.tunnel, z - 1.9, TUNNEL_EAST + 1, Y.tunnel + 4.2, z + 1.9);
+    b.buried(() => {
+      b.hallway("mountain-tunnel", "tunnel", [TUNNEL_EAST + 1, z], [-9.5, z], Y.tunnel, 4.2, 4.6);
+    });
+    // Beyond the prow it crosses Grand Street's spur as a covered bridge.
+    b.hallway("tunnel-bridge", "tunnel", [-9.5, z], [TUNNEL_WEST, z], Y.tunnel, 4.2, 4.6);
+    pier([-10.5, z], Y.tunnel - 0.3, 3);
+    pier([-22, z], Y.tunnel - 0.3, 3);
+    const high = b.flight(
+      "tunnel-stair",
+      "tunnel",
+      [TUNNEL_WEST, Y.tunnel, z],
+      [-1, 0],
+      Y.upTown - Y.tunnel,
+      4,
+      {
+        fill: GROUND,
+      },
+    );
+    b.rect("tunnel-landing", "toproad", high[0] - 3.5, z - 3, high[0] + 0.05, z + 3, Y.upTown);
+    for (let x = TUNNEL_EAST - 4; x > TUNNEL_WEST; x -= 9) lantern([x, z + 1.4], Y.tunnel);
+  }
+
+  // ---------------------------------------------------------------- Up Town
+  function upTown() {
+    const { a0, a1, r0, r1 } = UP,
+      y = Y.upTown,
+      inner = [r0, 54] as const,
+      avenue = [62, 68] as const,
+      outer = [84, r1] as const,
+      radials = [4.92, 5.25, 5.62],
+      // The article's map trims the quarter's south-west end to its outer streets, and
+      // bulges its west-north-west arc out to a hundred metres.
+      innerStart = 4.82,
+      bulge = [5.0, 5.8] as const,
+      bulgeR = 100;
+    // Streets: the inner street along the retaining wall, the avenue and the outer street.
+    ringFloor("up-inner", "toproad", inner[0], inner[1], innerStart, a1, y);
+    rail(polar(inner[0], innerStart), polar(avenue[0], innerStart), y);
+    parapet(avenue[0] + 0.2, a0, innerStart, y);
+    ringFloor("up-avenue", "toproad", avenue[0], avenue[1], a0, a1 + 0.1, y);
+    ringFloor("up-outer", "toproad", outer[0], outer[1], a0, BAND.a1, y);
+    // Radial streets between the blocks, five metres wide.
+    radials.forEach((a, i) => {
+      const h = 2.5;
+      for (const [p, q, id] of [
+        [inner[1] - 0.5, avenue[0] + 0.5, "in"],
+        [avenue[1] - 0.5, outer[0] + 0.5, "out"],
+      ] as const) {
+        const d = radial(a),
+          n: XZ = [-d[1], d[0]],
+          A = polar(p, a),
+          B = polar(q, a);
+        b.floor(
+          `up-radial-${i}-${id}`,
+          "toproad",
+          [add(A, n, -h), add(B, n, -h), add(B, n, h), add(A, n, h)],
+          y,
+        );
+        // Covered: each lane runs as a vaulted passage between the blocks.
+        const roof = [
+          add(A, n, -h - 0.4),
+          add(B, n, -h - 0.4),
+          add(B, n, h + 0.4),
+          add(A, n, h + 0.4),
+        ];
+        b.mass(roof, y + 5.4, y + 6, "wall");
+        for (const end of [A, B])
+          b.piece("doorway", [5.6, 5.4, 0.5], at3(end, y), facing(d), "trim", 0.5);
+        CAPITAL_INTERIORS.push({
+          center: at3(polar((p + q) / 2, a), y + 2.7),
+          half: [h, 2.7, (q - p) / 2],
+          yaw: facing(d),
+        });
+      }
+    });
+    // The north band reaching around behind the prow tip to the great gate.
+    ringFloor("up-band", "toproad", BAND.r0, outer[0], BAND.a0, BAND.a1, y);
+    // The retaining wall and its parapet over Grand Street, open where the tunnel climbs in.
+    const tunnelA = facingAngle(-27.5, TUNNEL_Z),
+      th = 2.6 / r0;
+    ringMass(r0 - 1.2, r0, innerStart, tunnelA - th, GROUND, y - 0.4);
+    ringMass(r0 - 1.2, r0, tunnelA + th, a1, GROUND, y - 0.4);
+    ringMass(r0 - 1.2, r0, tunnelA - th, tunnelA + th, GROUND, Y.tunnel - 1.6);
+    parapet(r0 + 0.2, innerStart + 0.02, a1, y, [[tunnelA, 5]]);
+    // The outer wall, stepping out round the bulge, and the terrace of houses inside it.
+    ringMass(r1, r1 + 1.2, a0, bulge[0], GROUND, y + 3);
+    ringMass(r1, r1 + 1.2, bulge[1], BAND.a1, GROUND, y + 3);
+    ringMass(bulgeR, bulgeR + 1.2, bulge[0], bulge[1], GROUND, y + 3);
+    for (const a of bulge)
+      b.wall(polar(r1, a), polar(bulgeR + 1.2, a), GROUND, y + 3, { thickness: 1.2 });
+    merlons(r1 + 0.6, a0, bulge[0], y + 3);
+    merlons(r1 + 0.6, bulge[1], BAND.a1, y + 3);
+    merlons(bulgeR + 0.6, bulge[0], bulge[1], y + 3);
+    ringFloor("up-outer-terrace", "toproad", outer[1] - 0.5, bulgeR, bulge[0], bulge[1], y);
+    // The inner north, as on the article's map: Up Town wraps right round to the prow,
+    // decked over Grand Street's spur and court beneath.
+    const tipWest = 6.12,
+      tipEast = Math.PI * 2 + 0.16;
+    ringFloor("up-north-west", "toproad", r0, BAND.r0, a1, tipWest, y);
+    ringFloor("up-north-tip", "toproad", 59.8, BAND.r0, tipWest, tipEast, y);
+    ringFloor("up-north-east", "toproad", r0, BAND.r0, tipEast, BAND.a1, y);
+    parapet(r0 + 0.2, a1, tipWest, y);
+    parapet(r0 + 0.2, tipEast, BAND.a1, y);
+    parapet(60, tipWest, tipEast, y);
+    rail(polar(r0, tipWest), polar(59.8, tipWest), y);
+    rail(polar(r0, tipEast), polar(59.8, tipEast), y);
+    rail(polar(r0, BAND.a1), polar(BAND.r0, BAND.a1), y);
+    for (const p of [
+      [-24, -50],
+      [-24, -60],
+      [-11, -52],
+      [10, -52],
+    ] as XZ[])
+      pier(p, y - 1, 2);
+    // Blocks of houses: Leyndell's "houses as blocks", some of them homes.
+    let homes = 0,
+      slot = 0;
+    const fill = (rA: number, rB: number, s0: number, s1: number, tag: string) => {
+      const depth = rB - rA - 1.4;
+      for (let a = s0 + 0.01; a < s1 - 0.01;) {
+        const rm = rA + 0.7,
+          w = 6 + rand() * 4,
+          da = w / rm;
+        if (a + da > s1 - 0.005) break;
+        const mid = a + da / 2;
+        // Front the street on the outer side for inner rows, the inner side for outer rows.
+        const outward = tag === "in";
+        const back = outward ? rA + 0.7 : rB - 0.7,
+          t = frame(b, ...polar(back, mid), facing(radial(outward ? mid : mid + Math.PI)));
+        const tower = rand() < 0.12;
+        if (homes < 4 && !tower && w > 6.4 && tag === "in" && slot++ % 2 === 0) {
+          const id = `home-up-${homes++}`;
+          const hd = avenue[0] + 0.1 - back;
+          house(t, {
+            id,
+            area: "toproad",
+            x0: -w / 2,
+            z0: 0,
+            x1: w / 2,
+            z1: hd,
+            base: y,
+            doors: [{ side: "s", c: 0 }],
+          });
+          t.rect(`${id}:apron`, "toproad", -1.8, hd + 0.1, 1.8, hd + 2.4, y, {
+            render: false,
+            thickness: 0.1,
+          });
+          CAPITAL_HOMES.push({
+            id,
+            area: "toproad",
+            spot: t.world([0, hd * 0.55], y),
+            approach: [t.world([0, hd + 2], y), t.world([0, hd - 1], y)],
+          });
+        } else
+          block(t, {
+            x: 0,
+            z: 0,
+            w: w - 0.4,
+            depth: Math.min(depth, tower ? 6 : depth),
+            y,
+            storeys: tower ? 4 : 1 + Math.floor(rand() * 3),
+            tower,
+            rand,
+          });
+        a += da + 0.006;
+      }
+    };
+    const cuts = [a0, ...radials.flatMap((a) => [a - 2.6 / 58, a + 2.6 / 58]), a1];
+    for (let i = 0; i < cuts.length; i += 2) {
+      fill(inner[1], avenue[0], Math.max(cuts[i], innerStart), cuts[i + 1], "in");
+      fill(avenue[1], outer[0], cuts[i] + (i === 0 ? 0.07 : 0.01), cuts[i + 1] - 0.01, "out");
     }
-    // Backyard Below: two kit half-turns from the garden down to Up Town's east end.
-    const [tx, , tz] = CAPITAL_SITES.stairTower;
-    // Four gentle kit half-turns from the garden down to Up Town's east end.
-    for (let i = 0; i < 4; i++)
-      b.curvedFlight(
-        `backyard-below:${i}`,
-        "graveyard",
-        [tx, TIER_H[3] + 7.5 * i, tz],
-        8,
-        7.5,
-        (i % 2) as 0 | 1,
+    // The band keeps clear of the Top-Left Road and the great gate stair.
+    fill(BAND.r0 + 2, outer[0], 6.22, BAND.a1 - 0.08, "out");
+    // Houses along the bulge's terrace, backing onto its wall and facing the outer street.
+    fill(outer[1] + 1.2, bulgeR - 0.2, bulge[0] + 0.03, bulge[1] - 0.03, "out");
+    for (let a = a0 + 0.03; a < BAND.a1; a += 0.1) lantern(polar(outer[0] + 0.8, a), y);
+    for (let a = a0 + 0.05; a < a1; a += 0.12) lantern(polar(avenue[0] + 0.8, a), y);
+    // A square with the keepers' statue on the avenue, and a giant sword.
+    statue(polar(65, 5.0), y, -5.0, 1.6);
+    sword(polar(65, 5.45), y, 0.4, 1);
+    sword(polar(51, 4.62), y, -0.3, 0.8);
+    // The Top-Left Road: from the band up to the prow's tip platform.
+    b.floor(
+      "top-left-landing",
+      "toproad",
+      [
+        [-26, -71],
+        [-21.5, -71],
+        [-21.5, -66],
+        [-26, -66],
+      ],
+      y,
+    );
+    b.flight("top-left-road", "toproad", [-22, y, -68.5], [1, 0], Y.tip - y, 4.6);
+    // A covered stair hall, like the reference's enclosed climb between rooms.
+    for (const z of [-70.95, -66.05])
+      b.wall([-21.5, z], [-6.9, z], y, Y.tip + 4.5, { thickness: 0.4, material: "wall" });
+    b.mass(
+      [
+        [-22.3, -71.3],
+        [-6.9, -71.3],
+        [-6.9, -65.7],
+        [-22.3, -65.7],
+      ],
+      Y.tip + 4.5,
+      Y.tip + 5.1,
+      "roof",
+    );
+    interior(-22, y, -70.75, -6.9, Y.tip + 4.5, -66.25);
+    // A pier carries the flight's upper half, its top just under the steps.
+    pier([-10, -68.5], Y.upTown + ((Y.tip - Y.upTown) * 11) / 15 - 0.7, 2);
+    // The stair from the band up to the great gate.
+    const gateLanding: XZ[] = [
+      [20.1, -75],
+      [28, -75],
+      [28, -80],
+      [21.5, -80],
+    ];
+    b.floor("gate-landing", "toproad", gateLanding, y);
+    b.mass(gateLanding, GROUND, y - 0.6);
+    const top = b.flight("great-gate-stair", "toproad", [24, y, -80], [0, -1], Y.wall - y, 4.6, {
+      fill: GROUND,
+    });
+    // The landing before the great gate reaches the curtain's inner face.
+    const gateEnd = -Math.sqrt(W.r0 ** 2 - 21.7 ** 2) - 0.1;
+    b.rect("great-gate-landing", "refuge", 21.7, gateEnd, 26.3, top[2] + 0.05, Y.wall);
+    b.mass(
+      [
+        [21.7, gateEnd],
+        [26.3, gateEnd],
+        [26.3, top[2]],
+        [21.7, top[2]],
+      ],
+      GROUND,
+      Y.wall - 0.6,
+    );
+    b.wall([21.4, -80], [21.4, gateEnd + 0.4], Y.upTown, Y.wall + 1.1, {
+      thickness: 0.6,
+      material: "wall",
+    });
+    b.wall([26.6, -75], [26.6, -Math.sqrt(W.r0 ** 2 - 26.6 ** 2) + 0.3], Y.upTown, Y.wall + 1.1, {
+      thickness: 0.6,
+      material: "wall",
+    });
+    // The bridge from the beacon tower's top into the quarter's south-west end.
+    b.rect("up-beacon-link", "toproad", -86, 15.5, -79.5, 20.5, y);
+    b.mass(
+      [
+        [-86, 15.5],
+        [-79.5, 15.5],
+        [-79.5, 20.5],
+        [-86, 20.5],
+      ],
+      GROUND,
+      y - 0.6,
+    );
+  }
+
+  // ---------------------------------------------------------------- blade and plaza
+  function bladeAndPlaza() {
+    const y = Y.plaza,
+      outline = (z: number, s: number): XZ => [s * bladeHalfWidth(z), z];
+    // The tip platform where the Top-Left Road arrives.
+    b.rect("tip-platform", "yard", -7, -72, 7, -63, Y.tip);
+    // The Hollow Marshal monument at the end of the blade walk.
+    {
+      const z = -70,
+        t = Y.tip;
+      const size: ParishPoint = [3.7, 6.4, 4.4];
+      const scale = Math.min(
+        size[1],
+        size[0] / capitalMountedPlacement.width,
+        size[2] / capitalMountedPlacement.depth,
       );
-    b.pillar(tx, tz, BEDROCK, Y.gallery + 1 - BEDROCK, 5);
-    b.box(tx, tz, Y.gallery + 1, [1.2, 0.8, 1.2], 0, "glow", false);
-    const door = polar((TIER_R[3] + TIER_R[4]) / 2 + 0.5, Math.PI - SPAN);
+      const { position, size: base } = capitalMountedPlacement.base;
+      b.piece("equestrian-statue", size, [0, t, z + 0.3], 0, "gold");
+      b.solid(
+        [position[0] * scale, t + position[1] * scale, z + 0.3 + position[2] * scale],
+        [base[0] * scale, base[1] * scale, base[2] * scale],
+        0,
+      );
+    }
+    rail([-7, -72], [7, -72], Y.tip);
+    rail([7, -72], [7, -63.2], Y.tip);
+    rail([-7, -72], [-7, -71.2], Y.tip);
+    for (const [x, z] of [
+      [-6, -71],
+      [6, -71],
+      [6, -64.5],
+    ])
+      pier([x, z], Y.tip - 0.6, 1.4);
+    // The blade walk climbs from the tip to the plaza in two flights of steps.
+    const piece = (id: string, z0: number, z1: number, h: number) =>
+      b.floor(id, "yard", [outline(z0, -1), outline(z1, -1), outline(z1, 1), outline(z0, 1)], h);
+    piece("blade-tip", -63.01, -58, Y.tip);
+    piece("blade-neck", -58, -50, Y.tip);
+    b.flight("blade-stair-1", "yard", [0, Y.tip, -50], [0, 1], 4, 9);
+    piece("blade-mid", -44, -34, Y.tip + 4);
+    b.flight("blade-stair-2", "yard", [0, Y.tip + 4, -34], [0, 1], 4, 12);
+    // The blade's root is cut around the arena lift shaft.
+    // The arena lift rises west of the colosseum corridor, leaving Grand Street's ring
+    // free to pass round the prow's foot.
+    const shaft = { x0: -9.5, x1: -3.5, z0: -27, z1: -21 };
+    b.rect("blade-root-west", "yard", -11, -28, shaft.x0, -12, y);
+    b.rect("blade-root-east", "yard", shaft.x1, -28, 11, -12, y);
+    b.rect("blade-root-north", "yard", shaft.x0, -28, shaft.x1, shaft.z0, y);
+    b.rect("blade-root-south", "yard", shaft.x0, shaft.z1, shaft.x1, -12, y);
+    // Solid cheeks beside the flights carry the blade's edge up with them.
+    for (const [z0, z1, h0, half] of [
+      [-50, -44, Y.tip, 4.5],
+      [-34, -28, Y.tip + 4, 6],
+    ] as const)
+      for (const s of [-1, 1]) {
+        const quad: XZ[] = [
+          [s * half, z0],
+          [s * bladeHalfWidth(z0), z0],
+          [s * bladeHalfWidth(z1), z1],
+          [s * half, z1],
+        ];
+        b.mass(quad, h0 - 0.6, h0 + 4, "wall");
+      }
+    // Parapets along both edges.
+    for (const s of [-1, 1])
+      for (const [z0, z1, h] of [
+        [-63, -58, Y.tip],
+        [-58, -50, Y.tip],
+        [-50, -44, Y.tip + 4],
+        [-44, -34, Y.tip + 4],
+        [-34, -28, y],
+        [-28, -12, y],
+      ] as const)
+        rail(outline(z0, s), outline(z1, s), h);
+    // Railings around the shaft, open on the boarding (east) side.
+    rail([shaft.x0 - 0.2, shaft.z0 - 0.2], [shaft.x1, shaft.z0 - 0.2], y);
+    rail([shaft.x0 - 0.2, shaft.z1 + 0.2], [shaft.x1, shaft.z1 + 0.2], y);
+    rail([shaft.x0 - 0.2, shaft.z0 - 0.2], [shaft.x0 - 0.2, shaft.z1 + 0.2], y);
+    b.piece("elevator", [6.6, 4, 6.6], [-6.5, y - 0.3, -24], Math.PI / 2, "iron", 0.3);
+    // The prow beneath: a sheer masonry keel down to the ground, hollow for its passages.
+    const flank = (s: 1 | -1) => {
+      const zs = [-58, -50, -44, -34, -28, -12];
+      for (let i = 0; i + 1 < zs.length; i++) {
+        const z0 = zs[i],
+          z1 = zs[i + 1],
+          h0 = bladeHalfWidth(z0),
+          h1 = bladeHalfWidth(z1),
+          ceil = (z0 < -50 ? Y.tip : z0 < -34 ? Y.tip + 4 : y) - 0.7;
+        const quad = (bottom: number, top: number, za: number, zb: number) => {
+          const ha = h0 + ((h1 - h0) * (za - z0)) / (z1 - z0),
+            hb = h0 + ((h1 - h0) * (zb - z0)) / (z1 - z0);
+          b.mass(
+            [
+              [s * (ha - 1.2), za],
+              [s * ha, za],
+              [s * hb, zb],
+              [s * (hb - 1.2), zb],
+            ],
+            bottom,
+            top,
+          );
+        };
+        const top = z0 === -50 || z0 === -34 ? (z0 === -50 ? Y.tip : Y.tip + 4) - 0.6 : ceil;
+        // Openings through the keel: the Mountain Tunnel, and the arch where Grand
+        // Street's ring passes round the foot of the central mountain.
+        const holes = [
+          { za: TUNNEL_Z - 2.6, zb: TUNNEL_Z + 2.6, bottom: Y.tunnel - 0.4, top: Y.tunnel + 4.8 },
+          { za: -33, zb: -19.5, bottom: GROUND, top: Y.plain + 6 },
+        ];
+        const cuts = [z0, z1, ...holes.flatMap((h) => [h.za, h.zb])]
+          .filter((z) => z >= z0 && z <= z1)
+          .sort((p, q) => p - q);
+        for (let k = 0; k + 1 < cuts.length; k++) {
+          const za = cuts[k],
+            zb = cuts[k + 1];
+          if (zb - za < 1e-3) continue;
+          const open = holes.filter((h) => h.za <= za + 1e-6 && h.zb >= zb - 1e-6);
+          let y0 = GROUND;
+          for (const h of open.sort((p, q) => p.bottom - q.bottom)) {
+            if (h.bottom - y0 > 0.05) quad(y0, h.bottom, za, zb);
+            y0 = Math.max(y0, h.top);
+          }
+          if (top - y0 > 0.05) quad(y0, top, za, zb);
+        }
+      }
+    };
+    flank(1);
+    flank(-1);
+    // The keel's bow: the colosseum gate opens into the mountain.
+    for (const [x0, x1] of [
+      [-5, -2.4],
+      [2.4, 5],
+    ])
+      b.mass(
+        [
+          [x0, -59.2],
+          [x1, -59.2],
+          [x1, -58],
+          [x0, -58],
+        ],
+        GROUND,
+        Y.tip - 0.7,
+      );
+    b.mass(
+      [
+        [-2.4, -59.2],
+        [2.4, -59.2],
+        [2.4, -58],
+        [-2.4, -58],
+      ],
+      COURT_Y + 5.4,
+      Y.tip - 0.7,
+    );
+    b.piece("doorway", [5.6, 5.4, 0.8], [0, COURT_Y, -59.6], 0, "piece", 0.4);
+    // Giant swords stand beside the blade.
+    sword([-18, -54], Y.upTown, 0.5, 1.3);
+    sword([13, -56], Y.upTown, -0.4, 1.1);
+    // The Ultimate Plaza: a round court of statues on the central mountain.
+    const R = CAPITAL_RINGS.plaza,
+      n = 20,
+      step = (Math.PI * 2) / n,
+      ring = Array.from({ length: n }, (_, i) => polar(R, i * step + step / 2));
+    b.floor("plaza", "yard", ring, y, { thickness: 1 });
+    b.rect("plaza-east-wing", "yard", 15, -2.6, 16.6, 2.6, y);
+    b.rect("plaza-west-balcony", "yard", -20, -4, -15, 4, y);
+    rail([-20, -4], [-20, 4], y);
+    rail([-20, -4], [-15.6, -4], y);
+    rail([-20, 4], [-15.6, 4], y);
+    for (let i = 0; i < n; i++) {
+      const a0 = i * step + step / 2,
+        a1 = a0 + step,
+        am = (a0 + a1) / 2;
+      // Open to the blade (north), the chapel (south) and both wings.
+      if (am < 0.75 || am > Math.PI * 2 - 0.75) continue;
+      if (Math.abs(am - Math.PI) < 0.5) continue;
+      if (Math.abs(am - Math.PI / 2) < 0.2 || Math.abs(am - Math.PI * 1.5) < 0.3) continue;
+      rail(polar(R - 0.2, a0), polar(R - 0.2, a1), y);
+    }
+    ringMass(R - 1.4, R, 0.75, Math.PI * 2 - 0.75, 6, y - 1);
+    for (const a of [1.0, 1.95, 4.4, 5.3]) statue(polar(12.5, a), y, Math.PI - a, 1.3);
+    for (const a of [0.9, 2.2, 4.1, 5.4]) lantern(polar(14.4, a), y);
+    lantern([-3.5, -40], Y.tip + 4);
+    lantern([3.5, -40], Y.tip + 4);
+    lantern([-1.6, -58], Y.tip);
+    lantern([1.6, -58], Y.tip);
+  }
+
+  // ---------------------------------------------------------------- Oblivion Chapel
+  function chapel() {
+    const { x0, x1, z0, z1 } = CAPITAL_CATHEDRAL.chapel,
+      y = Y.citadel,
+      roof = y + 8.4;
+    interior(x0 + 0.3, y, z0 + 0.3, x1 - 0.3, roof - 0.6, z1 - 0.3);
+    b.rect("chapel", "kiln", x0 + 0.3, z0 + 0.3, x1 - 0.3, z1 - 0.3, y);
+    b.enclosure(
+      [
+        [x0, z0],
+        [x1, z0],
+        [x1, z1],
+        [x0, z1],
+      ],
+      y,
+      roof - 0.6,
+      {
+        thickness: 0.6,
+        openings: {
+          0: [
+            {
+              at: 12,
+              width: 4,
+              bottom: y,
+              height: 5,
+              frame: "double-door",
+              id: "chapel-north",
+              area: "kiln",
+            },
+          ],
+          1: [
+            {
+              at: 6.5,
+              width: 3,
+              bottom: y,
+              height: 4,
+              id: "chapel-east",
+              area: "aqueduct",
+              visibleThreshold: true,
+            },
+          ],
+          2: [
+            {
+              at: 12,
+              width: 4,
+              bottom: y,
+              height: 5,
+              frame: "double-door",
+              id: "chapel-south",
+              area: "kiln",
+            },
+          ],
+        },
+      },
+    );
+    b.rooms.push({
+      id: "chapel",
+      width: x1 - x0 - 0.6,
+      depth: z1 - z0 - 0.6,
+      height: 7.8,
+      high: true,
+    });
+    // The walkable roof, reached from the cathedral rafters, with a stair down inside
+    // along the west wall.
+    b.rect("chapel-roof", "kiln", -8.3, z0, x1, z1, roof, { material: "roof" });
+    b.rect("chapel-roof-landing", "kiln", x0 + 0.3, z0 + 0.9 + 12.57, -7.9, z1 - 0.3, roof, {
+      material: "roof",
+    });
+    b.mass(
+      [
+        [x0, z0],
+        [-8.3, z0],
+        [-8.3, z0 + 0.3],
+        [x0, z0 + 0.3],
+      ],
+      roof - 0.6,
+      roof,
+      "roof",
+    );
+    for (const [p, q] of [
+      [
+        [x0, z1],
+        [x1, z1],
+      ],
+      [
+        [x1, z0],
+        [x1, z1],
+      ],
+      [
+        [x0, z0],
+        [x1, z0],
+      ],
+      [
+        [-8.3, z0],
+        [-8.3, z1 - 3],
+      ],
+    ] as Array<[XZ, XZ]>)
+      rail(p, q, roof);
+    b.flight("chapel-roof-stair", "kiln", [-10, y, z0 + 0.9], [0, 1], roof - y, 2.8, { fill: y });
+    // A flight on the roof climbs to the narthex roof and the rafters.
+    const up = b.flight(
+      "chapel-rafter-stair",
+      "kiln",
+      [0, roof, z0 + 6],
+      [0, 1],
+      Y.rafter - roof,
+      2.4,
+    );
     b.bridge(
-      "backyard-below-foot",
-      "graveyard",
-      [tx - 5.8, tz],
-      [tx - 5.8, door[1] - 2],
-      TIER_H[3],
-      4.4,
+      "chapel-rafter-bridge",
+      "kiln",
+      [0, up[2] - 0.05],
+      [0, CAPITAL_CATHEDRAL.narthex.z0 + 0.3],
+      Y.rafter,
+      2.4,
       {
         kind: "slab",
       },
     );
-    b.floor(
-      "backyard-below-join",
-      "graveyard",
-      [
-        [door[0] - 1.2, door[1] - 2.6],
-        [door[0] - 1.2, door[1] + 1],
-        [tx - 3.6, door[1] + 1],
-        [tx - 3.6, door[1] - 2.6],
-      ],
-      TIER_H[3],
-      { thickness: 1 },
-    );
-    b.bridge("backyard-below-top", "graveyard", [tx - 5.8, tz], [tx - 5.8, -55], Y.gallery, 4.4, {
-      kind: "slab",
-    });
+    for (const s of [-1, 1])
+      b.wall([s * 1.4, z0 + 6], [s * 1.4, up[2]], roof, Y.rafter + 1.1, {
+        thickness: 0.4,
+        material: "trim",
+      });
+    // Altar, candles, benches and a banner; the shrine stands in the aisle.
+    b.box(0, z1 - 2.5, y, [4, 1.1, 1.4], 0, "trim");
+    for (const x of [-1.5, 0, 1.5]) b.box(x, z1 - 2.5, y + 1.1, [0.2, 0.5, 0.2], 0, "glow", false);
+    b.piece("banner", [2.4, 5, 0.06], [0, y + 2.6, z1 - 0.65], 0, "cloth");
+    for (const z of [z0 + 4.5, z0 + 7])
+      for (const x of [-4.2, 4.2])
+        b.prop("crate", [3.2, 0.5, 0.6], [x, y, z], 0, { material: "timber" });
+    // Colonnades down both sides make a nave of it, lamps glowing between the columns.
+    for (const z of [z0 + 3.3, z0 + 11])
+      for (const x of [-7.6, 7.6]) b.pillar(x, z, y, roof - y - 0.6, 1.1, "trim");
+    for (const z of [z0 + 7.2]) for (const x of [-6.8, 6.8]) lantern([x, z], y);
+    b.piece("spire", [5, 9, 5], [8, roof, z0 + 4], 0, "roof");
+    lantern([3.5, z0 - 1.2], y);
+    lantern([-3.5, z0 - 1.2], y);
   }
 
-  // ------------------------------------------- Tier 6: Ultimate Plaza (ring)
-  {
-    const k = 5;
-    for (const side of [1, -1] as const)
-      for (const d of [10, 22]) {
-        const [x, , z] = onTier(k, side, d, bandMid(k) - 1.5);
-        b.box(x, z, TIER_H[k], [1.6, 0.8, 1.6], 0, "trim");
-        b.prop("post", [0.9, 3.4, 0.9], [x, TIER_H[k] + 0.8, z], 0, {
-          material: "wall",
-          collide: false,
-        });
-        b.solid([x, TIER_H[k], z], [1.6, 4.2, 1.6]);
-        const [lx, , lz] = onTier(k, side, d + 5, TIER_R[k] - 1);
-        lantern(lx, TIER_H[k], lz);
-      }
-  }
-
-  // ---------------------------------------------------------------- Citadel
-  {
-    const y = Y.citadel,
-      R = TIER_R[6],
-      [ax, , az] = CAPITAL_SITES.arenaLift;
-    const arc = Array.from({ length: 9 }, (_, i) => polar(R, Math.PI / 2 + (Math.PI * i) / 8));
-    // A court over the prow root and a forecourt before the cathedral.
-    b.floor("citadel", "kiln", [...arc, [-R, az + SHAFT], [R, az + SHAFT]], y, { thickness: 1 });
-    b.rect("citadel-north-west", "kiln", -R, -36, ax - SHAFT, az + SHAFT, y, { thickness: 1 });
-    b.rect("citadel-north-east", "kiln", ax + SHAFT, -36, R, az + SHAFT, y, { thickness: 1 });
-    b.rect("citadel-north", "kiln", ax - SHAFT, -36, ax + SHAFT, az - SHAFT, y, { thickness: 1 });
-    b.mass([...arc, [-R, az + 3.1], [R, az + 3.1]], -2, y - 1);
-    b.mass(
-      [
-        [-R, -36],
-        [-R, az + 3.1],
-        [ax - 3.1, az + 3.1],
-        [ax - 3.1, -36],
-      ],
-      BEDROCK,
-      y - 1,
-      "rock",
-    );
-    b.mass(
-      [
-        [ax + 3.1, -36],
-        [ax + 3.1, az + 3.1],
-        [R, az + 3.1],
-        [R, -36],
-      ],
-      BEDROCK,
-      y - 1,
-      "rock",
-    );
-    b.mass(
-      [
-        [ax - 3.1, -36],
-        [ax - 3.1, az - 3.1],
-        [ax + 3.1, az - 3.1],
-        [ax + 3.1, -36],
-      ],
-      BEDROCK,
-      y - 1,
-      "rock",
-    );
-    b.piece("elevator", [7.4, y + 5.6 - (Y.plain - 4), 7.4], [ax, Y.plain - 4, az], 0, "trim", 0.6);
-    // A parapet around the court, open where the tier stair lands and onto the prow walk.
-    const landingA = parapetGaps[6][0];
-    for (let i = 0; i < 8; i++) {
-      const s0 = Math.PI / 2 + (Math.PI * i) / 8,
-        s1 = s0 + Math.PI / 8;
-      if ((landingA - s0) * (landingA - s1) <= 0) continue;
-      const p = polar(R + 0.2, s0),
-        q = polar(R + 0.2, s1),
-        length = Math.hypot(q[0] - p[0], q[1] - p[1]);
-      if (i === 3 || i === 4) parapet(p, q, y, [gap(i === 3 ? length - 2.3 : 2.3, 4.6, y)]);
-      else parapet(p, q, y);
-    }
-    parapet([-R - 0.2, -5], [-R - 0.2, -36], y);
-    parapet([R + 0.2, -20], [R + 0.2, -4], y);
-    parapet([16, -36.2], [R, -36.2], y);
-    parapet([-R, -36.2], [-16, -36.2], y);
-    // The white tower: a kit stack rising from the court above the prow.
-    const [wx, , wz] = CAPITAL_SITES.whiteTower;
-    b.box(wx, wz, y, [8, 54, 8]);
-    for (const dy of [12, 26, 40, 54]) b.box(wx, wz, y + dy, [9, 0.8, 9], 0, "trim");
-    for (const [x, z] of [
-      [-4, -4],
-      [4, -4],
-      [-4, 4],
-      [4, 4],
-    ])
-      b.pillar(wx + x, wz + z, y, 56, 1.4, "trim");
-    b.box(wx, wz, y + 54.8, [6, 6, 6]);
-    b.piece("pillar", [3.4, 10, 3.4], [wx, y + 60.8, wz], 0, "trim");
-    b.piece("post", [1.4, 9, 1.4], [wx, y + 70.8, wz], 0, "trim");
-    b.box(wx, wz, y + 79.8, [0.9, 0.9, 0.9], 0, "glow", false);
-    // The Oblivion Chapel: a small kit octagon with a walkable roof.
-    const [cx, , cz] = CAPITAL_SITES.chapel,
-      ring = octagon(cx, cz, 7.6),
-      edge = 2 * 7.6 * Math.sin(Math.PI / 8);
-    b.floor("chapel", "kiln", ring, y, { thickness: 1 });
-    b.enclosure(ring, y, Y.gallery - 0.6, {
-      openings: {
-        1: [{ at: edge / 2, width: 3, height: 4, bottom: y, area: "kiln", id: "chapel-door" }],
-      },
-    });
-    b.floor("chapel-roof", "kiln", ring, Y.gallery);
-    ring.forEach((q, i) =>
-      parapet(
-        q,
-        ring[(i + 1) % 8],
-        Y.gallery,
-        i === 7 ? [gap(edge / 2, 3.2, Y.gallery)] : undefined,
-      ),
-    );
-    b.box(cx, cz, Y.gallery, [3, 3, 3], 0, "trim");
-    // Inside: an altar on the west wall under a banner, candles, and benches facing it.
-    b.box(cx - 5.6, cz, y, [1.2, 1.1, 3], 0, "trim");
-    b.piece("banner", [1.6, 3.6, 0.05], [cx - 6.7, y + 1.6, cz], Math.PI / 2, "cloth");
-    for (const dz of [-1.1, 1.1]) {
-      b.piece("post", [0.18, 0.5, 0.18], [cx - 5.6, y + 1.1, cz + dz], 0, "trim");
-      b.box(cx - 5.6, cz + dz, y + 1.6, [0.12, 0.18, 0.12], 0, "glow", false);
-    }
-    for (const dz of [-2.6, 2.6])
-      for (const dx of [-3.4, -1.9])
-        b.prop("crate", [0.5, 0.45, 1.8], [cx + dx, y, cz + dz], 0, { material: "timber" });
-    b.flight("chapel-roof-stair", "kiln", [cx + 10, y, cz - 11], [-1, 0], 6, 4, { fill: y });
-    b.rect("chapel-roof-landing", "kiln", cx - 4, cz - 13, cx + 1, cz - 6, Y.gallery, {
-      thickness: 6,
-    });
-    lantern(cx + 7, y, cz + 4);
-    lantern(12, y, -30);
-    // The White Tree in its fountain before the tower: a pale kit trunk with bare,
-    // radiating limbs that turn up at their tips, ringed by a low basin.
-    {
-      const [tx, tz] = [-9, 11],
-        basin = octagon(tx, tz, 3.2);
-      basin.forEach((q, i) =>
-        b.wall(q, basin[(i + 1) % 8], y, y + 0.7, { thickness: 0.5, material: "trim" }),
-      );
-      b.piece("block", [5.4, 0.1, 5.4], [tx, y + 0.45, tz], Math.PI / 8, "water");
-      b.box(tx, tz, y, [0.9, 5.2, 0.9], 0.3, "trim");
-      for (let i = 0; i < 7; i++) {
-        const a = i * 2.39 + 0.4,
-          h = y + 3.6 + (i % 3) * 0.7,
-          len = 1.6 + (i % 2) * 0.9;
-        b.box(
-          tx + Math.sin(a) * len * 0.5,
-          tz + Math.cos(a) * len * 0.5,
-          h,
-          [0.22, 0.22, len],
-          a,
-          "trim",
-          false,
-        );
-        b.box(
-          tx + Math.sin(a) * len,
-          tz + Math.cos(a) * len,
-          h,
-          [0.18, 0.9 + (i % 3) * 0.3, 0.18],
-          a,
-          "trim",
-          false,
-        );
-      }
-      b.box(tx, tz, y + 5.2, [0.5, 1.4, 0.5], 0.8, "trim", false);
-    }
-    lantern(-12, y, 8);
-  }
-
-  // ------------------------------------------------------ Asylum Cathedral
-  {
+  // ---------------------------------------------------------------- Asylum Cathedral
+  function cathedral() {
     const y = Y.citadel,
       g = Y.gallery,
-      [, , apseZ] = CAPITAL_SITES.apse,
-      apse = octagon(0, apseZ, 14);
-    b.rect("nave", "cloister", -16, -68, 16, -36, y, { thickness: 1 });
-    b.rect("transept", "cloister", -22, -80, 22, -68, y, { thickness: 1 });
-    b.floor("apse", "cloister", apse, y, { thickness: 1 });
-    b.rect("gallery-west", "cloister", -16, -68, -10, -36, g);
-    b.rect("gallery-east", "cloister", 10, -68, 16, -36, g);
-    b.rect("gallery-loft", "cloister", -10, -40, 10, -36, g);
-    for (const x of [-13, 13])
-      b.flight(`gallery-stair:${x}`, "cloister", [x, y, -77], [0, 1], 6, 5, { fill: y });
-    b.wall([16, -36], [-16, -36], y, 68, {
-      openings: [
-        {
-          at: 16,
-          width: 6,
-          height: 5,
-          bottom: y,
-          frame: "double-door",
-          id: "cathedral-front",
-          area: "cloister",
-        },
-      ],
-    });
-    b.wall([16, -68], [16, -36], y, 68, {
-      openings: [
-        { at: 8, width: 2.4, height: 3.6, bottom: g, id: "gallery-east-door", area: "aqueduct" },
-      ],
-    });
-    b.wall([-16, -36], [-16, -68], y, 68, {
-      openings: [
-        {
-          at: 22,
-          width: 3,
-          height: 3.6,
-          bottom: g,
-          id: "gallery-west-door",
-          visibleThreshold: true,
-          area: "belfry",
-        },
-      ],
-    });
-    b.wall([22, -68], [16, -68], y, 64);
-    b.wall([22, -80], [22, -68], y, 64);
-    b.wall([-22, -80], [22, -80], y, 64, {
-      openings: [
-        {
-          at: 22,
-          width: 6,
-          height: 7,
-          bottom: y,
-          frame: "double-door",
-          id: "apse-door",
-          area: "cloister",
-        },
-      ],
-    });
-    b.wall([-22, -68], [-22, -80], y, 64);
-    b.wall([-16, -68], [-22, -68], y, 64);
-    apse.forEach((q, i) => {
-      if (i !== 3) b.wall(q, apse[(i + 1) % 8], y, 64);
-    });
-    for (const x of [-10, 10]) {
-      for (const z of [-42, -50, -58, -66]) b.pillar(x, z, y, 20, 1.2);
-      parapet([x, -68], [x, -40], g);
-    }
-    parapet([-10, -40.2], [10, -40.2], g);
-    for (let z = -63; z <= -43; z += 5)
-      for (const x of [-5.5, 5.5]) {
-        b.prop("scaffold", [4, 0.63, 1], [x, y, z], 0, { material: "timber" });
-        b.box(x, z - 0.55, y, [4, 1.2, 0.2], 0, "timber");
-      }
-    for (const [i, q] of apse.entries())
-      if (i !== 3 && i !== 4) b.pillar(q[0] * 0.92, apseZ + (q[1] - apseZ) * 0.92, y, 16, 1.4);
-    for (const a of [-1, 1]) {
-      const x = a * 8.6,
-        z = apseZ - 9;
-      b.prop("drum", [0.9, 1.1, 0.9], [x, y, z], 0, { material: "wall" });
-      b.box(x, z, y + 1.1, [0.5, 0.35, 0.5], 0, "glow", false);
-    }
-    b.prop("debris", [2.4, 0.6, 1.9], [-10, y, apseZ + 4], 0.6, { collide: false, thickness: 0.5 });
-    // Pale gabled roofs over the nave and transept, a stepped dome over the apse and
-    // pilasters down the walls, so the hall reads as the reference's citadel palace.
-    b.box(0, -52, 68, [33, 1, 33], 0, "trim");
-    b.piece("roof", [32, 6, 33], [0, 69, -52], Math.PI / 2, "roof", 0.6);
-    b.box(0, -74, 64, [45, 1, 13], 0, "trim");
-    b.piece("roof", [45, 4, 12], [0, 65, -74], 0, "roof", 0.6);
-    b.mass(apse, 64, 65, "trim");
-    for (const [i, [r, h]] of [
-      [12, 2],
-      [10, 2],
-      [7.5, 1.6],
-      [4.5, 1.4],
-    ].entries())
-      b.piece("drum", [r * 2, h, r * 2], [0, 65 + i * 2, apseZ], 0, i % 2 ? "trim" : "roof");
-    b.piece("spire", [2.4, 5, 2.4], [0, 72.8, apseZ], 0, "trim");
-    for (const x of [-16.5, 16.5])
-      for (const z of [-38.5, -50, -62, -67]) b.box(x, z, y, [1, 20, 1.3], 0, "trim", false);
-    b.mass(
-      [
-        [-16, -68],
-        [-16, -36],
-        [16, -36],
-        [16, -68],
-      ],
-      BEDROCK,
-      y - 1,
-      "rock",
-    );
-    b.mass(
-      [
-        [-22, -80],
-        [-22, -68],
-        [22, -68],
-        [22, -80],
-      ],
-      BEDROCK,
-      y - 1,
-      "rock",
-    );
-    b.mass(apse, BEDROCK, y - 1, "rock");
-    lantern(-8, y, -70);
-    lantern(8, y, -70);
-    lantern(-12, g, -50);
-    // Banners hang from the nave pillars, a red runner leads to the transept, and
-    // candle stands ring the apse outside the keeper's circle.
-    for (const x of [-9.3, 9.3])
-      for (const z of [-42, -50, -58, -66])
-        b.piece("banner", [1.3, 6, 0.06], [x, y + 9, z], Math.PI / 2, "cloth");
-    b.piece("block", [3, 0.04, 30], [0, y + 0.02, -52], 0, "cloth");
-    for (let i = 0; i < 10; i++) {
-      const a = Math.PI * 0.15 + (i / 9) * Math.PI * 0.7 + Math.PI,
-        [x, z] = [Math.cos(a) * 12.4, apseZ + Math.sin(a) * 12.4];
-      if (Math.hypot(x, z - apseZ) < 12) continue;
-      b.prop("post", [0.3, 1.3, 0.3], [x, y, z], 0, { material: "iron" });
-      b.box(x, z, y + 1.3, [0.16, 0.24, 0.16], 0, "glow", false);
-    }
-    for (const x of [-20, 20]) b.piece("banner", [1.8, 7, 0.06], [x, y + 2.2, -79.6], 0, "cloth");
-  }
-
-  // ------------------------------------- Church outside path and Royal Backyard
-  {
-    const y = Y.citadel,
-      g = Y.gallery;
-    b.rect("outside-path", "aqueduct", 20, -46, 24, -20, y, { thickness: 1 });
-    parapet([24.2, -20], [24.2, -46], y);
-    parapet([20, -19.8], [24, -19.8], y);
-    b.flight("outside-path-stair", "aqueduct", [22, y, -46], [0, -1], 6, 4, { fill: y });
-    b.rect("outside-path-upper", "aqueduct", 16, -70, 24, -55, g, { thickness: 1 });
-    parapet([24.2, -55], [24.2, -62], g);
-    parapet([24.2, -66], [24.2, -70], g);
-    parapet([16, -70.2], [24, -70.2], g);
-    b.mass(
-      [
-        [20, -46],
-        [20, -20],
-        [24, -20],
-        [24, -46],
-      ],
-      BEDROCK,
-      y - 1,
-      "rock",
-    );
-    b.mass(
-      [
-        [16.3, -70],
-        [16.3, -55],
-        [24, -55],
-        [24, -70],
-      ],
-      BEDROCK,
-      g - 1,
-      "rock",
-    );
-    b.bridge("backyard-bridge", "aqueduct", [24, -64], [37, -64], g, 4, { kind: "slab" });
-    // The bridge rides an arcade, like the reference's viaduct along the ridge.
-    for (const x of [28.3, 32.7]) b.pillar(x, -64, 28, g - 1 - 28, 1.8);
-    for (const [x0, x1] of [
-      [24, 28.3],
-      [28.3, 32.7],
-      [32.7, 35],
-    ])
-      b.box((x0 + x1) / 2, -64, g - 2.6, [x1 - x0, 1.6, 3.6], 0, "wall", false);
-    const [cx, , cz] = CAPITAL_SITES.backyard,
-      island = octagon(cx, cz, 12);
-    b.floor("backyard", "graveyard", island, g, { thickness: 1 });
-    b.mass(island, 20, g - 1, "rock");
-    island.forEach((q, i) => {
-      if (i === 5) return;
-      parapet(q, island[(i + 1) % 8], g, i === 4 ? [gap(2.4, 4.6, g)] : undefined);
-    });
-    for (const [x, z] of [
-      [-4, -2],
-      [4, -2],
-      [-4, 6],
-      [4, 6],
-    ])
-      b.pillar(cx + x, cz + z, g, 4, 0.9, "trim");
-    b.box(cx, cz + 2, g + 4, [9.4, 0.5, 9.4], 0, "trim", false);
-    // A domed pavilion, like the small domed halls on the reference's ridge.
-    for (const [i, [w, h]] of [
-      [8, 1],
-      [6.4, 1.2],
-      [4.2, 1.2],
-    ].entries())
-      b.piece("drum", [w, h, w], [cx, g + 4.5 + i * 1.1, cz + 2], 0, i === 1 ? "trim" : "roof");
-    b.piece("spire", [1, 1.8, 1], [cx, g + 7.8, cz + 2], 0, "trim");
-    b.prop("corner-wall", [3, 2.4, 3], [cx + 7, g, cz - 6], -Math.PI / 2, {
-      thickness: 0.4,
-      collide: false,
-    });
-    b.solid([cx + 7.8, g, cz - 6], [1.4, 2.4, 3]);
-    b.prop("log-pile", [2.4, 0.5, 2.4], [cx + 7, g, cz + 4], 0, { material: "timber" });
-    b.prop("crate", [1.25, 0.6, 0.9], [cx - 6.5, g, cz + 5], 0.4, { material: "timber" });
-    b.prop("debris", [2.4, 0.5, 1.9], [cx + 1, g, cz - 8], 0, { collide: false, thickness: 0.4 });
-    lantern(cx - 8, g, cz - 2);
-    lantern(cx + 8, g, cz + 6);
-    // Clipped hedges in kit planters and a small fountain under the pavilion.
-    for (const [x, z, w] of [
-      [cx - 4.5, cz - 9, 4],
-      [cx + 3, cz + 9.5, 5],
-    ] as const) {
-      b.box(x, z, g, [w + 0.3, 0.5, 1.4], 0, "trim");
-      b.box(x, z, g + 0.5, [w, 0.9, 1.1], 0, "hedge", false);
-    }
-    b.prop("drum", [1.6, 0.6, 1.6], [cx, g, cz + 2], 0, { material: "trim" });
-    b.piece("drum", [1.3, 0.05, 1.3], [cx, g + 0.56, cz + 2], 0, "water");
-  }
-
-  // ------------------------------------------------------- Beacon pathway
-  {
-    const y = Y.gallery,
-      [bx, , bz] = CAPITAL_SITES.beaconTower,
-      [lx, , lz] = CAPITAL_SITES.beaconLift,
-      rise = (y - Y.plain) / 6;
-    b.bridge("beacon-pathway", "belfry", [-16.6, lz], [bx + 20, lz], y, 4, { kind: "walkway" });
-    for (const x of [-26, -36, -46]) b.pillar(x, lz, BEDROCK, y - 0.15 - BEDROCK, 1.2);
-    b.rect("beacon-top", "belfry", bx + 3, bz, lx - SHAFT, bz + 12, y);
-    b.rect("beacon-top-south", "belfry", lx - SHAFT, lz + SHAFT, lx + SHAFT, bz + 12, y);
-    b.rect("beacon-top-east", "belfry", lx + SHAFT, bz, bx + 20, bz + 12, y);
-    parapet([bx + 3, bz + 12.2], [bx + 20, bz + 12.2], y);
-    parapet([bx + 2.8, bz + 12], [bx + 2.8, bz + 9], y);
-    for (let i = 0; i < 6; i++)
-      b.curvedFlight(
-        `beacon-spiral:${i}`,
-        "belfry",
-        [bx, y - rise * (i + 1), bz],
-        9,
-        rise,
-        (i % 2) as 0 | 1,
+      r = Y.rafter,
+      { narthex: N, transept: T, hall: H } = CAPITAL_CATHEDRAL,
+      top = y + 22;
+    interior(-2.5, y, CAPITAL_CATHEDRAL.chapel.z1, 2.5, y + 5.4, N.z0);
+    interior(N.x0 + 0.3, y, N.z0 + 0.3, N.x1 - 0.3, r - 0.6, N.z1 - 0.3);
+    interior(-2.4, y, N.z1, 2.4, y + 5.4, T.z0);
+    interior(T.x0 + 0.3, y, T.z0 + 0.3, T.x1 - 0.3, top - 1, T.z1 - 0.3);
+    interior(H.x0 + 0.3, y, H.z0 - 0.3, H.x1 - 0.3, top - 1, H.z1);
+    interior(-12, y, H.z1, 12, top - 1, 112);
+    interior(-5, y, 112, 5, top - 1, CAPITAL_CATHEDRAL.apseTip - 0.3);
+    const slab = (x0: number, z0: number, x1: number, z1: number, bottom: number, t: number) =>
+      b.mass(
+        [
+          [x0, z0],
+          [x1, z0],
+          [x1, z1],
+          [x0, z1],
+        ],
+        bottom,
+        bottom + t,
+        "roof",
       );
-    b.pillar(bx, bz, BEDROCK, y + 4 - BEDROCK, 5.6);
-    b.box(bx, bz, y + 4, [3, 2, 3], 0, "glow", false);
-    b.box(bx, bz, y + 6, [4.4, 0.6, 4.4], 0, "trim");
-    for (const x of [bx + 10, bx + 18]) b.pillar(x, bz + 11, BEDROCK, y - 0.6 - BEDROCK, 1.4);
-    b.piece("elevator", [7.4, y + 5.6 - (Y.plain - 4), 7.4], [lx, Y.plain - 4, lz], 0, "trim", 0.6);
-    lantern(bx + 18, y, bz + 1.5);
+    // The vestibule between the chapel and the barred front door.
+    b.rect(
+      "cathedral-vestibule",
+      "kiln",
+      -2.5,
+      CAPITAL_CATHEDRAL.chapel.z1 - 0.3,
+      2.5,
+      N.z0 + 0.3,
+      y,
+      {
+        threshold: true,
+        render: true,
+      },
+    );
+    for (const x of [-2.8, 2.8])
+      b.wall([x, CAPITAL_CATHEDRAL.chapel.z1], [x, N.z0], y, y + 5.4, { thickness: 0.6 });
+    slab(-3.1, CAPITAL_CATHEDRAL.chapel.z1, 3.1, N.z0, y + 5.4, 0.4);
+    // Narthex, with a walkable roof the rafter walk crosses.
+    b.rect("narthex", "cloister", N.x0 + 0.3, N.z0 + 0.3, N.x1 - 0.3, N.z1 - 0.3, y);
+    b.enclosure(
+      [
+        [N.x0, N.z0],
+        [N.x1, N.z0],
+        [N.x1, N.z1],
+        [N.x0, N.z1],
+      ],
+      y,
+      r - 0.6,
+      {
+        thickness: 0.6,
+        openings: {
+          0: [
+            {
+              at: 9,
+              width: 4.4,
+              bottom: y,
+              height: 5,
+              frame: "double-door",
+              id: "cathedral-front",
+              area: "cloister",
+            },
+          ],
+          2: [{ at: 9, width: 4, bottom: y, height: 5, id: "narthex-south", area: "cloister" }],
+        },
+      },
+    );
+    b.rooms.push({ id: "narthex", width: 17.4, depth: 12.4, height: 13, high: true });
+    b.rect("narthex-roof", "cloister", N.x0, N.z0, N.x1, N.z1, r, { material: "roof" });
+    rail([N.x0, N.z0], [-1.4, N.z0], r);
+    rail([1.4, N.z0], [N.x1, N.z0], r);
+    rail([N.x0, N.z1], [-1.4, N.z1], r);
+    rail([1.4, N.z1], [N.x1, N.z1], r);
+    b.rect("narthex-link", "cloister", -2.4, N.z1 - 0.3, 2.4, T.z0 + 0.3, y);
+    for (const x of [-2.7, 2.7]) b.wall([x, N.z1], [x, T.z0], y, y + 5.4, { thickness: 0.6 });
+    slab(-3, N.z1, 3, T.z0, y + 5.4, 0.4);
+    b.bridge("rafter-narthex-bridge", "cloister", [0, N.z1 - 0.3], [0, T.z0 + 0.6], r, 2.4, {
+      kind: "slab",
+    });
+    // The front towers over the narthex: the landmark seen from the city wall.
+    for (const s of [-1, 1]) {
+      b.box(s * 6.5, N.z0 + 3, r, [5, 26, 5], 0, "wall");
+      b.piece("spire", [6, 14, 6], [s * 6.5, r + 26, N.z0 + 3], 0, "roof");
+    }
+    b.piece("ring", [6, 6, 0.6], [0, y + 6.4, N.z0 - 0.35], 0, "glow");
+    // Transept: the boss door south, the narthex north, and openings for the gallery
+    // links and the rafter spine.
+    b.rect("transept", "cloister", T.x0 + 0.3, T.z0 + 0.3, T.x1 - 0.3, T.z1 - 0.3, y);
+    b.enclosure(
+      [
+        [T.x0, T.z0],
+        [T.x1, T.z0],
+        [T.x1, T.z1],
+        [T.x0, T.z1],
+      ],
+      y,
+      top,
+      {
+        thickness: 0.6,
+        openings: {
+          0: [
+            { at: 28, width: 4, bottom: y, height: 5, id: "transept-north", area: "cloister" },
+            {
+              at: 28,
+              width: 2.4,
+              bottom: r,
+              height: 3.4,
+              frame: "none",
+              area: "cloister",
+              id: "rafter-north",
+            },
+          ],
+          2: [
+            {
+              at: 28,
+              width: 6,
+              bottom: y,
+              height: 6,
+              id: "hall-door",
+              area: "cloister",
+              frame: "double-door",
+            },
+            {
+              at: 28,
+              width: 2.4,
+              bottom: r,
+              height: 3.4,
+              frame: "none",
+              area: "cloister",
+              id: "rafter-south",
+            },
+            {
+              at: 12.5,
+              width: 4.4,
+              bottom: g,
+              height: 4,
+              frame: "none",
+              area: "cloister",
+              id: "gallery-east-link",
+            },
+            {
+              at: 43.5,
+              width: 4.4,
+              bottom: g,
+              height: 4,
+              frame: "none",
+              area: "cloister",
+              id: "gallery-west-link",
+            },
+          ],
+        },
+      },
+    );
+    b.rooms.push({ id: "transept", width: 55.4, depth: 13.4, height: 21, high: true });
+    // The hall: the keeper's nave, its aisles and the apse.
+    const apse: XZ[] = [
+      [H.x0 + 0.3, H.z0],
+      [H.x1 - 0.3, H.z0],
+      [H.x1 - 0.3, H.z1],
+      [12, 112],
+      [5, CAPITAL_CATHEDRAL.apseTip - 0.3],
+      [-5, CAPITAL_CATHEDRAL.apseTip - 0.3],
+      [-12, 112],
+      [H.x0 + 0.3, H.z1],
+    ];
+    b.floor("hall", "cloister", apse, y);
+    const shell: XZ[] = [
+      [H.x1, H.z0],
+      [H.x1, H.z1],
+      [12.3, 112.3],
+      [5.2, CAPITAL_CATHEDRAL.apseTip],
+      [-5.2, CAPITAL_CATHEDRAL.apseTip],
+      [-12.3, 112.3],
+      [H.x0, H.z1],
+      [H.x0, H.z0],
+    ];
+    for (let i = 0; i + 1 < shell.length; i++) {
+      const openings: CapitalOpening[] = [];
+      if (i === 0)
+        openings.push({
+          at: 26,
+          width: 3,
+          bottom: g,
+          height: 4,
+          id: "gallery-east-door",
+          area: "aqueduct",
+          visibleThreshold: true,
+        });
+      if (i === 3)
+        openings.push({
+          at: 5.2,
+          width: 3.6,
+          bottom: y,
+          height: 4.4,
+          id: "apse-door",
+          area: "belfry",
+          frame: "door",
+        });
+      b.wall(shell[i], shell[i + 1], y, top, { thickness: 0.6, openings });
+    }
+    b.rooms.push({ id: "hall", width: 35.4, depth: 41, height: 21, high: true });
+    // Nave arcade: pillars carry the galleries, clear of the keeper's circle.
+    for (let z = H.z0 + 4; z < H.z1 - 2; z += 7)
+      for (const s of [-1, 1]) b.pillar(s * 12.6, z, y, g - y - 0.6, 1.4, "trim");
+    // Galleries (F2) along both aisles and the transept's north wall, joined over the
+    // transept floor; the outside path enters on the east.
+    // The gallery's edge meets the top of its stair exactly, so the climb has no lip.
+    const gn = T.z1 - 1.4 - Math.round((g - y) / 0.2) * 0.3,
+      ge = H.z1 - 0.4;
+    b.rect("gallery-east", "cloister", 13.3, H.z0 + 0.6, 17.7, ge, g);
+    b.rect("gallery-west", "cloister", -17.7, H.z0 + 0.6, -13.3, ge, g);
+    b.rect("gallery-east-link", "cloister", 13.3, gn, 17.7, H.z0 + 0.6, g);
+    b.rect("gallery-west-link", "cloister", -17.7, gn, -13.3, H.z0 + 0.6, g);
+    b.rect("gallery-north", "cloister", T.x0 + 0.3, T.z0 + 0.3, T.x1 - 0.3, gn, g);
+    b.rect("gallery-east-arm", "cloister", 21, gn, T.x1 - 0.3, T.z1 - 0.6, g);
+    for (const x of [13.3, -13.3]) rail([x, gn], [x, ge], g);
+    for (const [x0, x1] of [
+      [T.x0 + 0.3, -23.6],
+      [-20.4, -17.7],
+      [-13.3, 13.3],
+      [17.7, 21],
+    ])
+      rail([x0, gn], [x1, gn], g);
+    rail([21, gn], [21, T.z1 - 0.6], g);
+    rail([17.7, T.z1 - 0.6], [21, T.z1 - 0.6], g);
+    // The ladder stair from the gallery down to the transept floor (west arm).
+    b.flight("gallery-stair", "cloister", [-22, y, T.z1 - 1.4], [0, -1], g - y, 3, { fill: y });
+    // The rafters: a stair in the east arm, a beam to the spine running the length of
+    // the church, cross beams and a chandelier ring over the keeper's circle.
+    const rz = T.z1 - 3;
+    const rs = b.flight("rafter-stair", "cloister", [27, g, rz], [-1, 0], r - g, 3);
+    b.rect("rafter-link", "cloister", 0.6, rz - 1.5, rs[0] + 0.03, rz + 1.5, r, {
+      material: "timber",
+      thickness: 0.6,
+    });
+    b.rect("rafter-spine", "cloister", -1, T.z0 - 0.4, 1, H.z1, r, {
+      material: "timber",
+      thickness: 0.6,
+    });
+    const boss = CAPITAL_SITES.apse[2];
+    for (const z of [boss - 8, boss + 8, H.z1 - 2]) {
+      b.rect(`rafter-cross-${z}`, "cloister", -16, z - 1, -0.6, z + 1, r, {
+        material: "timber",
+        thickness: 0.6,
+      });
+      b.rect(`rafter-cross-${z}-e`, "cloister", 0.6, z - 1, 16, z + 1, r, {
+        material: "timber",
+        thickness: 0.6,
+      });
+    }
+    b.arc(
+      "rafter-chandelier",
+      "cloister",
+      0,
+      boss,
+      2.4,
+      4.4,
+      Math.PI / 8,
+      Math.PI * 2 + Math.PI / 8,
+      r,
+      12,
+      "timber",
+    );
+    b.box(0, boss, r - 6, [1.2, 5.4, 1.2], 0, "iron", false);
+    b.box(0, boss, r - 7.4, [5, 1.2, 5], 0, "glow", false);
+    // Roofs: a steep gable over the transept and the hall, a dome over the apse.
+    b.piece(
+      "roof",
+      [T.z1 - T.z0 + 1, 10, T.x1 - T.x0 + 1],
+      [0, top, (T.z0 + T.z1) / 2],
+      Math.PI / 2,
+      "roof",
+      0.4,
+    );
+    b.piece(
+      "roof",
+      [H.x1 - H.x0 + 1, 14, H.z1 - H.z0 + 1],
+      [0, top, (H.z0 + H.z1) / 2],
+      0,
+      "roof",
+      0.4,
+    );
+    b.piece("dome", [24, 10, 12], [0, top, 108], 0, "roof");
+    for (const [x, z] of [
+      [-28, 49],
+      [28, 49],
+      [-28, 63],
+      [28, 63],
+      [18, 104],
+      [-18, 104],
+    ])
+      b.piece("spire", [3, 9, 3], [x, top, z], 0, "roof");
+    // Tall lancet windows down the nave and across the transept and front, as in the
+    // reference's gothic church: a dark glazing panel inside a kit arch frame.
+    const lancet = (x: number, z: number, yaw: number, bottom: number, h: number) => {
+      const out = facing([Math.sin(yaw), Math.cos(yaw)]);
+      b.piece("arch-panel", [1.5, h - 0.2, 0.06], [x, bottom + 0.1, z], out, "shadow");
+      b.piece(
+        "arch-window",
+        [2, h, 0.25],
+        [x + Math.sin(yaw) * 0.05, bottom, z + Math.cos(yaw) * 0.05],
+        out,
+        "trim",
+        0.2,
+      );
+    };
+    for (let z = H.z0 + 6; z < H.z1 - 3; z += 7)
+      for (const s of [-1, 1]) {
+        if (s > 0 && Math.abs(z - (H.z0 + 26)) < 4) continue;
+        lancet(s * (H.x1 + 0.32), z, (s * Math.PI) / 2, g + 4.5, 8);
+      }
+    for (let x = T.x0 + 4; x < T.x1 - 3; x += 7) {
+      if (Math.abs(x) < 4) continue;
+      lancet(x, T.z0 - 0.32, Math.PI, y + 7, 9);
+      if (Math.abs(x) > H.x1 + 2) lancet(x, T.z1 + 0.32, 0, y + 7, 9);
+    }
+    for (const s of [-1, 1])
+      lancet(s * (T.x1 + 0.32), (T.z0 + T.z1) / 2, (s * Math.PI) / 2, y + 7, 9);
+    for (const x of [-5, 5]) lancet(x, N.z0 - 0.32, Math.PI, y + 6, 6);
+    // Buttresses along the hall's west flank, and a light ceiling of masonry.
+    for (let z = H.z0 + 9.5; z < H.z1 - 3; z += 7) {
+      b.box(-19.2, z, y + 6, [1.8, top - y - 8, 1.4], 0, "wall", false);
+      b.box(-19.2, z, top - 2, [2.2, 0.45, 1.8], 0, "trim", false);
+      b.piece("pillar", [1.3, 2.4, 1.3], [-19.2, top - 1.55, z], 0, "trim");
+      b.piece("spire", [1.7, 4.2, 1.7], [-19.2, top + 0.85, z], 0, "roof");
+    }
+    slab(H.x0, H.z0, H.x1, H.z1, top - 1, 1);
+    slab(T.x0, T.z0, T.x1, T.z1, top - 1, 1);
+    // Dressing: a red runner, banners on the pillars and braziers in the apse.
+    b.box(0, (H.z0 + H.z1) / 2, y, [3, 0.04, H.z1 - H.z0 - 2], 0, "cloth", false);
+    for (let z = H.z0 + 4; z < H.z1 - 2; z += 14)
+      for (const s of [-1, 1])
+        b.piece("banner", [1.2, 4.5, 0.06], [s * 12.6, y + 1.5, z - 0.8], 0, "cloth");
+    for (const [x, z] of [
+      [-7, 110],
+      [7, 110],
+      [-12, 106],
+      [12, 106],
+    ])
+      brazier([x, z], y);
+    for (const [x, z] of [
+      [-6, T.z1 - 1.5],
+      [6, T.z1 - 1.5],
+      [-6, N.z1 - 1.5],
+      [6, N.z1 - 1.5],
+    ])
+      lantern([x, z], y);
+    for (const z of [70, 85, 100]) for (const s of [-1, 1]) lantern([s * 16.8, z], g);
+    // The keeper's apse holds the switch that lifts the fog.
+    b.box(0, 111, y, [3, 1, 2], 0, "trim");
   }
 
-  // --------------------------------------- Grand Street beneath the plain
-  // The old road runs covered beneath the plain, from the beacon's sunken foot to the
-  // gate into the mountain, so the plain above it lies flat to the walls.
-  {
-    const y = Y.plain,
-      [bx, , bz] = CAPITAL_SITES.beaconTower,
-      [lx, , lz] = CAPITAL_SITES.beaconLift,
-      street = { thickness: 3 } as const;
-    b.rect("beacon-foot", "crypt", bx - 12, bz - 30, bx + 18, bz, y, street);
-    b.rect("beacon-foot-lift", "crypt", lx - SHAFT, bz, lx + SHAFT, lz - SHAFT, y, street);
-    const route: XZ[] = [
-      [-74, -76],
-      [LOWER_STREET_X, -40],
-      [LOWER_STREET_X, 0],
+  // ---------------------------------------------------------------- Church Outside Path
+  function outsidePath() {
+    const y = Y.citadel,
+      { transept: T, hall: H } = CAPITAL_CATHEDRAL,
+      cx = CAPITAL_CATHEDRAL.chapel.x1,
+      turn = H.z0 + 5;
+    b.rect("outside-ledge", "aqueduct", cx + 0.3, 19.5, 26, 24.5, y);
+    b.rect("outside-north", "aqueduct", 21, 24.5, 26, T.z0 - 4.5, y);
+    // Its first stretch is a covered colonnade beside the narthex.
+    for (let z = 26; z < T.z0 - 4.5; z += 4)
+      for (const x of [21.3, 25.7]) b.pillar(x, z, y, 5.3, 0.8, "timber");
+    b.mass(
+      [
+        [20.8, 24.5],
+        [26.2, 24.5],
+        [26.2, T.z0 - 4.5],
+        [20.8, T.z0 - 4.5],
+      ],
+      y + 5.3,
+      y + 5.9,
+      "roof",
+    );
+    interior(21.2, y, 24.5, 25.8, y + 5.3, T.z0 - 4.5);
+    b.rect("outside-corner", "aqueduct", 21, T.z0 - 4.5, 34, T.z0, y);
+    b.rect("outside-arm", "aqueduct", T.x1 + 0.3, T.z0, 34, turn, y);
+    b.rect("outside-turn", "aqueduct", 19.5, T.z1 + 0.3, T.x1 + 0.3, turn, y);
+    const walkZ = (T.z0 + T.z1) / 2 + 1;
+    for (const [p, q] of [
+      [
+        [26, 19.5],
+        [26, T.z0 - 4.5],
+      ],
+      [
+        [34, T.z0 - 4.5],
+        [34, walkZ - 2.2],
+      ],
+      [
+        [34, walkZ + 2.2],
+        [34, turn],
+      ],
+      [
+        [21, 24.5],
+        [21, T.z0 - 4.5],
+      ],
+      [
+        [cx + 0.3, 19.5],
+        [26, 19.5],
+      ],
+      [
+        [25.5, turn],
+        [34, turn],
+      ],
+    ] as Array<[XZ, XZ]>)
+      rail(p, q, y);
+    b.mass(
+      [
+        [cx, 19],
+        [34.4, 19],
+        [34.4, turn + 0.4],
+        [cx, turn + 0.4],
+      ],
+      GROUND,
+      y - 0.6,
+      "wall",
+    );
+    // Stepping platforms climb the hall's flank to the east gallery door.
+    b.rect("outside-step-1", "aqueduct", 19.5, turn, 25.5, turn + 4, y);
+    const p2 = b.flight("outside-path-stair", "aqueduct", [22.5, y, turn + 4], [0, 1], 3.5, 4.4, {
+      fill: y,
+    });
+    b.rect("outside-step-2", "aqueduct", 19.5, p2[2], 25.5, p2[2] + 4.5, y + 3.5);
+    const p3 = b.flight(
+      "outside-path-stair-2",
+      "aqueduct",
+      [22.5, y + 3.5, p2[2] + 4.5],
+      [0, 1],
+      3.5,
+      4.4,
+      {
+        fill: y,
+      },
+    );
+    const s3 = p3[2] + 5.5;
+    b.rect("outside-step-3", "aqueduct", H.x1 + 0.3, p3[2], 25.5, s3, Y.gallery);
+    // From the last platform a flight falls to the garden's tail beside the apse.
+    const tail = descend(
+      "outside-garden-tail-stair",
+      "graveyard",
+      [22.5, Y.gallery, s3 - 0.05],
+      [0, 1],
+      Y.gallery - Y.garden,
+      4.4,
+      GROUND,
+    );
+    b.mass(
+      [
+        [19.3, turn],
+        [25.7, turn],
+        [25.7, s3],
+        [19.3, s3],
+      ],
+      GROUND,
+      y - 0.6,
+    );
+    rail([25.6, p3[2]], [25.6, s3], Y.gallery);
+    rail([H.x1 + 0.3, s3], [20.1, s3], Y.gallery);
+    rail([25.6, p2[2]], [25.6, p2[2] + 4.5], y + 3.5);
+    rail([19.4, p2[2]], [19.4, p2[2] + 4.5], y + 3.5);
+    rail([19.4, turn], [19.4, turn + 4], y);
+    rail([25.6, turn + 0.2], [25.6, turn + 4], y);
+    gardenTailZ = tail[2];
+    // The branch east to the Royal Backyard.
+    b.bridge("outside-garden-walk", "aqueduct", [34, walkZ], [46, walkZ], y, 4, { kind: "slab" });
+    b.flight("outside-garden-stair", "graveyard", [46, y, walkZ], [1, 0], Y.garden - y, 4, {
+      fill: GROUND,
+    });
+    for (const z of [walkZ - 2.2, walkZ + 2.2])
+      b.wall([46, z], [52, z], y, Y.garden + 1.1, { thickness: 0.4, material: "trim" });
+    pier([40, walkZ], y - 0.9, 2.4);
+    lantern([24, 30], y);
+    lantern([31, T.z0 + 3], y);
+    lantern([24, turn + 2], y);
+  }
+
+  // ---------------------------------------------------------------- Royal Backyard
+  function royalBackyard() {
+    const y = Y.garden;
+    const walkZ = (CAPITAL_CATHEDRAL.transept.z0 + CAPITAL_CATHEDRAL.transept.z1) / 2 + 1;
+    // The garden's outline is traced from the article's area map: widest across the
+    // middle, narrowing to the south, with a tail sweeping west to the apse.
+    const tail = convexHull([
+      [21, 101],
+      [85, 101],
+      [83, 107],
+      [69, 113],
+      [66, 125],
+      [55.5, 131],
+      [53.5, 137],
+      [46, 141],
+      [38.5, 141],
+      [16, 135],
+      [14, 126],
+      [15.5, 112],
+    ]);
+    const parts: XZ[][] = [
+      [
+        [58.4, 26],
+        [82, 20],
+        [94, 38],
+        [100, 50],
+        [58.4, 57],
+      ],
+      [
+        [54, 59],
+        [58.4, 57],
+        [100, 50],
+        [105, 62],
+        [105, 70],
+        [99, 77],
+        [85, 80],
+        [54, 80],
+      ],
+      [
+        [54, 80],
+        [85, 80],
+        [85, 101],
+        [54, 101],
+      ],
+      tail,
+      // The landing where the outside path's last flight comes down beside the hall.
+      [
+        [19.5, gardenTailZ - 0.05],
+        [26, gardenTailZ - 0.05],
+        [26, 101.05],
+        [21, 101.05],
+      ],
     ];
-    route.forEach((p, i) => {
-      b.floor(`grand-street-joint:${i}`, "crypt", octagon(p[0], p[1], 4.4), y, street);
-      if (i)
-        b.bridge(`grand-street:${i}`, "crypt", route[i - 1], p, y, 8, {
+    parts.forEach((p, i) =>
+      b.floor(`garden-${i}`, "graveyard", p, y, { material: "hedge", thickness: 1 }),
+    );
+    b.floor(
+      "garden-west-landing",
+      "graveyard",
+      [
+        [51.97, walkZ - 2.4],
+        [58.9, walkZ - 2.4],
+        [58.9, walkZ + 2.4],
+        [51.97, walkZ + 2.4],
+      ],
+      y,
+    );
+    // Rails round the whole outline, open to the stairs and to Backyard Below.
+    const tailEdges: Array<[XZ, XZ]> = tail
+      .map((p, i): [XZ, XZ] => [p, tail[(i + 1) % tail.length]])
+      .filter(([p, q]) => !(p[1] === 101 && q[1] === 101));
+    const outer: Array<[XZ, XZ]> = [
+      [
+        [64.2, 24.52],
+        [82, 20],
+      ],
+      [
+        [82, 20],
+        [94, 38],
+      ],
+      [
+        [94, 38],
+        [100, 50],
+      ],
+      [
+        [100, 50],
+        [105, 62],
+      ],
+      [
+        [105, 62],
+        [105, 70],
+      ],
+      [
+        [105, 70],
+        [99, 77],
+      ],
+      [
+        [99, 77],
+        [85, 80],
+      ],
+      [
+        [85, 80],
+        [85, 101],
+      ],
+      ...tailEdges.filter(([p, q]) => !(p[0] === 85 && q[0] === 85)),
+      [
+        [26.2, 101],
+        [54, 101],
+      ],
+      [
+        [54, 101],
+        [54, 59],
+      ],
+      [
+        [58.4, 57],
+        [58.4, walkZ + 2.6],
+      ],
+      [
+        [19.5, gardenTailZ],
+        [19.5, 101],
+      ],
+    ];
+    for (const [p, q] of outer) rail(p, q, y);
+    rail([58.4, walkZ - 2.6], [58.4, 40], y);
+    // The garden wall round the head of Backyard Below stands too tall to vault, so its
+    // door is the only way through and opens from the garden alone.
+    for (const [p, q] of [
+      [
+        [58.4, 40],
+        [58.4, 32.6],
+      ],
+      [
+        [58.4, 28.4],
+        [58.4, 26],
+      ],
+      [
+        [58.4, 26],
+        [64.2, 24.52],
+      ],
+    ] as Array<[XZ, XZ]>)
+      b.wall(p, q, y, y + 5, { thickness: 0.6 });
+    b.mass([...parts[0]], GROUND, y - 1, "rock");
+    // Hedges, planters, statues on stepped plinths and the blue pavilion.
+    for (const [x, z, w, d] of [
+      [66, 34, 6, 1.4],
+      [76, 30, 1.4, 7],
+      [68, 70, 8, 1.4],
+      [92, 62, 1.4, 6],
+      [74, 92, 6, 1.4],
+      [34, 112, 8, 1.4],
+      [52, 124, 1.4, 6],
+    ]) {
+      b.box(x, z, y, [w + 0.4, 0.5, d + 0.4], 0, "trim");
+      b.box(x, z, y + 0.5, [w, 1.2, d], 0, "hedge");
+    }
+    for (const [x, z] of [
+      [72, 48],
+      [62, 78],
+      [78, 86],
+      [60, 116],
+    ])
+      statue([x, z], y, 0.4, 1.2);
+    {
+      const [x, , z] = CAPITAL_SITES.pavilion;
+      for (const [dx, dz] of [
+        [-3, -3],
+        [3, -3],
+        [3, 3],
+        [-3, 3],
+      ])
+        b.pillar(x + dx, z + dz, y, 9, 0.8, "trim");
+      // Tall pointed arches glowing blue on all four sides, as the reference's pavilion.
+      for (const [dx, dz, yaw] of [
+        [0, -3, 0],
+        [0, 3, 0],
+        [-3, 0, Math.PI / 2],
+        [3, 0, Math.PI / 2],
+      ])
+        b.piece("arch-window", [5.4, 8.6, 0.35], [x + dx, y, z + dz], yaw, "marker", 0.3);
+      b.box(x, z, y + 9, [7.4, 0.6, 7.4], 0, "trim", false);
+      b.piece("spire", [6.6, 6, 6.6], [x, y + 9.6, z], 0, "roof");
+      b.box(x + 1.8, z + 1.8, y, [1.2, 0.8, 1.2], 0, "trim");
+      b.box(x + 1.8, z + 1.8, y + 0.8, [0.6, 0.6, 0.6], 0, "marker", false);
+    }
+    for (const [x, z] of [
+      [62, 30],
+      [86, 42],
+      [100, 66],
+      [80, 96],
+      [64, 98],
+      [40, 128],
+      [24, 122],
+    ])
+      b.piece("bare-tree", [5, 6, 5], [x, y, z], rand() * 3, "bark");
+    sword([96, 58], y, 1.1, 0.9);
+    // Ruined walls round the garden, arches broken open, rubble at their feet.
+    for (const [p, q, h] of [
+      [[85, 29], [90, 39], 6],
+      [[102.4, 62], [102.4, 69], 7.5],
+      [[64, 112], [58, 124], 5],
+      [[24, 132], [36, 138.5], 4.5],
+    ] as Array<[XZ, XZ, number]>) {
+      const length = Math.hypot(q[0] - p[0], q[1] - p[1]);
+      b.wall(p, q, y, y + h, {
+        thickness: 0.9,
+        openings: [
+          {
+            at: length / 2,
+            width: 2.6,
+            bottom: y + 1.2,
+            height: Math.min(4, h - 1.6),
+            frame: "none",
+          },
+        ],
+      });
+      for (let k = 0; k < 3; k++)
+        b.piece(
+          "debris",
+          [1.5, 0.6, 1.5],
+          at3(
+            [p[0] + (q[0] - p[0]) * (0.2 + k * 0.3) + 1.2, p[1] + (q[1] - p[1]) * (0.2 + k * 0.3)],
+            y,
+          ),
+          rand() * 3,
+        );
+    }
+    // Backyard Below: the stair tower from the garden down to the town's south end.
+    const a1 = MID.a1,
+      endIn = polar(MID.street[0], a1),
+      endOut = polar(MID.street[1], a1);
+    b.floor("backyard-below-link", "graveyard", [endIn, [44.05, 13], [44.05, 19], endOut], Y.f2);
+    b.rect("backyard-below-l3", "graveyard", 44, 13, 48.05, 19, Y.f2);
+    b.flight("backyard-below-c", "graveyard", [48, Y.f2, 16], [1, 0], 6, 4, { fill: GROUND });
+    b.rect("backyard-below-l2", "graveyard", 56.95, 13.9, 61, 25.6, Y.f2 + 6);
+    b.flight("backyard-below-b", "graveyard", [57, Y.f2 + 6, 23.5], [-1, 0], 6, 4, {
+      fill: GROUND,
+    });
+    b.rect("backyard-below-l1", "graveyard", 44, 21.4, 48.05, 32.6, Y.f2 + 12);
+    const high = b.flight(
+      "backyard-below-a",
+      "graveyard",
+      [48, Y.f2 + 12, 30.5],
+      [1, 0],
+      y - Y.f2 - 12,
+      4,
+      {
+        fill: GROUND,
+      },
+    );
+    b.rect("backyard-below-top", "graveyard", high[0] - 0.05, 28.5, 61, 32.5, y);
+    b.mass(
+      [
+        [44, 13],
+        [48, 13],
+        [48, 19],
+        [44, 19],
+      ],
+      GROUND,
+      Y.f2 - 0.6,
+    );
+    b.mass(
+      [
+        [57, 13.9],
+        [61, 13.9],
+        [61, 25.6],
+        [57, 25.6],
+      ],
+      GROUND,
+      Y.f2 + 5.4,
+    );
+    b.mass(
+      [
+        [44, 21.4],
+        [48, 21.4],
+        [48, 32.6],
+        [44, 32.6],
+      ],
+      GROUND,
+      Y.f2 + 11.4,
+    );
+    rail([44, 19.2], [44, 32.6], Y.f2 + 12);
+    rail([44, 32.6], [48, 32.6], Y.f2 + 12);
+    rail([61, 13.9], [61, 25.6], Y.f2 + 6);
+    rail([57, 13.9], [61, 13.9], Y.f2 + 6);
+    rail([44, 13], [48, 13], Y.f2);
+    lantern([46, 14.2], Y.f2);
+    lantern([59.8, 20], Y.f2 + 6);
+    lantern([45.2, 27], Y.f2 + 12);
+  }
+
+  // ---------------------------------------------------------------- Beacon Pathway
+  function beaconPathway() {
+    // From the apse door south of the keeper's hall, west and north along the island's
+    // rim in three flights of steps down to the beacon tower.
+    // Laid on the article's arc: about a hundred metres out, closing in towards the tower.
+    const legs: Array<{ from: XZ; to: XZ; y0: number; y1: number }> = [
+      { from: [0, 118.4], to: [-9.5, 120.6], y0: 24, y1: 24 },
+      { from: [-9.5, 120.6], to: [-32, 101.5], y0: 24, y1: 18 },
+      { from: [-32, 101.5], to: [-53.8, 86.1], y0: 18, y1: 18 },
+      { from: [-53.8, 86.1], to: [-70.2, 66.9], y0: 18, y1: 12 },
+      { from: [-70.2, 66.9], to: [-76.3, 47.7], y0: 12, y1: 12 },
+      { from: [-76.3, 47.7], to: [-76.6, 31.3], y0: 12, y1: Y.upTown },
+    ];
+    b.rect("beacon-door", "belfry", -2.2, CAPITAL_CATHEDRAL.apseTip - 0.3, 2.2, 120.6, Y.citadel);
+    legs.forEach((leg, i) => {
+      const dx = leg.to[0] - leg.from[0],
+        dz = leg.to[1] - leg.from[1],
+        length = Math.hypot(dx, dz),
+        d: XZ = [dx / length, dz / length],
+        width = 4.4,
+        last = i === legs.length - 1,
+        start = add(leg.from, d, i === 0 ? 2.15 : 2.95),
+        end = last ? leg.to : add(leg.to, d, -2.95);
+      if (leg.y0 === leg.y1 && (i === 2 || i === 4)) {
+        // A broken stretch: the walk has fallen away to a narrow span through rubble.
+        const lerp = (t: number): XZ => [
+          start[0] + (end[0] - start[0]) * t,
+          start[1] + (end[1] - start[1]) * t,
+        ];
+        const p1 = lerp(0.33),
+          p2 = lerp(0.67),
+          n: XZ = [-d[1], d[0]];
+        span(`beacon-walk-${i}`, "belfry", start, p1, leg.y0, width);
+        b.bridge(`beacon-broken-${i}`, "belfry", add(p1, d, -0.05), add(p2, d, 0.05), leg.y0, 1.8, {
           kind: "slab",
           rails: [false, false],
         });
+        span(`beacon-walk-${i}-end`, "belfry", p2, end, leg.y0, width);
+        for (let k = 0; k < 6; k++) {
+          const t = 0.36 + k * 0.05,
+            side = k % 2 ? 1 : -1,
+            c = add(lerp(t), n, side * (1.6 + rand() * 0.8));
+          b.piece(
+            "debris",
+            [1.4 + rand(), 0.7, 1.4 + rand()],
+            at3(c, leg.y0 - 1.6 - rand()),
+            rand() * 3,
+          );
+        }
+      } else if (leg.y0 === leg.y1) span(`beacon-walk-${i}`, "belfry", start, end, leg.y0, width);
+      else {
+        const low = descend(
+          `beacon-stair-${i}`,
+          "belfry",
+          at3(start, leg.y0),
+          d,
+          leg.y0 - leg.y1,
+          width,
+          GROUND,
+        );
+        const lowXZ: XZ = [low[0], low[2]];
+        if (Math.hypot(end[0] - lowXZ[0], end[1] - lowXZ[1]) > 0.5)
+          span(`beacon-walk-${i}`, "belfry", add(lowXZ, d, -0.05), end, leg.y1, width);
+      }
+      // A landing at each turn, exactly spanning the incoming walk's end and the next
+      // flight's top, so no slab overhangs the steps.
+      if (!last) {
+        const next = legs[i + 1],
+          nl = Math.hypot(next.to[0] - next.from[0], next.to[1] - next.from[1]),
+          nd: XZ = [(next.to[0] - next.from[0]) / nl, (next.to[1] - next.from[1]) / nl],
+          nn: XZ = [-nd[1], nd[0]],
+          n: XZ = [-d[1], d[0]],
+          inEnd = add(leg.to, d, -3),
+          outStart = add(leg.to, nd, 2.95);
+        const points = [
+          add(inEnd, n, width / 2),
+          add(inEnd, n, -width / 2),
+          add(outStart, nn, width / 2),
+          add(outStart, nn, -width / 2),
+        ];
+        const cx = points.reduce((sum, p) => sum + p[0], 0) / 4,
+          cz = points.reduce((sum, p) => sum + p[1], 0) / 4;
+        points.sort((p, q) => Math.atan2(p[1] - cz, p[0] - cx) - Math.atan2(q[1] - cz, q[0] - cx));
+        b.floor(`beacon-landing-${i}`, "belfry", points, leg.y1);
+        b.mass(points, GROUND, leg.y1 - 0.6);
+        lantern(leg.to, leg.y1);
+      }
     });
-    b.rect(
-      "grand-street-turn",
-      "crypt",
-      LOWER_STREET_X - 4.2,
-      -4.2,
-      LOWER_STREET_X + 4,
-      4.2,
-      y,
-      street,
-    );
-    // Walls and a vault follow the road from where it leaves the beacon's foot, mitred at
-    // each turn, and close round the gate passage's mouth.
-    const mouth = 0.25,
-      tunnel: XZ[] = [
-        [-74 + (LOWER_STREET_X + 74) * mouth, -76 + 36 * mouth],
-        ...route.slice(1),
-        [LOWER_STREET_X + 4, 0],
+
+    // The beacon tower: a round watchtower whose lift falls to Grand Street.
+    const [tx, tz] = BEACON_TOWER,
+      top = Y.upTown;
+    b.arc("beacon-top", "belfry", tx, tz, 4.35, 7, 0, Math.PI * 2, top, 16);
+    b.rect("beacon-top-n", "belfry", tx - 3, tz - 4.5, tx + 3, tz - 3.05, top);
+    b.rect("beacon-top-s", "belfry", tx - 3, tz + 3.05, tx + 3, tz + 4.5, top);
+    b.rect("beacon-top-e", "belfry", tx + 3.05, tz - 3, tx + 4.5, tz + 3, top);
+    b.rect("beacon-top-w", "belfry", tx - 4.5, tz - 3, tx - 3.05, tz + 3, top);
+    ringWall(7.3, 0, Math.PI * 2, GROUND, top - 0.6, {
+      cx: tx,
+      cz: tz,
+      thickness: 0.8,
+      gaps: [[Math.PI / 2, 4.6]],
+    });
+    ringWall(7.3, 0, Math.PI * 2, top, top + 1.1, {
+      cx: tx,
+      cz: tz,
+      thickness: 0.4,
+      material: "trim",
+      gaps: [
+        [5.6, 6],
+        [Math.PI + 0.06, 6],
       ],
-      height = 7,
-      side = (d: number) =>
-        tunnel.map(([x, z], i): XZ => {
-          const normal = (j: number) => {
-            const [p, q] = [tunnel[j], tunnel[j + 1]],
-              length = Math.hypot(q[0] - p[0], q[1] - p[1]);
-            return [-(q[1] - p[1]) / length, (q[0] - p[0]) / length] as const;
-          };
-          const n0 = normal(Math.max(0, i - 1)),
-            n1 = normal(Math.min(tunnel.length - 2, i)),
-            mx = n0[0] + n1[0],
-            mz = n0[1] + n1[1],
-            k = d / (mx * n1[0] + mz * n1[1]);
-          return [x + mx * k, z + mz * k];
-        });
-    const left = side(4.6),
-      right = side(-4.6),
-      leftRoof = side(5.2),
-      rightRoof = side(-5.2);
-    for (let i = 0; i < tunnel.length - 1; i++) {
-      b.wall(left[i], left[i + 1], y, y + height, { thickness: 0.8 });
-      b.wall(right[i], right[i + 1], y, y + height, { thickness: 0.8 });
-      b.mass(
-        [leftRoof[i], leftRoof[i + 1], rightRoof[i + 1], rightRoof[i]],
-        y + height,
-        y + height + 1,
+    });
+    b.piece(
+      "elevator",
+      [6.6, top - Y.plain + 3.2, 6.6],
+      [tx, Y.plain - 0.3, tz],
+      Math.PI / 2,
+      "iron",
+      0.3,
+    );
+    // The beacon itself: a lantern on pillars above the landing.
+    for (let i = 0; i < 6; i++) {
+      const [px, pz] = polar(6.5, (i * Math.PI) / 3 + Math.PI / 6);
+      b.pillar(tx + px, tz + pz, top, 10, 0.8, "trim");
+    }
+    b.mass(octagon(tx, tz, 7.6), top + 10, top + 11, "trim");
+    b.box(tx, tz, top + 11, [4, 3, 4], 0, "glow", false);
+    b.piece("spire", [6, 7, 6], [tx, top + 14, tz], 0, "roof");
+  }
+
+  // ---------------------------------------------------------------- Grand Street
+  function grandStreet() {
+    const y = Y.plain;
+    // The bar from the beacon tower's foot to the junction circle.
+    b.rect("grand-bar", "crypt", BEACON_TOWER[0] + 3.05, 21, JUNCTION[0] - 6.2, 28, y);
+    b.floor("grand-junction", "crypt", octagon(JUNCTION[0], JUNCTION[1], 7.4), y);
+    // The ring round the foot of the central mountain, as on the article's map: west,
+    // north through the arch in the prow's keel, and on to the east beneath the town.
+    // Past the arena lift's shaft it keeps to its outer half; in the east it stays clear
+    // of the town's base.
+    const shaftA = [5.82, 6.19] as const,
+      eastEnd = 1.85,
+      eastR = 29.6;
+    ringFloor("grand-ring", "crypt", GS.r0, GS.r1, GS.a0, shaftA[0], y);
+    ringFloor("grand-ring-shaft", "crypt", 28.9, GS.r1, shaftA[0], shaftA[1], y);
+    ringFloor("grand-ring-north", "crypt", GS.r0, GS.r1, shaftA[1], Math.PI * 2 + 0.1, y);
+    ringFloor("grand-ring-east", "crypt", GS.r0, eastR, 0.1, eastEnd, y);
+    parapet(29.1, shaftA[0], shaftA[1], y);
+    for (const a of shaftA) rail(polar(GS.r0, a), polar(28.9, a), y);
+    rail(polar(eastR, 0.1), polar(GS.r1, 0.1), y);
+    rail(polar(GS.r0, eastEnd), polar(eastR, eastEnd), y);
+    for (let a = 6.3; a < Math.PI * 2 + eastEnd; a += 0.2) lantern(polar(GS.r0 + 0.8, a), y);
+    {
+      const p0 = polar((GS.r0 + GS.r1) / 2, GS.a0 + 0.05),
+        dx = JUNCTION[0] - p0[0],
+        dz = JUNCTION[1] - p0[1],
+        l = Math.hypot(dx, dz),
+        n: XZ = [(-dz / l) * 3.5, (dx / l) * 3.5];
+      b.floor(
+        "grand-ring-link",
+        "crypt",
+        [add(p0, n, -1), add(p0, n, 1), add(JUNCTION, n, 1), add(JUNCTION, n, -1)],
+        y,
       );
     }
-    // Retaining walls hold the plain back round the sunken court, with a parapet along
-    // their brink; a block above the road's vault closes the court's south-west corner.
-    const { x0, x1, z0, z1 } = BEACON_COURT,
-      t = 3.6;
-    for (const [ax, az, cx, cz] of [
-      [x0, z0, x1, z0 + t],
-      [x1 - t, z0 + t, x1, z1],
-      [x0 + 6, z1 - t, x1 - t, z1],
-      [x0, z0 + t, x0 + t, -72],
+    const spurSouth = polar(GS.r0 + 2, GS.a1 - 0.12);
+    b.floor(
+      "grand-spur",
+      "crypt",
+      [spurSouth, [-20, -27], [-20, -51.95], [-13, -51.95], [-13, spurSouth[1]]],
+      y,
+    );
+    // Broad steps rise from the spur to the raised court before the gate, as the
+    // reference's approach climbs to its boss room.
+    b.flight("grand-steps", "crypt", [-16.5, y, -52], [0, -1], COURT_Y - y, 7, { fill: GROUND });
+    b.rect("grand-court-west", "crypt", -20, -59.25, -8, -54.95, COURT_Y);
+    b.rect("grand-court", "crypt", -20, -66, 20, -59.2, COURT_Y);
+    // Masonry under the court, clear of the colosseum stair's first steps.
+    for (const [x0, z0, x1, z1] of [
+      [-20, -66, 20, -59.2],
+      [-20, -59.25, -8, -54.95],
     ])
       b.mass(
         [
-          [ax, az],
-          [cx, az],
-          [cx, cz],
-          [ax, cz],
+          [x0, z0],
+          [x1, z0],
+          [x1, z1],
+          [x0, z1],
         ],
-        BEDROCK,
-        0,
-        "wall",
+        GROUND,
+        COURT_Y - 0.6,
       );
-    b.mass(
-      [
-        [x0, -72],
-        [x0 + 6, -72],
-        [x0 + 6, z1],
-        [x0, z1],
-      ],
-      y + height + 1,
-      0,
-      "wall",
-    );
-    for (const [p, q] of [
-      [
-        [x0 + t, z0 + t],
-        [x1 - t, z0 + t],
-      ],
-      [
-        [x1 - t, z0 + t],
-        [x1 - t, z1 - t],
-      ],
-      [
-        [x1 - t, z1 - t],
-        [x0 + 6, z1 - t],
-      ],
-      [
-        [x0 + 6, z1 - t],
-        [x0 + 6, -72],
-      ],
-      [
-        [x0 + 6, -72],
-        [x0 + t, -72],
-      ],
-      [
-        [x0 + t, -72],
-        [x0 + t, z0 + t],
-      ],
-    ] as Array<[XZ, XZ]>)
-      parapet(p, q, 0);
-    b.wall(left.at(-1)!, right.at(-1)!, y, y + height, {
-      thickness: 0.8,
-      openings: [{ at: 4.6, width: 6, bottom: y, height: 6, frame: "none" }],
+    for (let i = 0; i < 3; i++) {
+      // Stepped tiers line the court's far side.
+      b.box(0, -64.2 - i * 0.6, COURT_Y, [36 - i * 4, 0.6 * (i + 1), 0.6], 0, "wall");
+    }
+    // The colosseum gate's threshold into the keel.
+    b.rect("colosseum-gate", "crypt", -2.4, -59.4, 2.4, -57.5, COURT_Y, {
+      threshold: true,
+      render: true,
     });
-    // The gate into the mountain, ending at the colosseum's sealed door.
-    b.hallway("colosseum-gate", "crypt", [LOWER_STREET_X + 4, 0], [-21.85, 0], y, 6, 6);
-    for (const z of [-30, -12]) lantern(LOWER_STREET_X + 3.2, y, z);
-    for (const x of [-3, 3]) lantern(x, 0, CAPITAL_SITES.greatGateFoot[2]);
+    // Houses as blocks along the street: Leyndell's main thoroughfare.
+    const row = (p: XZ, yaw: number, w: number, depth: number, storeys: number) =>
+      block(frame(b, p[0], p[1], yaw), {
+        x: 0,
+        z: 0,
+        w,
+        depth,
+        y,
+        storeys,
+        rand,
+        tower: rand() < 0.15,
+      });
+    for (const x of [-64, -55, -46]) {
+      row([x, 14.4], 0, 8, 6, 2);
+      row([x, 34.6], Math.PI, 8, 6, 2 + Math.floor(rand() * 2));
+    }
+    for (let a = GS.a0 + 0.3; a < GS.a1 - 0.05; a += 0.22) {
+      const t = frame(b, ...polar(GS.r1 + 7.6, a), facing(radial(a + Math.PI)));
+      block(t, { x: 0, z: 0, w: 6.5, depth: 6, y, storeys: 2 + Math.floor(rand() * 2), rand });
+    }
+    // Giant swords stuck in the street.
+    sword([-56, 24.5], y, 0.2, 1.4);
+    sword(polar(27, 4.9), y, 1.3, 1.2);
+    for (let x = -72; x < -38; x += 8) lantern([x, 21.8], y);
+    for (let a = GS.a0; a < GS.a1; a += 0.2) lantern(polar(GS.r1 - 0.8, a), y);
+    for (const z of [-30, -42, -50]) lantern([-13.8, z], y);
+    lantern([-18, -62.5], COURT_Y);
+    lantern([16, -62.5], COURT_Y);
   }
 
-  // ------------------------------------------------------- Glory Colosseum
-  {
-    const [cx, y, cz] = CAPITAL_SITES.colosseum,
-      ring = octagon(cx, cz, 23),
-      apothem = 23 * Math.cos(Math.PI / 8),
-      edge = 2 * 23 * Math.sin(Math.PI / 8),
-      [ax, , az] = CAPITAL_SITES.arenaLift;
-    b.floor("colosseum", "arena", ring, y, { thickness: 3 });
-    b.enclosure(ring, y, -6, {
-      thickness: 1.2,
-      openings: {
-        5: [
-          {
-            at: edge / 2,
-            width: 6,
-            height: 6,
-            bottom: y,
-            id: "colosseum-gate",
-            visibleThreshold: true,
-            area: "arena",
-          },
+  // ---------------------------------------------------------------- Glory Colosseum
+  function colosseum() {
+    const y = Y.arena,
+      R = CAPITAL_RINGS.arena;
+    // Takes in the stands and the ceiling ring, but stays beneath the street ring above.
+    interior(-R - 5, y, -R - 5, R + 5, y + 9, R + 5);
+    interior(-2.2, y, -57.5, 2.2, COURT_Y + 5, -R);
+    for (const s of [-1, 1]) interior(s > 0 ? 2.2 : -5.5, y, -36, s > 0 ? 5.5 : -2.2, y + 5.4, -30);
+    const ceiling = (x0: number, z0: number, x1: number, z1: number, bottom: number) =>
+      b.mass(
+        [
+          [x0, z0],
+          [x1, z0],
+          [x1, z1],
+          [x0, z1],
         ],
-        7: [
-          {
-            at: edge / 2,
-            width: 4,
-            height: 4.5,
-            bottom: y,
-            id: "colosseum-lift",
-            visibleThreshold: true,
-            area: "arena",
-          },
-        ],
-      },
-    });
-    for (let i = 0; i < 8; i++) {
-      if (i === 5 || i === 7) continue;
-      const phi = ((i + 1) * Math.PI) / 4;
-      for (let k = 0; k < 2; k++) {
-        const d = apothem - 0.6 - 0.75 - 1.5 * (1 - k),
-          length = 2 * d * Math.tan(Math.PI / 8) - 1.2;
-        b.box(
-          cx + Math.sin(phi) * d,
-          cz - Math.cos(phi) * d,
-          y,
-          [length, (k + 1) * 1.1, 1.5],
-          -phi,
-          k ? "trim" : "wall",
-        );
-      }
-    }
-    for (const q of ring) b.pillar(cx + (q[0] - cx) * 0.97, cz + (q[1] - cz) * 0.97, y, 14, 2);
-    b.mass(octagon(cx, cz, 24.6), -6, -2, "wall");
-    b.piece(
-      "double-door",
-      [8, 9, 0.15],
-      [cx + apothem - 0.68, y, cz],
-      -Math.PI / 2,
-      "piece",
-      0.8,
-      true,
-    );
-    for (const a of [-1, 1]) {
-      const x = cx + a * 9,
-        z = cz + apothem - 3;
-      b.prop("drum", [0.9, 1.1, 0.9], [x, y, z], 0, { material: "wall" });
-      b.box(x, z, y + 1.1, [0.5, 0.35, 0.5], 0, "glow", false);
-    }
-    b.hallway("colosseum-lift-hall", "arena", [ax, cz - apothem - 0.6], [ax, az + SHAFT], y, 5, 5);
-    // Bedrock around the hall, open for the gate passage, lift hall and shaft.
-    const n = cz - apothem - 1.2;
-    for (const part of [
-      [
-        [-26, n],
-        [-26, -3.4],
-        [cx - apothem - 0.6, -3.4],
-        [cx - apothem - 0.6, n],
-      ],
-      [
-        [-26, -36],
-        [-26, n],
-        [ax - 3.1, n],
-        [ax - 3.1, -36],
-      ],
-      [
-        [ax + 3.1, -36],
-        [ax + 3.1, n],
-        [26, n],
-        [26, -36],
-      ],
-      [
-        [ax - 3.1, -36],
-        [ax - 3.1, az - 3.1],
-        [ax + 3.1, az - 3.1],
-        [ax + 3.1, -36],
-      ],
-    ] as XZ[][])
-      b.mass(part, BEDROCK, -2);
-    b.mass(
-      [
-        [ax - 3.1, az + 3.1],
-        [ax - 3.1, n],
-        [ax + 3.1, n],
-        [ax + 3.1, az + 3.1],
-      ],
-      y + 5,
-      -2,
-    );
-    for (const a of [-1, 1]) lantern(cx + a * 6, y, cz + apothem - 2);
-    lantern(ax + 1.8, y, n - 3);
-    // Banners above the stands and braziers burning on the upper seats.
-    for (let i = 0; i < 8; i++) {
-      if (i === 5 || i === 7) continue;
-      const phi = ((i + 1) * Math.PI) / 4,
-        r = apothem - 0.68;
-      b.piece(
-        "banner",
-        [2.2, 6, 0.06],
-        [cx + Math.sin(phi) * r, y + 5, cz - Math.cos(phi) * r],
-        -phi,
-        "cloth",
+        bottom,
+        bottom + 0.6,
       );
-      const d = apothem - 0.6 - 0.75;
+    b.buried(() => {
+      // The corridor from the gate: a stair down, then a straight hall to the arena.
+      const low = descend(
+        "colosseum-stair",
+        "arena",
+        [0, COURT_Y, -57.5],
+        [0, 1],
+        COURT_Y - y,
+        4,
+        y,
+      );
+      b.rect("colosseum-corridor", "arena", -2.2, low[2] - 0.05, 2.2, -R + 0.4, y);
+      b.rect("colosseum-lift-landing", "arena", -3.45, -27, -2.15, -21, y);
       for (const s of [-1, 1]) {
-        const along = s * 3,
-          x = cx + Math.sin(phi) * d + Math.cos(phi) * along,
-          z = cz - Math.cos(phi) * d + Math.sin(phi) * along;
-        b.piece("drum", [0.8, 0.7, 0.8], [x, y + 2.2, z], 0, "iron");
-        b.box(x, z, y + 2.9, [0.5, 0.35, 0.5], 0, "glow", false);
+        const x = s * 2.5,
+          alcove = { at: -33 - low[2], width: 6, bottom: y, height: 4.8, frame: "none" as const };
+        b.wall([x, -57.5], [x, low[2]], y, COURT_Y + 5, { thickness: 0.6 });
+        b.wall([x, low[2]], [x, -R], y, y + 5.4, {
+          thickness: 0.6,
+          openings:
+            s < 0
+              ? [{ at: -24 - low[2], width: 6.2, bottom: y, height: 4.6, frame: "none" }, alcove]
+              : [alcove],
+        });
+        // Statue alcoves either side of the hall, framed by orange pillars.
+        const outer = s * 5.8;
+        b.rect(
+          `colosseum-alcove-${s}`,
+          "arena",
+          s > 0 ? 2.15 : -5.5,
+          -36,
+          s > 0 ? 5.5 : -2.15,
+          -30,
+          y,
+        );
+        b.wall([outer, -36.3], [outer, -29.7], y, y + 5.4, { thickness: 0.6 });
+        for (const z of [-36.3, -29.7]) b.wall([x, z], [outer, z], y, y + 5.4, { thickness: 0.6 });
+        ceiling(s > 0 ? 2.2 : -6.1, -36.6, s > 0 ? 6.1 : -2.2, -29.4, y + 5.4);
+        statue([s * 4.3, -33], y, s > 0 ? -Math.PI / 2 : Math.PI / 2, 1.5);
+        for (const z of [-36.6, -29.4]) b.pillar(x, z, y, 5.4, 0.8, "timber");
       }
-    }
-  }
-  /** An enterable, furnished home in the row, built like the tier houses. */
-  function home(k: number, side: 1 | -1, d: number, back: number, w: number, depth: number) {
-    const a = along(k, side, d),
-      [ox, oz] = polar(back, a),
-      t = frame(b, ox, oz, Math.atan2(Math.sin(a), -Math.cos(a))),
-      id = `home-${k + 1}-${side > 0 ? "east" : "west"}-${Math.round(d)}`;
-    house(t, {
-      id,
-      area: TIER_AREAS[k],
-      x0: -w / 2,
-      z0: 0,
-      x1: w / 2,
-      z1: depth,
-      base: TIER_H[k],
-      storeys: 1,
-      doors: [{ side: "s", c: 0 }],
+      ceiling(-2.8, -57.5, 2.8, low[2], COURT_Y + 5);
+      ceiling(-2.8, low[2], 2.8, -R, y + 5.4);
+      // The arena: a round floor ringed by a wall of niches and lamps, then the stands.
+      const ring = Array.from({ length: 24 }, (_, i) =>
+        polar(R, (i * Math.PI * 2) / 24 + Math.PI / 24),
+      );
+      b.floor("colosseum", "arena", ring, y, { thickness: 1 });
+      // The wall opens to the north for the corridor; its range stops either side of the gap.
+      const gate = 2.3 / (R + 0.3);
+      ringWall(R + 0.3, gate, Math.PI * 2 - gate, y, y + 7, { thickness: 0.6 });
+      for (let i = 0; i < 12; i++) {
+        const a = (i * Math.PI * 2) / 12 + Math.PI / 12,
+          [x, z] = polar(R - 0.1, a);
+        b.box(x, z, y + 2.2, [2, 2.4, 0.3], -a, "shadow", false);
+        b.box(x, z, y + 3, [0.6, 0.6, 0.4], -a, "glow", false);
+      }
+      // The stands break at the north for the corridor and the lift beside it.
+      ringMass(R + 0.6, R + 2.6, 0.48, Math.PI * 2 - 0.48, y, y + 7);
+      ringMass(R + 2.6, R + 4.4, 0.48, Math.PI * 2 - 0.48, y, y + 8.4);
+      b.mass(
+        Array.from({ length: 16 }, (_, i) => polar(R + 1.5, (i * Math.PI * 2) / 16)),
+        y + 9,
+        y + 9.6,
+      );
+      // An outer ceiling ring roofs the stands, open only for the corridor and the
+      // arena lift's shaft, so no daylight reaches the arena from the street ring above.
+      ringMass(R + 1.3, R + 5, 0.13, 5.82, y + 9, y + 9.6);
+      ringMass(R + 1.3, R + 5, 6.19, Math.PI * 2 - 0.13, y + 9, y + 9.6);
     });
-    CAPITAL_HOMES.push({
-      id,
-      k,
-      spot: t.world([-0.9, depth - 1.4], TIER_H[k]),
-      approach: [t.world([0, depth + 1.8], TIER_H[k]), t.world([0, depth - 0.8], TIER_H[k])],
-    });
-  }
-  rowQuarters(b, reserved, home);
-  // Two rings of detached blocks pack the broad lowest tier like the reference. They
-  // leave the inner street, a back lane, the street under the curtain, two cross streets
-  // per side, the gate forecourt, the start courtyard, the breach and the end stair open.
-  {
-    const rand = scatter(4421),
-      dEnd = SPAN * bandMid(0),
-      s0 = TIER_STAIRS[0],
-      stairD =
-        Math.abs(Math.PI - ((Math.atan2(s0.low[0], -s0.low[2]) + 2 * Math.PI) % (2 * Math.PI))) *
-        bandMid(0);
-    for (const side of [1, -1] as const)
-      for (const [back, depth] of [
-        [75.5, 8.5],
-        [85.6, 5.9],
-      ]) {
-        const scale = bandMid(0) / (back + depth / 2);
-        const blocked: Array<[number, number]> = [
-          [0, 9],
-          [66, 74],
-          [101, 109],
-          [dEnd - 6, dEnd + 10],
-          ...(side > 0
-            ? ([
-                [6, 40],
-                [s0.side > 0 ? stairD - 14 : dEnd, dEnd],
-              ] as Array<[number, number]>)
-            : ([[back > 80 ? 46 : 50, back > 80 ? 64 : 58]] as Array<[number, number]>)),
-        ];
-        const free = (d0: number, d1: number) => blocked.every(([p, q]) => d1 <= p || d0 >= q);
-        let d = 12;
-        while (d < dEnd) {
-          const w = 6 + rand() * 4,
-            span = w * scale;
-          if (!free(d, d + span)) {
-            d += 1;
-            continue;
-          }
-          const tower = rand() < 0.1,
-            storeys = tower ? 4 : 1 + Math.floor(rand() * 3);
-          rowBuilding(b, 0, side, d + span / 2, back, w, depth, storeys, tower, rand, 4.5);
-          d += span + (1 + rand() * 0.9) * scale;
-        }
-      }
-  }
-  return lanterns;
-}
-
-/** Deterministic scatter, so the quarters are identical on every load. */
-function scatter(seed: number) {
-  return () => {
-    seed = (seed * 16807) % 2147483647;
-    return (seed - 1) / 2147483646;
-  };
-}
-
-/**
- * Packs closed kit row buildings against each tier's retaining face, like the white
- * terraces of the reference: varied widths and storeys, windows, cornices, doors, flat
- * crenellated roofs, gables and the odd tower. Each keeps a street at least 4.2 m wide
- * along the parapet, and keeps clear of gates, stairs, lifts and the enterable houses.
- */
-function rowQuarters(
-  b: CapitalBuilder,
-  reserved: Map<string, Array<[number, number]>>,
-  home: (k: number, side: 1 | -1, d: number, back: number, w: number, depth: number) => void,
-) {
-  const rand = scatter(7919);
-  let eligible = 0;
-  const storey = 4.5;
-  for (let k = 0; k < 5; k++)
-    for (const side of [1, -1] as const) {
-      const inner = TIER_R[k + 1],
-        outer = TIER_R[k],
-        back = inner + 0.4,
-        scale = bandMid(k) / back,
-        dEnd = SPAN * bandMid(k);
-      const blocked: Array<[number, number]> = [
-        // The prow ends above the lowest tier, which only keeps a short avenue clear.
-        [0, k === 0 ? 6 : 10],
-        [dEnd - 4, dEnd + 10],
-        ...(reserved.get(`${k}:${side}`) ?? []),
-      ];
-      const stair = TIER_STAIRS[k];
-      if (stair.side === side) {
-        const a = Math.atan2(stair.low[0], -stair.low[2]),
-          dLow = Math.abs(Math.PI - ((a + 2 * Math.PI) % (2 * Math.PI))) * bandMid(k);
-        blocked.push([dLow - (k === 0 ? 12 : 8), dEnd + 10]);
-      }
-      if (k === 0 && side === 1) blocked.push([8, 36]);
-      if (k === 0 && side === -1) blocked.push([48, 60]);
-      if (k === 1 && side === 1) blocked.push([22, 38]);
-      const free = (d0: number, d1: number) => blocked.every(([p, q]) => d1 <= p || d0 >= q);
-      const [wMin, wMax] = k < 2 ? [6, 11] : k < 4 ? [5, 9] : [4, 7];
-      let d = 10;
-      while (d < dEnd) {
-        const tower = k < 4 && rand() < 0.12,
-          w = tower ? 5 : wMin + rand() * (wMax - wMin),
-          span = w * scale;
-        if (!free(d, d + span)) {
-          d += 1;
-          continue;
-        }
-        const front = Math.sqrt((outer - 4.5) ** 2 - (w / 2) ** 2) - back,
-          depth = Math.min(6.5, front);
-        // Every other broad house on the lower three tiers can be entered.
-        const enterable = k <= 2 && !tower && w >= 6.5 && depth >= 3.8 && eligible++ % 2 === 1;
-        if (enterable) home(k, side, d + span / 2, back, w, depth);
-        else if (depth > 1.6) {
-          const storeys = tower
-            ? 4 + Math.floor(rand() * 2)
-            : 1 + Math.floor(rand() * (k < 4 ? 3 : 2));
-          rowBuilding(b, k, side, d + span / 2, back, w, depth, storeys, tower, rand, storey);
-        }
-        d += span + (0.4 + rand() * 0.8) * scale;
-      }
+    b.rooms.push({ id: "colosseum", width: 2 * R, depth: 2 * R, height: 9, high: true });
+    for (let i = 0; i < 6; i++) {
+      const a = (i * Math.PI * 2) / 6 + Math.PI / 6;
+      b.piece("banner", [1.6, 4, 0.06], at3(polar(R - 0.05, a), y + 3.6), Math.PI - a, "cloth");
+      brazier(polar(R - 1.8, a), y);
     }
-}
-
-function rowBuilding(
-  b: CapitalBuilder,
-  k: number,
-  side: 1 | -1,
-  d: number,
-  back: number,
-  w: number,
-  depth: number,
-  storeys: number,
-  tower: boolean,
-  rand: () => number,
-  storey: number,
-) {
-  const a = along(k, side, d),
-    [ox, oz] = polar(back, a),
-    yaw = Math.atan2(Math.sin(a), -Math.cos(a)),
-    c = Math.cos(yaw),
-    s = Math.sin(yaw),
-    y = TIER_H[k],
-    height = storeys * storey;
-  const P = (x: number, z: number): XZ => [ox + x * c + z * s, oz - x * s + z * c];
-  const at = (
-    x: number,
-    z: number,
-    bottom: number,
-    size: ParishPoint,
-    m: CapitalMaterial,
-    collide = false,
-  ) => {
-    const [px, pz] = P(x, z);
-    b.box(px, pz, bottom, size, yaw, m, collide);
-  };
-  const place = (
-    model: Parameters<CapitalBuilder["piece"]>[0],
-    size: ParishPoint,
-    x: number,
-    z: number,
-    bottom: number,
-    m: CapitalMaterial,
-    thickness?: number,
-    leaves?: boolean,
-  ) => {
-    const [px, pz] = P(x, z);
-    b.piece(model, size, [px, bottom, pz], yaw, m, thickness, leaves);
-  };
-  const bodyDepth = tower ? Math.min(depth, 5) : depth;
-  // The body, with a plinth course and a cornice at each floor.
-  at(0, bodyDepth / 2, y, [w, height, bodyDepth], "house", true);
-  at(0, bodyDepth / 2, y, [w + 0.2, 0.6, bodyDepth + 0.2], "trim");
-  for (let i = 1; i <= storeys; i++)
-    at(0, bodyDepth / 2, y + i * storey - 0.3, [w + 0.3, 0.3, bodyDepth + 0.3], "trim");
-  // Bays of windows; the door takes one ground-floor bay.
-  const bays = Math.max(1, Math.floor(w / 2.4)),
-    pitch = w / bays,
-    door = Math.floor(rand() * bays);
-  for (let i = 0; i < storeys; i++)
-    for (let j = 0; j < bays; j++) {
-      const x = -w / 2 + pitch * (j + 0.5),
-        bottom = y + i * storey;
-      if (i === 0 && j === door) {
-        place("door", [1.9, 3, 0.2], x, bodyDepth + 0.05, bottom + 0.6, "timber", 0.3, true);
-        continue;
-      }
-      const wh = i === 0 ? 1.6 : 2;
-      place("window", [1.1, wh, 0.2], x, bodyDepth + 0.08, bottom + 1.4, "trim", 0.16);
-      at(x, bodyDepth + 0.02, bottom + 1.45, [0.85, wh - 0.1, 0.04], "shadow");
-    }
-  const top = y + height;
-  if (tower) {
-    // Some houses hang a banner between their upper windows.
-    if (storeys >= 2 && rand() < 0.3)
-      place("banner", [1, 3.2, 0.05], 0, bodyDepth + 0.12, y + storey + 0.6, "cloth");
-    place("spire", [w + 0.6, 6, bodyDepth + 0.6], 0, bodyDepth / 2, top, "roof");
-    return;
+    lantern([1.4, -32], y);
+    lantern([-1.4, -40], y);
   }
-  const roof = rand();
-  if (roof < 0.45) {
-    // A flat roof behind a crenellated parapet.
-    at(0, bodyDepth - 0.2, top, [w, 0.6, 0.4], "trim");
-    at(0, 0.2, top, [w, 0.6, 0.4], "trim");
-    for (const sx of [-1, 1])
-      at((sx * (w - 0.4)) / 2, bodyDepth / 2, top, [0.4, 0.6, bodyDepth], "trim");
-    for (let x = -w / 2 + 0.6; x < w / 2 - 0.3; x += 1.4)
-      at(x, bodyDepth - 0.2, top + 0.6, [0.6, 0.6, 0.4], "trim");
-  } else
-    place("roof", [w, Math.min(3, bodyDepth * 0.6), bodyDepth], 0, bodyDepth / 2, top, "roof", 0.3);
-  if (rand() < 0.5) at(w / 2 - 1.2, bodyDepth * 0.35, top, [0.8, 2.4, 0.8], "trim");
+  function facingAngle(x: number, z: number) {
+    return (Math.atan2(x, -z) + Math.PI * 2) % (Math.PI * 2);
+  }
 }

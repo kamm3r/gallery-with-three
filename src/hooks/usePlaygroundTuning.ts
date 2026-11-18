@@ -1,8 +1,11 @@
 import { button, folder, useControls } from "leva";
-import { useEffect, useMemo, useRef, type MutableRefObject } from "react";
-import { parkZones, type Tuple3 } from "../gameplay/collisionCourse";
+import { useFrame } from "@react-three/fiber";
+import { useWorld } from "koota/react";
+import { useCallback, useEffect, useMemo, useRef, type MutableRefObject } from "react";
+import { nearestZone, parkZones, type Tuple3 } from "../gameplay/collisionCourse";
 import { controllerDefaults, type ControllerTuning } from "../gameplay/controllerTuning";
-import { useGame } from "../gameSettings";
+import { useGame } from "../hooks/useGame";
+import { PlayerPosition } from "../gameplay/ecs/traits";
 
 const RAD_TO_DEG = 180 / Math.PI;
 const panelDefaults = {
@@ -18,6 +21,14 @@ function slider(value: number, min: number, max: number, step: number, label: st
 /** Leva "Controller" folder. Mounted by the playground only, so the other
  * worlds always play on `controllerDefaults`. */
 export function useControllerTuning(): ControllerTuning {
+  useControls(
+    "Scene tools",
+    import.meta.env.DEV
+      ? {
+          "Open browser inspector": button(() => window.location.assign("/playground?inspector")),
+        }
+      : {},
+  );
   const d = panelDefaults;
   const [values, set] = useControls("Controller", () => ({
     Movement: folder({
@@ -56,6 +67,7 @@ export function useControllerTuning(): ControllerTuning {
       snapDistance: slider(d.snapDistance, 0, 1.5, 0.02, "Ground snap"),
       slopeMaxAngle: slider(d.slopeMaxAngle, 10, 85, 1, "Max slope"),
       mass: slider(d.mass, 1, 200, 1, "Push mass"),
+      pushForce: slider(d.pushForce, 50, 5000, 50, "Push force (N)"),
     }),
   }));
 
@@ -84,31 +96,62 @@ export function useControllerTuning(): ControllerTuning {
   return tuning;
 }
 
-/** Leva zone picker plus `[` / `]` to cycle zones and `R` to restart one. */
-export function useZoneTeleport(teleportRef: MutableRefObject<Tuple3 | null>) {
+/**
+ * Tracks the zone the player is standing in and drives zone travel: the Leva
+ * picker, `[` / `]` to cycle, and `R` to restart the zone you are in.
+ */
+export function useZoneTeleport(
+  teleportRef: MutableRefObject<Tuple3 | null>,
+  onZoneChange?: (index: number) => void,
+) {
   const { paused } = useGame();
+  const world = useWorld();
   const names = useMemo(() => parkZones.map((zone) => zone.name), []);
   const current = useRef(0);
+  const sinceCheck = useRef(0);
+  const reportZone = useRef(onZoneChange);
+  reportZone.current = onZoneChange;
   const [, set] = useControls("Test zones", () => ({
     zone: {
       value: names[0],
       options: names,
       label: "Zone",
       onChange: (name: string, _path, context) => {
-        current.current = Math.max(0, names.indexOf(name));
-        // Picking from the panel teleports; the initial mount does not.
-        if (!context.initial) teleportRef.current = parkZones[current.current].spawn;
+        const index = Math.max(0, names.indexOf(name));
+        // Picking from the panel teleports; mount and tracking updates do not.
+        if (context.initial || index === current.current) return;
+        current.current = index;
+        teleportRef.current = parkZones[index].spawn;
+        reportZone.current?.(index);
       },
       transient: false,
     },
   }));
 
+  const enter = useCallback(
+    (index: number) => {
+      if (index === current.current) return;
+      current.current = index;
+      set({ zone: names[index] });
+      reportZone.current?.(index);
+    },
+    [names, set],
+  );
+
+  useFrame((_, delta) => {
+    sinceCheck.current += delta;
+    if (sinceCheck.current < 0.25) return;
+    sinceCheck.current = 0;
+    const player = world.get(PlayerPosition);
+    if (player?.valid) enter(nearestZone(player.x, player.z));
+  });
+
   useEffect(() => {
     if (paused) return;
     const go = (index: number) => {
-      current.current = (index + parkZones.length) % parkZones.length;
-      teleportRef.current = parkZones[current.current].spawn;
-      set({ zone: names[current.current] });
+      const next = (index + parkZones.length) % parkZones.length;
+      teleportRef.current = parkZones[next].spawn;
+      enter(next);
     };
     const onKey = (event: KeyboardEvent) => {
       if (event.repeat || event.target instanceof HTMLInputElement) return;
@@ -118,5 +161,5 @@ export function useZoneTeleport(teleportRef: MutableRefObject<Tuple3 | null>) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [names, paused, set, teleportRef]);
+  }, [enter, paused, teleportRef]);
 }

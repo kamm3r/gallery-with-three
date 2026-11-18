@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
-import { useGame } from "../gameSettings";
+import { useGame } from "../hooks/useGame";
 
 // Portal transitions use the same pause boundary as the scene.
 export function useGameTimeout() {

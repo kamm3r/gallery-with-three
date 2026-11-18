@@ -18,6 +18,9 @@ export const controllerDefaults = {
   slopeMaxAngle: (50 * Math.PI) / 180,
   /** Mass used to shove dynamic bodies (crates, seesaw). */
   mass: 10,
+  /** Strongest steady shove (N). Light crates slide; heavy ones, whose
+   * ground friction exceeds it, stay put. */
+  pushForce: 600,
 };
 
 export type ControllerTuning = typeof controllerDefaults;

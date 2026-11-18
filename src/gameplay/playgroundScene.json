@@ -1,0 +1,13 @@
+{
+  "version": 3,
+  "objects": {
+    "platform-disc": {
+      "position": [-7.115330598551967, 0.49533550124875303, -5.928812348260955],
+      "rotation": [0, 0, 0],
+      "scale": [1, 1, 1]
+    }
+  },
+  "nodes": {},
+  "removed": [],
+  "properties": {}
+}

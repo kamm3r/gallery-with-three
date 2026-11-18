@@ -1,8 +1,12 @@
+import { SceneObject } from "./SceneObject";
+import { ZoneLabel } from "./CollisionCourse";
+import { parkLabels } from "../gameplay/collisionCourse";
 import { useEffect, useMemo } from "react";
-import { CylinderCollider, RigidBody } from "@react-three/rapier";
+import { ConvexHullCollider, RigidBody } from "@react-three/rapier";
 import { button, useControls } from "leva";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import * as THREE from "three";
+import { playgroundBasicMaterial } from "../gameplay/playgroundResources";
 import {
   createTreeBlueprint,
   defaultTreeShape,
@@ -68,6 +72,12 @@ const specimens: Array<{
     },
   },
 ];
+
+// Every display stands on the same flat disc; only its colour changes.
+const groundDisc = new THREE.CircleGeometry(4.8, 24);
+groundDisc.name = "Tree display disc";
+const labRing = new THREE.RingGeometry(4.78, 4.9, 48);
+labRing.name = "Tree lab ring";
 
 const displays = specimens.flatMap(({ kind, x, trunkRadius, day, halloween }) => [
   { kind, x, z: 40, trunkRadius, variant: "day" as const, ...day },
@@ -242,23 +252,26 @@ export function CustomTreeShowcase() {
       Object.fromEntries(
         displays.map(({ kind, variant, palette }) => [
           `${variant}-${kind}`,
-          new THREE.ShaderMaterial({
-            vertexShader: foliageVertexShader,
-            fragmentShader: foliageFragmentShader,
-            uniforms: {
-              colorMap: { value: palette.map((color) => new THREE.Color(color)) },
-              lightPosition: {
-                value:
-                  variant === "halloween"
-                    ? new THREE.Vector3(-40, 44, 25)
-                    : new THREE.Vector3(22, 38, 12),
+          Object.assign(
+            new THREE.ShaderMaterial({
+              vertexShader: foliageVertexShader,
+              fragmentShader: foliageFragmentShader,
+              uniforms: {
+                colorMap: { value: palette.map((color) => new THREE.Color(color)) },
+                lightPosition: {
+                  value:
+                    variant === "halloween"
+                      ? new THREE.Vector3(-40, 44, 25)
+                      : new THREE.Vector3(22, 38, 12),
+                },
+                fillStrength: {
+                  value: variant === "halloween" ? 0.18 : kind === "evergreen" ? 0.23 : 0.1,
+                },
               },
-              fillStrength: {
-                value: variant === "halloween" ? 0.18 : kind === "evergreen" ? 0.23 : 0.1,
-              },
-            },
-            side: THREE.DoubleSide,
-          }),
+              side: THREE.DoubleSide,
+            }),
+            { name: `Foliage · ${variant} ${kind}` },
+          ),
         ]),
       ) as Record<`${TreeVariant}-${TreeKind}`, THREE.ShaderMaterial>,
     [],
@@ -277,8 +290,13 @@ export function CustomTreeShowcase() {
   }, []);
   const trunkMaterials = useMemo(
     () => ({
-      day: new THREE.MeshToonMaterial({ color: "#465347", gradientMap: gradient }),
-      halloween: new THREE.MeshToonMaterial({ color: "#332b30", gradientMap: gradient }),
+      day: Object.assign(new THREE.MeshToonMaterial({ color: "#465347", gradientMap: gradient }), {
+        name: "Trunk · day",
+      }),
+      halloween: Object.assign(
+        new THREE.MeshToonMaterial({ color: "#332b30", gradientMap: gradient }),
+        { name: "Trunk · halloween" },
+      ),
     }),
     [gradient],
   );
@@ -327,51 +345,90 @@ export function CustomTreeShowcase() {
   const shown = [...displays.map((display) => ({ ...display, lab: false })), ...liveDisplays];
 
   return (
-    <group name="custom-tree-showcase">
-      {shown.map(({ kind, variant, x, z, ground, trunkRadius, lab }) => {
+    <SceneObject id="zone-trees" name="Tree showcase">
+      {shown.map(({ kind, variant, x: worldX, z: worldZ, ground, trunkRadius, lab }) => {
+        const x = 0,
+          z = 0;
         const treeGeometry = lab ? liveGeometries : geometries[kind];
         return (
-          <group key={lab ? `live-${variant}` : `${variant}-${kind}`}>
-            <mesh position={[x, 0.025, z]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-              <circleGeometry args={[4.8, 24]} />
-              <meshBasicMaterial color={ground} />
-            </mesh>
+          <SceneObject
+            key={lab ? `live-${variant}` : `${variant}-${kind}`}
+            id={`tree-${lab ? "live" : kind}-${variant}`}
+            name={`Tree · ${lab ? "live lab" : kind} (${variant})`}
+            position={[worldX, 0, worldZ]}
+          >
+            {parkLabels
+              .filter(({ position: [lx, , lz] }) => lx === worldX && lz === worldZ + 8)
+              .map((label) => (
+                <ZoneLabel
+                  key={label.text}
+                  text={label.text}
+                  position={[0, label.position[1], 8]}
+                />
+              ))}
+            <mesh
+              name="display-disc"
+              geometry={groundDisc}
+              material={playgroundBasicMaterial("Tree display ground", ground)}
+              position={[x, 0.025, z]}
+              rotation={[-Math.PI / 2, 0, 0]}
+              receiveShadow
+              dispose={null}
+            />
             {lab && (
-              <mesh position={[x, 0.03, z]} rotation={[-Math.PI / 2, 0, 0]}>
-                <ringGeometry args={[4.78, 4.9, 48]} />
-                <meshBasicMaterial color="#e7bd69" />
-              </mesh>
+              <mesh
+                name="lab-ring"
+                geometry={labRing}
+                material={playgroundBasicMaterial("Tree lab ring", "#e7bd69")}
+                position={[x, 0.03, z]}
+                rotation={[-Math.PI / 2, 0, 0]}
+                dispose={null}
+              />
             )}
             <RigidBody type="fixed" colliders={false} position={[x, 0, z]}>
-              <CylinderCollider args={[2.5, trunkRadius]} position={[0, 2.5, 0]} />
-              <group rotation-y={variant === "halloween" ? Math.PI / 7 : 0}>
-                <mesh
-                  geometry={
-                    variant === "halloween" ? treeGeometry.halloweenTrunk : treeGeometry.dayTrunk
-                  }
-                  material={trunkMaterials[variant]}
-                  castShadow
-                  dispose={null}
-                />
-                <mesh
-                  name={
-                    lab
-                      ? `custom-live-${variant}`
-                      : variant === "halloween"
-                        ? `custom-halloween-${kind}`
-                        : `custom-${kind}`
-                  }
-                  geometry={treeGeometry.foliage}
-                  material={foliageMaterials[`${variant}-${kind}`]}
-                  scale={variant === "halloween" ? 0.93 : 1}
-                  castShadow
-                  dispose={null}
-                />
-              </group>
+              <ConvexHullCollider
+                args={[
+                  new Float32Array(
+                    Array.from({ length: 40 }, (_, i) => {
+                      const angle = ((i % 20) / 20) * Math.PI * 2;
+                      return [
+                        Math.cos(angle) * trunkRadius,
+                        i < 20 ? 0 : 5,
+                        Math.sin(angle) * trunkRadius,
+                      ];
+                    }).flat(),
+                  ),
+                ]}
+              />
+              <mesh
+                name="trunk"
+                rotation-y={variant === "halloween" ? Math.PI / 7 : 0}
+                geometry={
+                  variant === "halloween" ? treeGeometry.halloweenTrunk : treeGeometry.dayTrunk
+                }
+                material={trunkMaterials[variant]}
+                castShadow
+                dispose={null}
+              />
+              <mesh
+                name={
+                  lab
+                    ? `custom-live-${variant}`
+                    : variant === "halloween"
+                      ? `custom-halloween-${kind}`
+                      : `custom-${kind}`
+                }
+                rotation-y={variant === "halloween" ? Math.PI / 7 : 0}
+                geometry={treeGeometry.foliage}
+                material={foliageMaterials[`${variant}-${kind}`]}
+                scale={variant === "halloween" ? 0.93 : 1}
+                castShadow
+                dispose={null}
+              />
             </RigidBody>
-          </group>
+          </SceneObject>
         );
       })}
-    </group>
+    </SceneObject>
   );
 }

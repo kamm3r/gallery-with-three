@@ -15,6 +15,8 @@ export type CapitalSurface = {
   area: ParishArea;
   vertices: ParishPoint[];
   layer: "upper" | "lower";
+  /** Enclosed routes inside the mountain do not cut its exterior height field. */
+  buried?: boolean;
 };
 export type CapitalSolid = { position: ParishPoint; size: ParishPoint; yaw: number };
 export type CapitalMaterial =
@@ -30,9 +32,12 @@ export type CapitalMaterial =
   | "house"
   | "roof"
   | "shadow"
+  | "recess"
   | "cloth"
   | "hedge"
-  | "water";
+  | "water"
+  | "bark"
+  | "gold";
 export type CapitalPiece = {
   model: CapitalKitModel;
   size: ParishPoint;
@@ -42,6 +47,9 @@ export type CapitalPiece = {
   material: CapitalMaterial;
   /** Sealed doors render their kit leaves shut; passable frames have none. */
   leaves?: boolean;
+  buried?: boolean;
+  /** Part of the ground city that rises to meet the sky city when the fog lifts. */
+  ground?: boolean;
 };
 /** A prism slab: walkable floors, ramps under kit stairs, roofs and masonry masses. */
 export type CapitalSlab = {
@@ -54,6 +62,8 @@ export type CapitalSlab = {
   threshold?: boolean;
   /** Closed masonry: rock may meet it, unlike walkable floors and kit pieces. */
   mass?: boolean;
+  buried?: boolean;
+  ground?: boolean;
 };
 export type CapitalDoorRecord = {
   id: string;
@@ -133,6 +143,31 @@ export function createCapitalBuilder() {
     leaves?: boolean,
   ) {
     pieces.push({ model, size, position, yaw, material, thickness, leaves });
+  }
+  /** Mark an enclosed interior as covered by rock, retaining all of its collision and navigation. */
+  function buried(author: () => void) {
+    const starts = [pieces.length, slabs.length, surfaces.length];
+    author();
+    pieces.slice(starts[0]).forEach((p) => {
+      p.buried = true;
+    });
+    slabs.slice(starts[1]).forEach((s) => {
+      s.buried = true;
+    });
+    surfaces.slice(starts[2]).forEach((s) => {
+      s.buried = true;
+    });
+  }
+  /** Mark everything authored inside as the ground city beneath the fog. */
+  function groundLayer(author: () => void) {
+    const starts = [pieces.length, slabs.length];
+    author();
+    pieces.slice(starts[0]).forEach((p) => {
+      p.ground = true;
+    });
+    slabs.slice(starts[1]).forEach((s) => {
+      s.ground = true;
+    });
   }
   /** A walkable, convex floor slab. */
   function floor(
@@ -602,6 +637,8 @@ export function createCapitalBuilder() {
     surface,
     solid,
     piece,
+    buried,
+    groundLayer,
     floor,
     rect,
     mass,

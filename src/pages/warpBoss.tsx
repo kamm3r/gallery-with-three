@@ -1,13 +1,13 @@
 import { useEcsRef } from "../hooks/useEcsRef";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { Physics } from "@react-three/rapier";
-import { Navigate, useNavigate } from "react-router-dom";
+import { Navigate, useNavigate } from "../hooks/useRoute";
 import { GameCanvas } from "../components/GameCanvas";
 import { ExperienceHud } from "../components/ExperienceHud";
 import { TinyTusk, TuskArena } from "../components/TinyTusk";
 import { ThirdPersonPlayer } from "../components/ThirdPersonPlayer";
 import { AkuMask } from "../components/warpProps";
-import { useGame } from "../gameSettings";
+import { useGame } from "../hooks/useGame";
 import { useGameTimeout } from "../hooks/useGameTimeout";
 import { useDocumentMetadata } from "../hooks/useDocumentMetadata";
 import { setResultScreenActive } from "../gameplay/resultScreen";

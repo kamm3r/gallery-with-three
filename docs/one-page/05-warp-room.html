@@ -1,0 +1,455 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>5 · The Warp Room — one-page design</title>
+    <style>
+      @page {
+        size: 17in 11in;
+        margin: 0;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: #ddd8cf;
+        font:
+          14px/1.35 system-ui,
+          "Segoe UI",
+          sans-serif;
+        color: #2a2622;
+      }
+      .sheet {
+        width: 1632px;
+        height: 1056px;
+        margin: 0 auto;
+        background: #fbf8f2;
+        padding: 32px 40px;
+        display: grid;
+        grid-template: "head head head" auto "hub levels boss" minmax(0, 1fr) / 520px 1fr 470px;
+        gap: 20px 30px;
+      }
+      header {
+        grid-area: head;
+        display: flex;
+        align-items: baseline;
+        gap: 20px;
+        border-bottom: 3px solid #2a2622;
+        padding-bottom: 10px;
+      }
+      h1 {
+        font:
+          700 44px/1 Georgia,
+          serif;
+        margin: 0;
+      }
+      header .sub {
+        font-size: 18px;
+        color: #6b6158;
+        flex: 1;
+      }
+      header .meta {
+        font:
+          12px/1.3 ui-monospace,
+          monospace;
+        color: #6b6158;
+        text-align: right;
+      }
+      h2 {
+        font: 700 13px/1 system-ui;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        margin: 0 0 10px;
+        color: #8a5a2b;
+      }
+      .note {
+        font-size: 12px;
+        color: #6b6158;
+      }
+      .hub {
+        grid-area: hub;
+      }
+      .levels {
+        grid-area: levels;
+      }
+      .boss {
+        grid-area: boss;
+      }
+      .lvl {
+        display: grid;
+        grid-template-columns: 70px 1fr;
+        gap: 12px;
+        align-items: center;
+        margin-bottom: 10px;
+      }
+      .chip {
+        height: 56px;
+        border-radius: 8px;
+        border: 2px solid #2a2622;
+        position: relative;
+        overflow: hidden;
+      }
+      .chip i {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: 40%;
+      }
+      .lvl b {
+        font:
+          700 18px Georgia,
+          serif;
+      }
+      .lvl small {
+        display: block;
+        color: #6b6158;
+        font-size: 13px;
+      }
+      .crates {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 10px;
+        margin: 6px 0 14px;
+      }
+      .crate {
+        display: grid;
+        grid-template-columns: 40px 1fr;
+        gap: 8px;
+        align-items: center;
+        font-size: 12.5px;
+      }
+      .crate .c {
+        width: 40px;
+        height: 40px;
+        border: 2px solid #2a2622;
+        border-radius: 4px;
+        display: grid;
+        place-items: center;
+        font:
+          700 11px ui-monospace,
+          monospace;
+      }
+      .crate b {
+        display: block;
+        font-size: 13px;
+      }
+      .loop {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: wrap;
+        margin-bottom: 14px;
+        font-size: 13px;
+      }
+      .loop span.s {
+        border: 2px solid #2a2622;
+        border-radius: 20px;
+        padding: 4px 12px;
+        background: #fff;
+      }
+      .loop span.g {
+        background: #7b5aa6;
+        color: #fff;
+        border-color: #7b5aa6;
+      }
+      .rule {
+        border-left: 4px solid #7b5aa6;
+        padding: 3px 0 3px 12px;
+        margin-bottom: 9px;
+        font-size: 13px;
+      }
+      .rule > b:first-child {
+        display: block;
+        font-size: 14px;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        font-size: 13px;
+        margin-bottom: 8px;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 5px 6px;
+        border-bottom: 1px solid #e3dccf;
+      }
+      th {
+        font-weight: 600;
+        color: #6b6158;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="sheet">
+      <header>
+        <h1>The Warp Room</h1>
+        <div class="sub">
+          /warp · A Crash Bandicoot 2-style hub. Five short platforming levels, one crystal each,
+          then a boss.
+        </div>
+        <div class="meta">
+          PAGE 5 / 5 · PLATFORMER<br />warpLevels.ts · warpRun.ts · warpBoss.ts<br />progress saved
+          in this browser
+        </div>
+      </header>
+
+      <section class="hub">
+        <h2>The hub · reached from the painting lying flat on the lake island</h2>
+        <svg viewBox="-130 -130 260 260" width="520" height="520" font-family="system-ui">
+          <circle r="120" fill="#efe9f6" stroke="#2a2622" stroke-width="1.5" />
+          <g id="pads"></g>
+          <circle r="30" fill="#2a2622" />
+          <text y="-2" text-anchor="middle" fill="#f0b46b" font-weight="700" font-size="8">
+            TINY TUSK
+          </text>
+          <text y="8" text-anchor="middle" fill="#fbf8f2" font-size="5.5">
+            opens at 5 / 5 crystals
+          </text>
+        </svg>
+        <div class="rule">
+          <b>Collectables tell you what's left</b>Each level has one <b>crystal</b> (required) and
+          one <b>gem</b> for breaking every counted crate (optional mastery).
+        </div>
+        <div class="rule">
+          <b>Controls</b>Jump on crates and critters, or spin with the left mouse button, J or E.
+          Pause → back to the Warp Room.
+        </div>
+      </section>
+
+      <section class="levels">
+        <h2>Five levels · palette from each level's theme</h2>
+        <div class="lvl">
+          <div class="chip" style="background: #8fc7c0"><i style="background: #8a6a3e"></i></div>
+          <div><b>Turtle Woods</b><small>A mossy jungle trail. Mind the turtles.</small></div>
+        </div>
+        <div class="lvl">
+          <div class="chip" style="background: #c9dcef"><i style="background: #eef4fb"></i></div>
+          <div>
+            <b>Snow Go</b><small>Frozen ridges and drifting ice floes over the void.</small>
+          </div>
+        </div>
+        <div class="lvl">
+          <div class="chip" style="background: #1d2622"><i style="background: #5f6b5c"></i></div>
+          <div><b>The Pits</b><small>Down in the sewers: rats and rising lifts.</small></div>
+        </div>
+        <div class="lvl">
+          <div class="chip" style="background: #f0b67f"><i style="background: #b8784a"></i></div>
+          <div>
+            <b>Boulder Dash</b
+            ><small
+              >A narrow canyon. Something big rolls behind you: 3.7 m/s, slower than your 4.8 m/s
+              walk.</small
+            >
+          </div>
+        </div>
+        <div class="lvl">
+          <div class="chip" style="background: #b9a7c9"><i style="background: #a39a86"></i></div>
+          <div>
+            <b>Road to Ruin</b><small>Crumbling temple steps, powder kegs and monkeys.</small>
+          </div>
+        </div>
+
+        <h2 style="margin-top: 18px">A level, start to finish</h2>
+        <div class="loop">
+          <span class="s">Start</span>→<span class="s">crates · fruit · critters</span>→<span
+            class="s"
+            >checkpoint crate</span
+          >→<span class="s">gaps &amp; hazards</span>→<span class="s g">crystal</span>→<span
+            class="s"
+            >exit</span
+          >
+        </div>
+
+        <h2>Crate language · one look, one rule</h2>
+        <div class="crates">
+          <div class="crate">
+            <div class="c" style="background: #c08a4e">▢</div>
+            <div><b>Wooden</b>Break it for fruit. Counts toward the gem.</div>
+          </div>
+          <div class="crate">
+            <div class="c" style="background: #f2e3a0">C</div>
+            <div><b>Checkpoint</b>Respawn here.</div>
+          </div>
+          <div class="crate">
+            <div class="c" style="background: #d9a441">☺</div>
+            <div><b>Aku Aku</b>The mask absorbs one hit.</div>
+          </div>
+          <div class="crate">
+            <div class="c" style="background: #b5432f; color: #fff">TNT</div>
+            <div><b>TNT</b>Explodes 3 s after you land on it.</div>
+          </div>
+          <div class="crate">
+            <div class="c" style="background: #2f8f4a; color: #fff">N</div>
+            <div><b>Nitro</b>Explodes on touch.</div>
+          </div>
+        </div>
+        <div class="rule">
+          <b>Fair by construction</b>Tests check that every gap can be jumped at walking speed.
+          Non-sprinting bots with human reaction times must beat the boulder chase and the boss.
+        </div>
+      </section>
+
+      <section class="boss">
+        <h2>Tiny Tusk · the loop</h2>
+        <svg
+          viewBox="0 -18 470 268"
+          width="470"
+          height="250"
+          font-family="system-ui"
+          font-size="12"
+        >
+          <defs>
+            <marker
+              id="a"
+              viewBox="0 0 10 10"
+              refX="9"
+              refY="5"
+              markerWidth="7"
+              markerHeight="7"
+              orient="auto"
+            >
+              <path d="M0 0L10 5L0 10z" fill="#2a2622" />
+            </marker>
+          </defs>
+          <g stroke="#2a2622" stroke-width="2" fill="#fff">
+            <rect x="10" y="20" width="130" height="56" rx="8" />
+            <rect x="170" y="20" width="130" height="56" rx="8" />
+            <rect x="330" y="20" width="130" height="56" rx="8" />
+            <rect x="170" y="150" width="130" height="56" rx="8" fill="#2a2622" />
+            <rect x="10" y="150" width="130" height="56" rx="8" fill="#7b5aa6" stroke="#7b5aa6" />
+          </g>
+          <g text-anchor="middle">
+            <text x="75" y="44" font-weight="700">Leap</text>
+            <text x="75" y="62" font-size="10.5" fill="#6b6158">shadow telegraph</text>
+            <text x="235" y="44" font-weight="700">Land</text>
+            <text x="235" y="62" font-size="10.5" fill="#6b6158">crushes within 2 m</text>
+            <text x="395" y="44" font-weight="700">Pound</text>
+            <text x="395" y="62" font-size="10.5" fill="#6b6158">0.4 s → shockwave ring</text>
+            <text x="235" y="174" font-weight="700" fill="#f0b46b">Dazed</text>
+            <text x="235" y="192" font-size="10.5" fill="#fbf8f2">head drops 2.1 → 1.3 m</text>
+            <text x="75" y="174" font-weight="700" fill="#fff">Stomp!</text>
+            <text x="75" y="192" font-size="10.5" fill="#efe9f6">3 stomps win</text>
+          </g>
+          <g stroke="#2a2622" stroke-width="1.6" fill="none" marker-end="url(#a)">
+            <path d="M140 48h28" />
+            <path d="M300 48h28" />
+            <path d="M395 20 C395 -2 75 -2 75 18" stroke-dasharray="4 3" />
+            <path d="M395 76 V110 Q395 178 302 178" />
+            <path d="M170 178h-28" />
+            <path d="M60 150 Q40 110 60 78" />
+          </g>
+          <text x="235" y="-8" text-anchor="middle" font-size="10.5" fill="#6b6158">
+            hop the ring · repeat for the phase's slams
+          </text>
+          <text x="402" y="120" font-size="10.5" fill="#6b6158">after the</text>
+          <text x="402" y="133" font-size="10.5" fill="#6b6158">last slam</text>
+          <text x="18" y="118" font-size="10.5" fill="#6b6158">next phase</text>
+          <text x="10" y="236" font-size="11" fill="#6b6158">
+            Arena radius 13 m · you start with 1 mask · 1.5 s invulnerability after he's hurt.
+          </text>
+        </svg>
+        <h2 style="margin-top: 12px">Phases get faster, never longer</h2>
+        <table>
+          <tr>
+            <th>Phase</th>
+            <th>Slams</th>
+            <th>Telegraph</th>
+            <th>Ring speed</th>
+            <th>Daze</th>
+          </tr>
+          <tr>
+            <td>1</td>
+            <td>3</td>
+            <td>1.30 s</td>
+            <td>5.0 m/s</td>
+            <td>3.6 s</td>
+          </tr>
+          <tr>
+            <td>2</td>
+            <td>3</td>
+            <td>1.15 s</td>
+            <td>5.8 m/s</td>
+            <td>3.2 s</td>
+          </tr>
+          <tr>
+            <td>3</td>
+            <td>4</td>
+            <td>1.00 s</td>
+            <td>6.6 m/s</td>
+            <td>2.8 s</td>
+          </tr>
+        </table>
+        <p class="note">
+          Every phase shortens the warning and the punish window. Rings stay slow enough to read and
+          hop at walking pace.
+        </p>
+        <div class="rule">
+          <b>Readable over hard</b>A shadow before every landing, a beat before every pound, a slump
+          before every opening.
+        </div>
+      </section>
+    </div>
+    <script>
+      const NS = "http://www.w3.org/2000/svg",
+        g = document.getElementById("pads");
+      const pads = [
+        ["Turtle Woods", "#8fc7c0"],
+        ["Snow Go", "#c9dcef"],
+        ["The Pits", "#1d2622"],
+        ["Boulder Dash", "#f0b67f"],
+        ["Road to Ruin", "#b9a7c9"],
+      ];
+      const el = (t, a, x) => {
+        const n = document.createElementNS(NS, t);
+        for (const k in a) n.setAttribute(k, a[k]);
+        if (x != null) n.textContent = x;
+        g.appendChild(n);
+        return n;
+      };
+      pads.forEach(([n, c], i) => {
+        const a = -Math.PI / 2 + (i * 2 * Math.PI) / 5,
+          x = Math.cos(a) * 82,
+          y = Math.sin(a) * 82;
+        el("line", {
+          x1: 0,
+          y1: 0,
+          x2: x,
+          y2: y,
+          stroke: "#c9bfdc",
+          "stroke-width": 3,
+          "stroke-dasharray": "4 4",
+        });
+        el("circle", { cx: x, cy: y, r: 18, fill: c, stroke: "#2a2622", "stroke-width": 1.5 });
+        el(
+          "text",
+          {
+            x,
+            y: y + 4,
+            "text-anchor": "middle",
+            "font-size": 9,
+            "font-weight": 700,
+            fill: i === 2 ? "#fff" : "#2a2622",
+          },
+          "◆",
+        );
+        el(
+          "text",
+          {
+            x,
+            y: y + (y < -40 ? -26 : 30),
+            "text-anchor": "middle",
+            "font-size": 7,
+            "font-weight": 700,
+          },
+          n,
+        );
+      });
+    </script>
+  </body>
+</html>

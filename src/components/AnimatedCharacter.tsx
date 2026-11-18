@@ -1,20 +1,19 @@
+import { getEditorPaused, isEditorStepFrame, editorAnimationScale } from "../dev/editorPlayback";
 import { useAnimations, useGLTF } from "@react-three/drei";
 import { useFrame, type ThreeElements } from "@react-three/fiber";
 import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { clone } from "three/addons/utils/SkeletonUtils.js";
 import { BACKSTEP_DURATION, ROLL_DURATION } from "../gameplay/playerRules";
-import { CHARACTER_MODEL, CLIP_SECONDS } from "../gameplay/characterAnimations";
+import {
+  CASUAL_MODEL,
+  CLIP_SECONDS,
+  PLAYER_MODEL,
+  type CharacterModelSpec,
+} from "../gameplay/characterAnimations";
 import { heldItems } from "../gameplay/heldItems";
 
-const MODEL_PATH = CHARACTER_MODEL;
 const LOCOMOTION = new Set(["Walk", "Run", "StrafeLeft", "StrafeRight", "WalkBack"]);
-// glTF node names lose their dots on load ("UpperArm.L" becomes "UpperArmL").
-const UPPER_BONES = new Set(
-  ["Abdomen", "Torso", "Neck", "Head"].concat(
-    ...["L", "R"].map((s) => ["Shoulder", "UpperArm", "LowerArm", "Fist"].map((b) => b + s)),
-  ),
-);
 
 const MATERIAL_COLORS: Record<string, THREE.ColorRepresentation> = {
   Skin: "#ad785a",
@@ -66,6 +65,8 @@ export type ActionName =
   | "PlungeLand";
 
 type AnimatedCharacterProps = ThreeElements["group"] & {
+  /** Which rigged character to wear (keep the object stable). */
+  model?: CharacterModelSpec;
   animation?: ActionName;
   armed?: boolean;
   /** Per-material colour overrides, by material name (keep the object stable). */
@@ -85,6 +86,7 @@ type AnimatedCharacterProps = ThreeElements["group"] & {
 };
 
 export function AnimatedCharacter({
+  model = CASUAL_MODEL,
   animation = "Idle",
   armed = false,
   palette,
@@ -97,7 +99,7 @@ export function AnimatedCharacter({
   ...props
 }: AnimatedCharacterProps) {
   const group = useRef<THREE.Group>(null);
-  const { scene, animations } = useGLTF(MODEL_PATH);
+  const { scene, animations } = useGLTF(model.path);
   const character = useMemo(() => clone(scene), [scene]);
   const { actions, mixer } = useAnimations(animations, group);
   const currentAction = useRef<THREE.AnimationAction | null>(null);
@@ -112,11 +114,10 @@ export function AnimatedCharacter({
   // A flashlight gripped where the sword would be: same mount, same forward axis.
   useLayoutEffect(() => {
     if (held !== "flashlight") return;
-    // glTF node names lose their dots on load ("Fist.R" becomes "FistR").
-    const fist = character.getObjectByName("FistR") ?? character.getObjectByName("Fist.R");
+    const fist = model.mounts.map((name) => character.getObjectByName(name)).find(Boolean);
     if (!fist) return;
     const torch = new THREE.Group();
-    torch.position.set(0, 0.14, 0);
+    torch.position.set(0, model.torch.offset, 0);
     torch.quaternion.set(Math.SQRT1_2, 0, 0, Math.SQRT1_2);
     const metal = new THREE.MeshStandardMaterial({
       color: "#2a2b30",
@@ -147,7 +148,7 @@ export function AnimatedCharacter({
     halo.position.y = 0.37;
     for (const mesh of [body, head]) mesh.castShadow = true;
     torch.add(body, head, lens, halo);
-    torch.scale.setScalar(1.3);
+    torch.scale.setScalar(model.torch.scale);
     fist.add(torch);
     heldItems.flashlightLens = lens;
     let frame = 0;
@@ -166,13 +167,16 @@ export function AnimatedCharacter({
       lensMaterial.dispose();
       haloMaterial.dispose();
     };
-  }, [character, held]);
+  }, [character, held, model]);
 
   useLayoutEffect(() => {
     const sword = character.getObjectByName("PlayerSword");
+    const shield = character.getObjectByName("PlayerShield");
+    if (shield) shield.visible = armed;
     if (!sword) return;
     sword.visible = armed;
-    sword.scale.setScalar(weaponScale);
+    // A skinned blade follows its bone, so scaling the mesh would offset it from the fist.
+    if (!(sword as THREE.SkinnedMesh).isSkinnedMesh) sword.scale.setScalar(weaponScale);
   }, [character, armed, weaponScale]);
 
   useLayoutEffect(() => {
@@ -265,9 +269,9 @@ export function AnimatedCharacter({
     if (!clip) return null;
     const layer = clip.clone();
     layer.name = "GuardUpper";
-    layer.tracks = layer.tracks.filter((t) => UPPER_BONES.has(t.name.split(".")[0]));
+    layer.tracks = layer.tracks.filter((t) => model.upperBones.has(t.name.split(".")[0]));
     return layer;
-  }, [animations]);
+  }, [animations, model]);
   const upperActionRef = useRef<THREE.AnimationAction | null>(null);
   useEffect(
     () => () => {
@@ -281,7 +285,19 @@ export function AnimatedCharacter({
   upperRef.current = upper;
 
   useFrame((_, delta) => {
-    mixer.timeScale = hold?.() ? 0 : 1;
+    mixer.timeScale = import.meta.env.DEV
+      ? editorAnimationScale(delta, Boolean(hold?.()))
+      : hold?.()
+        ? 0
+        : 1;
+  }, -1);
+  useFrame((_, delta) => {
+    mixer.timeScale = import.meta.env.DEV
+      ? editorAnimationScale(delta, Boolean(hold?.()))
+      : hold?.()
+        ? 0
+        : 1;
+    if (import.meta.env.DEV && getEditorPaused() && !isEditorStepFrame()) return;
     if (!upperActionRef.current && upperClip && group.current) {
       upperActionRef.current = mixer.clipAction(upperClip, group.current);
       upperActionRef.current.setEffectiveWeight(0).play();
@@ -344,4 +360,5 @@ export function AnimatedCharacter({
   );
 }
 
-useGLTF.preload(MODEL_PATH);
+useGLTF.preload(CASUAL_MODEL.path);
+useGLTF.preload(PLAYER_MODEL.path);

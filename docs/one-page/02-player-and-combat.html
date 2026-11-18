@@ -1,0 +1,548 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>2 · Player and combat — one-page design</title>
+    <style>
+      @page {
+        size: 17in 11in;
+        margin: 0;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: #ddd8cf;
+        font:
+          14px/1.35 system-ui,
+          "Segoe UI",
+          sans-serif;
+        color: #2a2622;
+      }
+      .sheet {
+        width: 1632px;
+        height: 1056px;
+        margin: 0 auto;
+        background: #fbf8f2;
+        padding: 32px 40px;
+        display: grid;
+        grid-template: "head head head" auto "body time side" minmax(
+            0,
+            1fr
+          ) "foes foes foes" auto / 330px 1fr 330px;
+        gap: 20px 30px;
+      }
+      header {
+        grid-area: head;
+        display: flex;
+        align-items: baseline;
+        gap: 20px;
+        border-bottom: 3px solid #2a2622;
+        padding-bottom: 10px;
+      }
+      h1 {
+        font:
+          700 44px/1 Georgia,
+          serif;
+        margin: 0;
+      }
+      header .sub {
+        font-size: 18px;
+        color: #6b6158;
+        flex: 1;
+      }
+      header .meta {
+        font:
+          12px/1.3 ui-monospace,
+          monospace;
+        color: #6b6158;
+        text-align: right;
+      }
+      h2 {
+        font: 700 13px/1 system-ui;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        margin: 0 0 10px;
+        color: #8a5a2b;
+      }
+      .note {
+        font-size: 12px;
+        color: #6b6158;
+      }
+      .body {
+        grid-area: body;
+      }
+      .time {
+        grid-area: time;
+      }
+      .side {
+        grid-area: side;
+      }
+      .foes {
+        grid-area: foes;
+        display: grid;
+        align-items: start;
+        grid-template-columns: repeat(3, 1fr) 1.25fr;
+        gap: 14px;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        font-size: 12.5px;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 3px 6px;
+        border-bottom: 1px solid #e3dccf;
+      }
+      th {
+        font-weight: 600;
+        color: #6b6158;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+      .card {
+        border: 2px solid #2a2622;
+        border-radius: 10px;
+        padding: 10px 14px;
+        background: #fff;
+      }
+      .card h3 {
+        font:
+          700 18px Georgia,
+          serif;
+        margin: 0 0 2px;
+      }
+      .stat {
+        font:
+          12px ui-monospace,
+          monospace;
+        color: #b5432f;
+        margin-bottom: 6px;
+      }
+      .card p {
+        margin: 3px 0;
+        font-size: 12.5px;
+      }
+      .card p b {
+        color: #2f6b4f;
+      }
+      .keys {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 3px 10px;
+        align-items: center;
+        font-size: 12.5px;
+        margin-bottom: 12px;
+      }
+      kbd {
+        font:
+          700 12px ui-monospace,
+          monospace;
+        border: 1.5px solid #2a2622;
+        border-bottom-width: 3px;
+        border-radius: 5px;
+        padding: 2px 7px;
+        background: #fff;
+        text-align: center;
+        min-width: 30px;
+        display: inline-block;
+      }
+      .principle {
+        background: #2a2622;
+        color: #fbf8f2;
+        border-radius: 10px;
+        padding: 12px 16px;
+        margin-bottom: 14px;
+      }
+      .principle b {
+        color: #f0b46b;
+      }
+      .legend {
+        display: flex;
+        gap: 16px;
+        font-size: 12px;
+        margin: 4px 0 8px;
+        flex-wrap: wrap;
+      }
+      .legend span::before {
+        content: "";
+        display: inline-block;
+        width: 14px;
+        height: 10px;
+        margin-right: 5px;
+        vertical-align: -1px;
+        background: var(--c);
+        border: 1px solid #2a2622;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="sheet">
+      <header>
+        <h1>Player &amp; Combat</h1>
+        <div class="sub">
+          One body everywhere. In combat realms: commitment, readable threat, forgiving input,
+          earned openings.
+        </div>
+        <div class="meta">
+          PAGE 2 / 5 · SOULS-LIKE CORE<br />characterAnimations.ts · playerRules.ts<br />playerDefense.ts
+          · combatTuning.ts
+        </div>
+      </header>
+
+      <section class="body">
+        <h2>The body</h2>
+        <svg viewBox="0 30 330 270" width="330" height="270" font-family="system-ui" font-size="11">
+          <line x1="10" y1="270" x2="320" y2="270" stroke="#2a2622" stroke-width="1.5" />
+          <!-- capsule 1.8 m tall = 216 px (120 px/m), radius .42 = 50 px -->
+          <rect
+            x="70"
+            y="54"
+            width="100"
+            height="216"
+            rx="50"
+            fill="#e9dcc6"
+            stroke="#2a2622"
+            stroke-width="2"
+          />
+          <line x1="40" y1="54" x2="40" y2="270" stroke="#b5432f" />
+          <text x="34" y="165" text-anchor="end" transform="rotate(-90 34 165)" fill="#b5432f">
+            1.8 m (crouch 1.2)
+          </text>
+          <line x1="120" y1="285" x2="170" y2="285" stroke="#b5432f" />
+          <text x="145" y="298" text-anchor="middle" fill="#b5432f">r 0.42</text>
+          <!-- step -->
+          <rect x="190" y="204" width="130" height="66" fill="#c9c0b0" stroke="#2a2622" />
+          <text x="255" y="242" text-anchor="middle">step 0.55 m</text>
+          <text x="255" y="256" text-anchor="middle" fill="#6b6158" font-size="9.5">
+            clears 0.48, blocks 0.6
+          </text>
+          <!-- ledge -->
+          <line x1="320" y1="64" x2="200" y2="64" stroke="#2a2622" stroke-dasharray="3 3" />
+          <text x="318" y="58" text-anchor="end">ledge top ≤ 1.75 m</text>
+          <path d="M200 130 l100 -50" stroke="#2f6b4f" stroke-width="2" />
+          <text x="250" y="122" fill="#2f6b4f">walkable ≤ 50°</text>
+        </svg>
+        <h2 style="margin-top: 8px">Movement presets</h2>
+        <table>
+          <tr>
+            <th>Preset</th>
+            <th>Walk / run</th>
+            <th>Feel</th>
+          </tr>
+          <tr>
+            <td>Default</td>
+            <td>4.8 / 7.5</td>
+            <td>Skids, strong air control. Hub, gallery, Hollow, Warp</td>
+          </tr>
+          <tr>
+            <td>Souls</td>
+            <td>inherits</td>
+            <td>Fast pivots, no skid, committed jumps</td>
+          </tr>
+          <tr>
+            <td>Capital</td>
+            <td>4.2 / 6.6</td>
+            <td>Souls at city pace</td>
+          </tr>
+        </table>
+        <p class="note">
+          Design spaces to the metrics chart (2.5 / 4 m/s). Tune feel to the controller. Walk every
+          change in /playground.
+        </p>
+      </section>
+
+      <section class="time">
+        <h2>Timelines · the shape of every action</h2>
+        <div class="legend">
+          <span style="--c: #d7d0c3">clip</span><span style="--c: #b5432f">hit window</span
+          ><span style="--c: #7aa6c9">hyper-armour</span
+          ><span style="--c: #2f6b4f">chain from ▼</span
+          ><span style="--c: #7b5aa6">roll from ▲</span
+          ><span style="--c: #f0b46b">invulnerable</span>
+        </div>
+        <svg id="tl" width="100%" height="455" font-family="system-ui" font-size="12"></svg>
+        <div class="principle">
+          <b>Forgiving input, strict execution.</b> One buffered press per action for <b>180 ms</b>.
+          It survives recovery and near landings, and is cleared by pause, death and traversal.
+          Light chain grace is 0.35 s. On the shared Space key, dodge fires on release; with a
+          separate sprint key it fires on press.<br /><b>Groups:</b> no stacking; attackers from one
+          side take turns, two flanks may strike together; no stunlocks; enemies leash home.
+        </div>
+      </section>
+
+      <section class="side">
+        <h2>Controls · rebindable</h2>
+        <div class="keys">
+          <kbd>WASD</kbd><span>Move</span> <kbd>F</kbd><span>Jump · climb ledge</span>
+          <kbd>Space</kbd><span>Tap: roll (backstep when still) · hold: sprint</span> <kbd>J</kbd
+          ><span>Attack (or click)</span> <kbd>Q</kbd
+          ><span>Lock on: 20 m acquire, 26 m break, 2.5 s lost</span> <kbd>K</kbd><span>Guard</span>
+          <kbd>L</kbd><span>Parry</span> <kbd>E</kbd><span>Interact · rest · open gates</span>
+          <kbd>R · M</kbd><span>Flask (+45 HP, 3 charges) · map</span>
+        </div>
+        <h2>Resources</h2>
+        <table style="margin-bottom: 12px">
+          <tr>
+            <td>Health</td>
+            <td>100</td>
+          </tr>
+          <tr>
+            <td>Stamina</td>
+            <td>100, +22/s after 0.5 s (half while guarding)</td>
+          </tr>
+          <tr>
+            <td>Roll cost</td>
+            <td>25 stamina, 0.9 s cooldown</td>
+          </tr>
+          <tr>
+            <td>Guard</td>
+            <td>1.2 stamina per damage, 12% chip, 1 s break</td>
+          </tr>
+          <tr>
+            <td>Riposte</td>
+            <td>×2 damage for 2 s after a parry</td>
+          </tr>
+          <tr>
+            <td>Damage</td>
+            <td>25 base, +15 into boss recovery</td>
+          </tr>
+        </table>
+        <h2>Camera</h2>
+        <svg viewBox="0 0 330 150" width="330" height="150" font-family="system-ui" font-size="11">
+          <circle cx="60" cy="110" r="10" fill="#e9dcc6" stroke="#2a2622" stroke-width="2" />
+          <path d="M60 110 L290 50" stroke="#2a2622" stroke-dasharray="4 3" />
+          <rect x="280" y="38" width="22" height="16" fill="#2a2622" />
+          <text x="170" y="68" text-anchor="middle" transform="rotate(-14 170 68)">
+            arm 7.5 m · zoom 4–10
+          </text>
+          <rect x="150" y="80" width="30" height="50" fill="#c9c0b0" stroke="#2a2622" />
+          <text x="165" y="145" text-anchor="middle" fill="#6b6158">stone pulls in</text>
+          <circle cx="240" cy="118" r="9" fill="#fff" stroke="#b5432f" stroke-width="2" />
+          <text x="240" y="145" text-anchor="middle" fill="#b5432f">enemies never</text>
+        </svg>
+        <p class="note">
+          Hold closest for 120 ms, then ease out. No look lag. Auto-rotate after 0.9 s idle.
+        </p>
+      </section>
+
+      <section class="foes">
+        <div class="card">
+          <h3>Cinder Sentinel</h3>
+          <div class="stat">120 HP · 32 dmg</div>
+          <p>Shield up, circles, steps in and chains two strikes.</p>
+          <p>
+            <b>Beat it:</b> flank the shield. One early roll won't cover both strikes; back off,
+            then punish the recovery.
+          </p>
+        </div>
+        <div class="card">
+          <h3>Lantern Penitent</h3>
+          <div class="stat">85 HP · 26 dmg</div>
+          <p>Backs away, then casts aimed ember bolts.</p>
+          <p><b>Beat it:</b> close in while it retreats. Use cover to block its sightline.</p>
+        </div>
+        <div class="card">
+          <h3>Ossuary Hound</h3>
+          <div class="stat">65 HP · 23 dmg</div>
+          <p>Circles fast, then commits to a forward pounce.</p>
+          <p><b>Beat it:</b> sidestep the pounce and strike quickly; its recovery is short.</p>
+        </div>
+        <div class="card">
+          <h3>Bosses · simulated win rate</h3>
+          <svg id="boss" width="100%" height="78" font-family="system-ui" font-size="12"></svg>
+          <p class="note" style="margin: 2px 0 0">
+            Bots with human limits (capitalBossBalance.test.ts).
+          </p>
+        </div>
+      </section>
+    </div>
+    <script>
+      const svg = (el, tag, attrs, text) => {
+        const n = document.createElementNS("http://www.w3.org/2000/svg", tag);
+        for (const k in attrs) n.setAttribute(k, attrs[k]);
+        if (text != null) n.textContent = text;
+        el.appendChild(n);
+        return n;
+      };
+      const tl = document.getElementById("tl");
+      const W = tl.getBoundingClientRect().width,
+        L = 150,
+        R = W - 14,
+        X = (f) => L + f * (R - L);
+      const moves = [
+        // name, hit, chainFrom, rollFrom, armour, extra
+        ["Quick slash", [0.3, 0.5], 0.52, 0.55, null, "×1.0 · 16 st · poise 25 · stop 60 ms"],
+        ["Slash", [0.3, 0.48], 0.55, 0.58, null, "×1.1 · 18 st · poise 30 · stop 70 ms"],
+        [
+          "Heavy slash",
+          [0.3, 0.5],
+          null,
+          0.62,
+          [0.12, 0.55],
+          "×1.5 · 24 st · poise 45 · stop 110 ms",
+        ],
+        [
+          "Jump attack",
+          [0.45, 0.68],
+          null,
+          0.75,
+          [0, 0.8],
+          "×1.6 · 22 st · poise 50 · stop 120 ms",
+        ],
+        [
+          "Plunge ≥ 2.4 m",
+          [0, 0.2],
+          null,
+          0.6,
+          [0, 0.5],
+          "×2.6 · 2.6 m radius · poise 80 · stop 160 ms",
+        ],
+      ];
+      svg(
+        tl,
+        "text",
+        { x: L, y: 12, fill: "#6b6158", "font-size": 11 },
+        "SWORD · fraction of the clip",
+      );
+      [0, 0.25, 0.5, 0.75, 1].forEach((f) => {
+        svg(tl, "line", { x1: X(f), x2: X(f), y1: 18, y2: 270, stroke: "#eee6d8" });
+        svg(
+          tl,
+          "text",
+          { x: X(f), y: 282, "text-anchor": "middle", fill: "#6b6158", "font-size": 10 },
+          f,
+        );
+      });
+      moves.forEach(([name, hit, chain, roll, armour, extra], i) => {
+        const y = 30 + i * 50;
+        svg(tl, "text", { x: 0, y: y + 15, "font-weight": 700 }, name);
+        svg(
+          tl,
+          "text",
+          { x: 0, y: y + 30, fill: "#6b6158", "font-size": 10 },
+          extra.split(" · ").slice(0, 2).join(" · "),
+        );
+        svg(
+          tl,
+          "text",
+          { x: 0, y: y + 42, fill: "#6b6158", "font-size": 10 },
+          extra.split(" · ").slice(2).join(" · "),
+        );
+        svg(tl, "rect", {
+          x: X(0),
+          y,
+          width: X(1) - X(0),
+          height: 22,
+          fill: "#d7d0c3",
+          stroke: "#2a2622",
+          rx: 3,
+        });
+        if (armour)
+          svg(tl, "rect", {
+            x: X(armour[0]),
+            y: y - 6,
+            width: X(armour[1]) - X(armour[0]),
+            height: 6,
+            fill: "#7aa6c9",
+            stroke: "#2a2622",
+            "stroke-width": 0.6,
+          });
+        svg(tl, "rect", {
+          x: X(hit[0]),
+          y,
+          width: X(hit[1]) - X(hit[0]),
+          height: 22,
+          fill: "#b5432f",
+        });
+        if (chain != null)
+          svg(tl, "path", { d: `M${X(chain) - 6} ${y - 8}h12l-6 9z`, fill: "#2f6b4f" });
+        svg(tl, "path", { d: `M${X(roll) - 6} ${y + 32}h12l-6 -9z`, fill: "#7b5aa6" });
+        if (chain == null)
+          svg(
+            tl,
+            "text",
+            { x: R - 4, y: y + 15, "text-anchor": "end", "font-size": 10, fill: "#2a2622" },
+            "no chain",
+          );
+      });
+      // Defensive actions in seconds.
+      const S0 = 296,
+        sec = (t) => L + (t / 1) * (R - L);
+      svg(tl, "text", { x: L, y: S0 + 8, fill: "#6b6158", "font-size": 11 }, "DEFENCE · seconds");
+      [0, 0.25, 0.5, 0.75, 1].forEach((t) => {
+        svg(tl, "line", { x1: sec(t), x2: sec(t), y1: S0 + 14, y2: S0 + 140, stroke: "#eee6d8" });
+        svg(
+          tl,
+          "text",
+          { x: sec(t), y: S0 + 152, "text-anchor": "middle", fill: "#6b6158", "font-size": 10 },
+          t + " s",
+        );
+      });
+      const def = [
+        ["Roll · 4.5 m", 0.92, [0.08, 0.55], "attack from 60%"],
+        ["Backstep · 1.6 m", 0.4, [0.04, 0.22], ""],
+        ["Parry · 12 st", 0.7, [0.05, 0.21], "active window → riposte"],
+      ];
+      def.forEach(([name, dur, inv, tag], i) => {
+        const y = S0 + 22 + i * 40;
+        svg(tl, "text", { x: 0, y: y + 15, "font-weight": 700 }, name);
+        if (tag) svg(tl, "text", { x: 0, y: y + 30, fill: "#6b6158", "font-size": 10 }, tag);
+        svg(tl, "rect", {
+          x: sec(0),
+          y,
+          width: sec(dur) - sec(0),
+          height: 22,
+          fill: "#d7d0c3",
+          stroke: "#2a2622",
+          rx: 3,
+        });
+        svg(tl, "rect", {
+          x: sec(inv[0]),
+          y,
+          width: sec(inv[1]) - sec(inv[0]),
+          height: 22,
+          fill: i === 2 ? "#2f6b4f" : "#f0b46b",
+        });
+        svg(
+          tl,
+          "text",
+          { x: sec(inv[1]) + 6, y: y + 15, "font-size": 11 },
+          `${inv[0]}–${inv[1]} s`,
+        );
+        if (i === 0)
+          svg(tl, "path", { d: `M${sec(0.92 * 0.6) - 6} ${y + 32}h12l-6 -9z`, fill: "#7b5aa6" });
+      });
+      const boss = document.getElementById("boss"),
+        BW = boss.getBoundingClientRect().width,
+        bx = (p) => 150 + p * (BW - 170);
+      [
+        ["Keeper of the Asylum", 0.74, 0.51],
+        ["Ash Warden", 0.61, 0.37],
+      ].forEach(([n, avg, care], i) => {
+        const y = 4 + i * 38;
+        svg(boss, "text", { x: 0, y: y + 13, "font-weight": 700, "font-size": 12 }, n);
+        svg(boss, "rect", { x: bx(0), y, width: bx(1) - bx(0), height: 16, fill: "#eee6d8" });
+        svg(boss, "rect", { x: bx(0), y, width: bx(avg) - bx(0), height: 16, fill: "#2f6b4f" });
+        svg(boss, "text", { x: bx(avg) + 4, y: y + 12, "font-size": 11 }, `${avg * 100}% average`);
+        svg(boss, "rect", {
+          x: bx(0),
+          y: y + 20,
+          width: bx(care) - bx(0),
+          height: 10,
+          fill: "#c9a06b",
+        });
+        svg(
+          boss,
+          "text",
+          { x: bx(care) + 4, y: y + 29, "font-size": 10, fill: "#6b6158" },
+          `${care * 100}% careless`,
+        );
+      });
+    </script>
+  </body>
+</html>

@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useThree } from "@react-three/fiber";
 import * as THREE from "three";
-import { useGame } from "../gameSettings";
+import { useGame } from "../hooks/useGame";
 import { waitForPreparationFrame } from "../gameplay/scenePreparation";
 
 export function ScenePreparation({
@@ -19,7 +19,6 @@ export function ScenePreparation({
     advance = useThree((s) => s.advance);
   const signature = [
     settings.shadows,
-    settings.ambientOcclusion,
     settings.bloom,
     settings.environmentDetail,
     settings.particleDetail,

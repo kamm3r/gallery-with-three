@@ -7,7 +7,6 @@ export type GraphicsSettings = {
   adaptiveResolution: boolean;
   frameTarget: 30 | 60;
   shadows: EffectDetail;
-  ambientOcclusion: EffectDetail;
   bloom: boolean;
   environmentDetail: Detail;
   particleDetail: EffectDetail;
@@ -19,7 +18,6 @@ export const graphicsPresets: Record<Exclude<GraphicsPreset, "custom">, Graphics
     adaptiveResolution: true,
     frameTarget: 60,
     shadows: "low",
-    ambientOcclusion: "off",
     bloom: false,
     environmentDetail: "low",
     particleDetail: "low",
@@ -30,7 +28,6 @@ export const graphicsPresets: Record<Exclude<GraphicsPreset, "custom">, Graphics
     adaptiveResolution: true,
     frameTarget: 60,
     shadows: "medium",
-    ambientOcclusion: "low",
     bloom: true,
     environmentDetail: "medium",
     particleDetail: "medium",
@@ -41,7 +38,6 @@ export const graphicsPresets: Record<Exclude<GraphicsPreset, "custom">, Graphics
     adaptiveResolution: true,
     frameTarget: 60,
     shadows: "high",
-    ambientOcclusion: "medium",
     bloom: true,
     environmentDetail: "high",
     particleDetail: "high",
@@ -52,7 +48,6 @@ export const graphicsPresets: Record<Exclude<GraphicsPreset, "custom">, Graphics
     adaptiveResolution: false,
     frameTarget: 60,
     shadows: "high",
-    ambientOcclusion: "high",
     bloom: true,
     environmentDetail: "high",
     particleDetail: "high",
@@ -86,7 +81,7 @@ export function readGraphicsSettings(saved: Record<string, unknown>): GraphicsSe
   if (typeof saved.adaptiveResolution === "boolean")
     result.adaptiveResolution = saved.adaptiveResolution;
   if (saved.frameTarget === 30 || saved.frameTarget === 60) result.frameTarget = saved.frameTarget;
-  for (const key of ["shadows", "ambientOcclusion", "particleDetail"] as const)
+  for (const key of ["shadows", "particleDetail"] as const)
     if (typeof saved[key] === "string" && effects.includes(saved[key]))
       result[key] = saved[key] as EffectDetail;
   if (typeof saved.environmentDetail === "string" && details.includes(saved.environmentDetail))

@@ -21,6 +21,7 @@ import {
   capitalShrines,
   capitalShortcut,
   capitalCathedralShortcut,
+  capitalGardenGate,
   capitalBeaconSeal,
   type CapitalLiftId,
 } from "../gameplay/capitalLayout";
@@ -28,9 +29,16 @@ import { stepCapitalLift, type CapitalLiftsState } from "../gameplay/capitalProg
 import type { ParishProgress } from "../gameplay/ashenParish";
 import type { ParishEncounter } from "../gameplay/parishEncounter";
 import { useReducedMotion } from "../hooks/useReducedMotion";
+import { useGame } from "../hooks/useGame";
 import { sunlight } from "../gameplay/sunlight";
 import { capitalLiftGeometry } from "../gameplay/capitalLiftGeometry";
 import { CapitalSky } from "./CapitalSky";
+import { playSound } from "../gameplay/sound";
+
+/** How far below its place the ground city waits while the sky city floats. */
+const GROUND_DROP = 240;
+/** Seconds the sky city takes to settle onto the ground once the switch is thrown. */
+const GROUND_SETTLE = 7;
 import {
   capitalKitGeometry,
   capitalKitUv,
@@ -175,12 +183,24 @@ export const SacredCapital = memo(
     resetVersion: number;
     revision: string;
   }) {
-    const environment = useMemo(() => buildCapitalEnvironment(), []);
+    const environment = useMemo(() => {
+      const built = buildCapitalEnvironment();
+      // A run resumed past the switch starts with the fog already gone.
+      built.fogReveal.value = progress.fogCleared ? 1 : 0;
+      return built;
+      // Built once per scene; later fog changes are eased in the frame loop.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
     const kit = environment.kitMaterials;
+    // PS2 style gives the city low-resolution, shading-baked, dithered surfaces.
+    const { settings } = useGame();
+    useEffect(() => environment.setPs2(settings.ps2Style), [environment, settings.ps2Style]);
     const sun = useRef<THREE.DirectionalLight>(null);
     const lanterns = useRef<(THREE.PointLight | null)[]>([]);
     const reduced = useReducedMotion();
     const pending = useRef<ReturnType<typeof setTimeout> | null>(null);
+    // 0 while the sky city floats, 1 once it has come down onto the ground city.
+    const settled = useRef(progress.fogCleared ? 1 : 0);
     useEffect(() => {
       if (pending.current) clearTimeout(pending.current);
       return () => {
@@ -198,9 +218,29 @@ export const SacredCapital = memo(
             0.8,
             Math.min(delta, 0.05),
           );
-      sunlight.fogColor.value.set("#a3afbd");
-      sunlight.color.value.set("#fff3e2");
-      sunlight.direction.value.set(-0.6, 0.7, 0.4).normalize();
+      // The switch brings the sky city down: seen from the sky city, the missing ground
+      // city rises out of the depths and locks beneath it, as the camera shakes.
+      const target = progress.fogCleared ? 1 : 0;
+      if (reduced) settled.current = target;
+      else if (settled.current !== target) {
+        if (settled.current === 0 && target === 1) playSound("rumble", { intensity: 1 });
+        const step = Math.min(delta, 0.05) / GROUND_SETTLE;
+        settled.current =
+          target > settled.current
+            ? Math.min(target, settled.current + step)
+            : Math.max(target, settled.current - step);
+        // The shake only decays during boss fights, so it is set outright and cleared here.
+        if (target === 1)
+          state.current.combat.shake = settled.current < 1 ? 0.35 * (1 - settled.current) : 0;
+      }
+      const t = settled.current,
+        eased = 1 - (1 - t) ** 3;
+      environment.ground.position.y = -GROUND_DROP * (1 - eased);
+      environment.ground.visible = t > 0;
+      // The reference's golden hour: a low sun in the south-west over a warm haze.
+      sunlight.fogColor.value.set("#d9aa8e");
+      sunlight.color.value.set("#ffcf9e");
+      sunlight.direction.value.set(-0.62, 0.3, 0.72).normalize();
       if (scene.fog instanceof THREE.Fog) scene.fog.color.copy(sunlight.fogColor.value);
       const c = state.current.combat;
       const nearest = [...capitalLanterns].sort(
@@ -215,22 +255,22 @@ export const SacredCapital = memo(
         }
       });
       if (sun.current) {
-        sun.current.position.set(c.playerX - 42, c.playerY + 13, c.playerZ + 48);
+        sun.current.position.set(c.playerX - 40, c.playerY + 19, c.playerZ + 46);
         sun.current.target.position.set(c.playerX, c.playerY, c.playerZ);
         sun.current.target.updateMatrixWorld();
       }
     });
     return (
       <>
-        <color attach="background" args={["#c3ccd4"]} />
+        <color attach="background" args={["#e3b08f"]} />
         <CapitalSky />
-        <fog attach="fog" args={["#a3afbd", 220, 900]} />
-        <hemisphereLight args={["#e2e8ef", "#6e665e", 1.3]} />
+        <fog attach="fog" args={["#d9aa8e", 200, 880]} />
+        <hemisphereLight args={["#f4d3b4", "#4f4250", 1.05]} />
         <directionalLight
           ref={sun}
           position={[-25, 65, 28]}
-          intensity={3.4}
-          color="#fff1df"
+          intensity={3.6}
+          color="#ffb47c"
           castShadow
           shadow-mapSize={[1024, 1024]}
           shadow-camera-left={-32}
@@ -271,6 +311,7 @@ export const SacredCapital = memo(
         {[
           { id: "refuge" as const, gate: capitalShortcut },
           { id: "court" as const, gate: capitalCathedralShortcut },
+          { id: "garden" as const, gate: capitalGardenGate },
         ]
           .filter(({ id }) => !progress[id])
           .map(({ id, gate }) => (
@@ -282,27 +323,51 @@ export const SacredCapital = memo(
               rotation={[0, gate.yaw, 0]}
             >
               <CuboidCollider args={[gate.width / 2, 2.5, 0.22]} position={[0, 2.5, 0]} />
-              {Array.from(
-                { length: Math.ceil(gate.width / 0.9) },
-                (_, i) =>
-                  -gate.width / 2 +
-                  0.3 +
-                  (i * (gate.width - 0.6)) / (Math.ceil(gate.width / 0.9) - 1),
-              ).map((x) => (
+              {id === "court" ? (
+                <>
+                  <KitPiece model="arch-panel" size={[gate.width, 5, 0.28]} material={kit.iron} />
+                  <KitPiece
+                    model="block"
+                    size={[0.08, 4.6, 0.12]}
+                    material={kit.floor}
+                    position={[0, 2.3, 0.2]}
+                  />
+                  {[-0.65, 0.65].map((x) => (
+                    <KitPiece
+                      key={x}
+                      model="ring"
+                      size={[0.45, 0.08, 0.45]}
+                      material={kit.iron}
+                      position={[x, 2.2, 0.23]}
+                      rotation={[Math.PI / 2, 0, 0]}
+                    />
+                  ))}
+                </>
+              ) : (
+                Array.from(
+                  { length: Math.ceil(gate.width / 0.9) },
+                  (_, i) =>
+                    -gate.width / 2 +
+                    0.3 +
+                    (i * (gate.width - 0.6)) / (Math.ceil(gate.width / 0.9) - 1),
+                ).map((x) => (
+                  <KitPiece
+                    key={x}
+                    model="block"
+                    size={[0.16, 5, 0.22]}
+                    material={kit.iron}
+                    position={[x, 2.5, 0]}
+                  />
+                ))
+              )}
+              {id !== "court" && (
                 <KitPiece
-                  key={x}
                   model="block"
-                  size={[0.16, 5, 0.22]}
-                  material={kit.iron}
-                  position={[x, 2.5, 0]}
+                  size={[gate.width, 0.22, 0.3]}
+                  material={kit.floor}
+                  position={[0, 4.5, 0]}
                 />
-              ))}
-              <KitPiece
-                model="block"
-                size={[gate.width, 0.22, 0.3]}
-                material={kit.floor}
-                position={[0, 4.5, 0]}
-              />
+              )}
             </RigidBody>
           ))}
         {!progress.caches.includes("town-key") && (

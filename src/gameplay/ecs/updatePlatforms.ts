@@ -12,9 +12,18 @@ export function updatePlatforms(world: World, delta: number) {
   world.query(platforms).readEach(([motion, view]) => {
     if (!view.body) return;
     const offset = Math.sin(elapsed * motion.speed + motion.phase) * motion.distance;
-    position.x = motion.x + (motion.axis === "x" ? offset : 0);
-    position.y = motion.y + (motion.axis === "y" ? offset : 0);
-    position.z = motion.z + (motion.axis === "z" ? offset : 0);
+    // Move along the authored node's local axis, transformed into world space.
+    // An orbit adds a circle on the local ground plane.
+    const angle = elapsed * motion.orbitSpeed + motion.phase;
+    const vx = (motion.axis === "x" ? offset : 0) + Math.cos(angle) * motion.orbitRadius;
+    const vy = motion.axis === "y" ? offset : 0;
+    const vz = (motion.axis === "z" ? offset : 0) + Math.sin(angle) * motion.orbitRadius;
+    const tx = 2 * (motion.qy * vz - motion.qz * vy);
+    const ty = 2 * (motion.qz * vx - motion.qx * vz);
+    const tz = 2 * (motion.qx * vy - motion.qy * vx);
+    position.x = motion.x + vx + motion.qw * tx + motion.qy * tz - motion.qz * ty;
+    position.y = motion.y + vy + motion.qw * ty + motion.qz * tx - motion.qx * tz;
+    position.z = motion.z + vz + motion.qw * tz + motion.qx * ty - motion.qy * tx;
     view.body.setNextKinematicTranslation(position);
     if (motion.spin || motion.tiltAmp) {
       // Yaw from spin composed with pitch oscillation: q = qY * qX.
@@ -24,10 +33,14 @@ export function updatePlatforms(world: World, delta: number) {
       const cy = Math.cos(halfSpin);
       const px = Math.sin(halfPitch);
       const cx = Math.cos(halfPitch);
-      rotation.x = cy * px;
-      rotation.y = sy * cx;
-      rotation.z = -sy * px;
-      rotation.w = cy * cx;
+      const x = cy * px,
+        y = sy * cx,
+        z = -sy * px,
+        w = cy * cx;
+      rotation.x = motion.qw * x + motion.qx * w + motion.qy * z - motion.qz * y;
+      rotation.y = motion.qw * y - motion.qx * z + motion.qy * w + motion.qz * x;
+      rotation.z = motion.qw * z + motion.qx * y - motion.qy * x + motion.qz * w;
+      rotation.w = motion.qw * w - motion.qx * x - motion.qy * y - motion.qz * z;
       view.body.setNextKinematicRotation(rotation);
     }
   });

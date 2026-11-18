@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vite-plus/test";
 import {
   graphicsPresets,
   patchGraphicsSettings,
   readGraphicsSettings,
 } from "../src/gameplay/graphicsSettings.ts";
 
-void test("presets apply every graphics control while preserving bindings and sound", () => {
+test("presets apply every graphics control while preserving bindings and sound", () => {
   const current = { ...graphicsPresets.high, soundVolume: 42, bindings: { dodge: "Space" } };
   const low = patchGraphicsSettings(current, { graphicsPreset: "low" });
   for (const key of Object.keys(graphicsPresets.low))
@@ -21,7 +21,7 @@ void test("presets apply every graphics control while preserving bindings and so
   assert.equal(patchGraphicsSettings(low, { bloom: false }).graphicsPreset, "low");
 });
 
-void test("saved custom graphics and legacy resolution survive validation", () => {
+test("saved custom graphics and legacy resolution survive validation", () => {
   assert.deepEqual(readGraphicsSettings(graphicsPresets.ultra), graphicsPresets.ultra);
   const custom = patchGraphicsSettings(graphicsPresets.high, {
     shadows: "off",
@@ -35,7 +35,7 @@ void test("saved custom graphics and legacy resolution survive validation", () =
   assert.equal(legacy.graphicsPreset, "custom");
 });
 
-void test("malformed saved controls cannot select prototype properties or exceed render limits", () => {
+test("malformed saved controls cannot select prototype properties or exceed render limits", () => {
   assert.deepEqual(
     readGraphicsSettings({
       graphicsPreset: "constructor",

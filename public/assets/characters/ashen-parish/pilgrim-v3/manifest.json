@@ -1,0 +1,12 @@
+{
+  "revision": 3,
+  "source": "cathedral-pilgrim-v3.blend",
+  "export": "cathedral-pilgrim-v3.glb",
+  "references": ["pilgrim-turnaround.png", "pilgrim-side-reference.png"],
+  "construction": "Fitted 3D meshes with four-view projected textures",
+  "bones": 22,
+  "parts": 69,
+  "projection_edge_corrections": 168,
+  "export_modules": 5,
+  "limitation": "Projection transitions and hidden surfaces still need texture painting; no combat or locomotion clips."
+}
